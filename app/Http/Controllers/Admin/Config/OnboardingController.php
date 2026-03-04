@@ -44,7 +44,7 @@ class OnboardingController extends Controller
         return view('admin.config.onboarding.form', ['page' => new OnboardingPage()]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): JsonResponse|RedirectResponse
     {
         $validated = $request->validate([
             'sort_order' => 'required|integer|min:0',
@@ -74,7 +74,7 @@ class OnboardingController extends Controller
         return view('admin.config.onboarding.form', ['page' => $onboarding]);
     }
 
-    public function update(Request $request, OnboardingPage $onboarding): RedirectResponse
+    public function update(Request $request, OnboardingPage $onboarding): JsonResponse|RedirectResponse
     {
         $validated = $request->validate([
             'sort_order' => 'required|integer|min:0',
