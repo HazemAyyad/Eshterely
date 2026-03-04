@@ -29,7 +29,7 @@ class CitiesController extends Controller
         $cities = $query->orderBy('name')->get(['id', 'country_id', 'name', 'code']);
 
         return response()->json($cities->map(fn ($c) => [
-            'id' => $c->code ?? (string) $c->id,
+            'id' => $c->id,
             'name' => $c->name,
         ]));
     }

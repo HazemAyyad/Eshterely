@@ -12,11 +12,13 @@ class CountriesController extends Controller
 {
     public function __invoke(Request $request): JsonResponse
     {
-        $countries = Country::orderBy('name')->get(['id', 'code', 'name']);
+        $countries = Country::orderBy('name')->get(['id', 'code', 'name', 'flag_emoji', 'dial_code']);
 
         return response()->json($countries->map(fn ($c) => [
             'id' => $c->code ?? (string) $c->id,
             'name' => $c->name,
+            'flag_emoji' => $c->flag_emoji ?? '',
+            'dial_code' => $c->dial_code ?? '',
         ]));
     }
 }

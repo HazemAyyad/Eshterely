@@ -19,7 +19,7 @@
         <h5 class="mb-0">إعدادات التطبيق (API ووضع التطوير)</h5>
     </div>
     <div class="card-body">
-        <form method="POST" action="{{ route('admin.config.app-config') }}" class="ajax-submit-form">
+        <form method="POST" action="{{ route('admin.config.app-config') }}" class="ajax-submit-form" enctype="multipart/form-data">
             @method('PATCH')
             @csrf
             <div class="mb-4">
@@ -29,6 +29,25 @@
                        placeholder="https://eshterely.duosparktech.com">
                 <small class="text-muted">اتركه فارغاً لاستخدام العنوان الافتراضي في التطبيق.</small>
                 @error('api_base_url')<div class="text-danger small">{{ $message }}</div>@enderror
+            </div>
+            <div class="mb-4">
+                <label class="form-label">اسم التطبيق</label>
+                <input type="text" name="app_name" id="app_name" class="form-control"
+                       value="{{ old('app_name', $config['app_name'] ?? '') }}"
+                       placeholder="Zayer">
+                <small class="text-muted">يُعرَض كعنوان للتطبيق داخل الواجهة.</small>
+                @error('app_name')<div class="text-danger small">{{ $message }}</div>@enderror
+            </div>
+            <div class="mb-4">
+                <label class="form-label">أيقونة التطبيق (App Icon)</label>
+                @if(!empty($config['app_icon_url']))
+                    <div class="mb-2">
+                        <img src="{{ str_starts_with($config['app_icon_url'], 'http') ? $config['app_icon_url'] : asset('storage/' . $config['app_icon_url']) }}" alt="App Icon" class="img-thumbnail" style="max-height: 80px;">
+                    </div>
+                @endif
+                <input type="file" name="app_icon" id="app_icon" class="form-control" accept="image/jpeg,image/png,image/jpg,image/gif,image/webp">
+                <small class="text-muted">رفع صورة الشعار/الأيقونة المستخدمة داخل التطبيق. إن لم تختر ملفاً تُحفظ الأيقونة الحالية.</small>
+                @error('app_icon')<div class="text-danger small">{{ $message }}</div>@enderror
             </div>
             <div class="mb-4">
                 <div class="form-check form-switch">

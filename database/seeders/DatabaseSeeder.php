@@ -13,6 +13,8 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             AppConfigSeeder::class,
+            CountrySeeder::class,
+            CitySeeder::class,
             AdminSeeder::class,
         ]);
     }

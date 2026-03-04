@@ -29,11 +29,23 @@ class ConfigController extends Controller
 
         $apiBaseUrl = null;
         $developmentMode = false;
+        $appName = null;
+        $appIconUrl = null;
         if (Schema::hasTable('app_config')) {
             $appConfig = DB::table('app_config')->first();
             if ($appConfig) {
                 $apiBaseUrl = $appConfig->api_base_url ?? null;
                 $developmentMode = (bool) ($appConfig->development_mode ?? false);
+                if (Schema::hasColumn('app_config', 'app_name')) {
+                    $appName = $appConfig->app_name ?? null;
+                }
+                if (Schema::hasColumn('app_config', 'app_icon_url')) {
+                    $appIconUrl = !empty($appConfig->app_icon_url)
+                        ? (str_starts_with($appConfig->app_icon_url, 'http')
+                            ? $appConfig->app_icon_url
+                            : asset('storage/' . $appConfig->app_icon_url))
+                        : null;
+                }
             }
         }
 
@@ -95,6 +107,8 @@ class ConfigController extends Controller
             ])->toArray(),
             'api_base_url' => $apiBaseUrl,
             'development_mode' => $developmentMode,
+            'app_name' => $appName,
+            'app_icon_url' => $appIconUrl,
         ]);
     }
 }

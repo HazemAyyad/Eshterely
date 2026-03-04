@@ -17,9 +17,9 @@ class AuthController extends Controller
     public function register(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'phone' => ['required', 'string', 'max:20', 'unique:users,phone'],
+            'phone' => ['required', 'string', 'regex:/^[0-9]+$/', 'min:10', 'max:15', 'unique:users,phone'],
             'full_name' => ['required', 'string', 'max:255'],
-            'password' => ['required', 'confirmed', Password::defaults()],
+            'password' => ['required', 'confirmed', Password::min(8)->numbers()->symbols()],
             'country_id' => ['nullable', 'string', 'max:20'],
             'city_id' => ['nullable', 'string', 'max:20'],
         ]);
@@ -55,14 +55,14 @@ class AuthController extends Controller
     public function verifyOtp(Request $request): JsonResponse
     {
         $rules = [
-            'phone' => ['required', 'string'],
+            'phone' => ['required', 'string', 'regex:/^[0-9]+$/', 'min:10', 'max:15'],
             'code' => ['required', 'string', 'size:6'],
             'mode' => ['nullable', 'string', 'in:signup,reset'],
             'fcm_token' => ['nullable', 'string', 'max:500'],
             'device_type' => ['nullable', 'string', 'max:20'],
         ];
         if ($request->mode === 'reset') {
-            $rules['password'] = ['required', 'confirmed', Password::defaults()];
+            $rules['password'] = ['required', 'confirmed', Password::min(8)->numbers()->symbols()];
         }
 
         $validator = Validator::make($request->all(), $rules);
@@ -109,7 +109,7 @@ class AuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'phone' => ['required', 'string'],
+            'phone' => ['required', 'string', 'regex:/^[0-9]+$/', 'min:10', 'max:15'],
             'password' => ['required'],
             'fcm_token' => ['nullable', 'string', 'max:500'],
             'device_type' => ['nullable', 'string', 'max:20'],
@@ -151,7 +151,7 @@ class AuthController extends Controller
     public function forgotPassword(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'phone' => ['required', 'string'],
+            'phone' => ['required', 'string', 'regex:/^[0-9]+$/', 'min:10', 'max:15'],
         ]);
 
         if ($validator->fails()) {
