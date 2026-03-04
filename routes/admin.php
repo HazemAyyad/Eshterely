@@ -1,0 +1,82 @@
+<?php
+
+use App\Http\Controllers\Admin\AuthController as AdminAuthController;
+use App\Http\Controllers\Admin\CartReviewController;
+use App\Http\Controllers\Admin\Config\FeaturedStoresController;
+use App\Http\Controllers\Admin\Config\MarketCountriesController;
+use App\Http\Controllers\Admin\Config\OnboardingController;
+use App\Http\Controllers\Admin\Config\PromoBannersController;
+use App\Http\Controllers\Admin\Config\SplashConfigController;
+use App\Http\Controllers\Admin\Config\ThemeConfigController;
+use App\Http\Controllers\Admin\Config\WarehousesController;
+use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\NotificationController;
+use App\Http\Controllers\Admin\OrderController;
+use App\Http\Controllers\Admin\SupportController;
+use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\WalletController;
+use Illuminate\Support\Facades\Route;
+
+Route::get('login', [AdminAuthController::class, 'showLogin'])->name('login');
+Route::post('login', [AdminAuthController::class, 'login']);
+Route::post('logout', [AdminAuthController::class, 'logout'])->name('logout')->middleware('auth:admin');
+
+Route::get('set-locale/{lang}', function ($lang) {
+    if (in_array($lang, ['ar', 'en'])) {
+        session(['admin_locale' => $lang]);
+    }
+    return redirect()->back();
+})->name('set-locale');
+
+Route::middleware('auth:admin')->group(function () {
+    Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+
+    // Config
+    Route::prefix('config')->name('config.')->group(function () {
+        Route::get('theme', [ThemeConfigController::class, 'edit'])->name('theme');
+        Route::patch('theme', [ThemeConfigController::class, 'update']);
+        Route::get('splash', [SplashConfigController::class, 'edit'])->name('splash');
+        Route::patch('splash', [SplashConfigController::class, 'update']);
+        Route::get('onboarding/data', [OnboardingController::class, 'data'])->name('onboarding.data');
+Route::resource('onboarding', OnboardingController::class)->except(['show'])->names('onboarding');
+        Route::get('market-countries/data', [MarketCountriesController::class, 'data'])->name('market-countries.data');
+Route::resource('market-countries', MarketCountriesController::class)->except(['show'])->names('market-countries');
+        Route::get('featured-stores/data', [FeaturedStoresController::class, 'data'])->name('featured-stores.data');
+        Route::resource('featured-stores', FeaturedStoresController::class)->except(['show'])->names('featured-stores');
+        Route::get('promo-banners/data', [PromoBannersController::class, 'data'])->name('promo-banners.data');
+        Route::resource('promo-banners', PromoBannersController::class)->except(['show'])->names('promo-banners');
+        Route::get('warehouses/data', [WarehousesController::class, 'data'])->name('warehouses.data');
+        Route::resource('warehouses', WarehousesController::class)->except(['show'])->names('warehouses');
+    });
+
+    // Users
+    Route::get('users/data', [UserController::class, 'data'])->name('users.data');
+    Route::resource('users', UserController::class)->only(['index', 'show'])->names('users');
+
+    // Orders
+    Route::get('orders/data', [OrderController::class, 'data'])->name('orders.data');
+    Route::get('orders', [OrderController::class, 'index'])->name('orders.index');
+    Route::get('orders/{order}', [OrderController::class, 'show'])->name('orders.show');
+    Route::patch('orders/{order}/status', [OrderController::class, 'updateStatus'])->name('orders.update-status');
+
+    // Cart Review
+    Route::get('cart-review/data', [CartReviewController::class, 'data'])->name('cart-review.data');
+    Route::get('cart-review', [CartReviewController::class, 'index'])->name('cart-review.index');
+    Route::patch('cart-review/{id}/review', [CartReviewController::class, 'approveOrReject'])->name('cart-review.update');
+
+    // Wallets
+    Route::get('wallets/data', [WalletController::class, 'data'])->name('wallets.data');
+    Route::get('wallets', [WalletController::class, 'index'])->name('wallets.index');
+    Route::get('wallets/{user}', [WalletController::class, 'show'])->name('wallets.show');
+
+    // Support
+    Route::get('support/data', [SupportController::class, 'data'])->name('support.data');
+    Route::get('support', [SupportController::class, 'index'])->name('support.index');
+    Route::get('support/{ticket}', [SupportController::class, 'show'])->name('support.show');
+    Route::post('support/{ticket}/messages', [SupportController::class, 'storeMessage'])->name('support.store-message');
+    Route::patch('support/{ticket}/status', [SupportController::class, 'updateStatus'])->name('support.update-status');
+
+    // Notifications
+    Route::get('notifications/send', [NotificationController::class, 'showSendForm'])->name('notifications.send');
+    Route::post('notifications/send', [NotificationController::class, 'send'])->name('notifications.send.submit');
+});

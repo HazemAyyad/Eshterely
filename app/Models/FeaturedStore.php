@@ -1,0 +1,25 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class FeaturedStore extends Model
+{
+    protected $fillable = [
+        'store_slug',
+        'name',
+        'description',
+        'logo_url',
+        'country_code',
+        'store_url',
+        'is_featured',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'is_featured' => 'boolean',
+        ];
+    }
+}
