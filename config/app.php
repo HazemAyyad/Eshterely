@@ -54,6 +54,8 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    'storage_link_token' => env('STORAGE_LINK_TOKEN', null),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone
