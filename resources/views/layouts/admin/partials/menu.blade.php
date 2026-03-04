@@ -67,6 +67,11 @@
                         <div>{{ __('admin.warehouses') }}</div>
                     </a>
                 </li>
+                <li class="menu-item {{ request()->routeIs('admin.config.app-config') ? 'active' : '' }}">
+                    <a href="{{ route('admin.config.app-config') }}" class="menu-link">
+                        <div>إعدادات التطبيق (API)</div>
+                    </a>
+                </li>
             </ul>
         </li>
         <li class="menu-item {{ request()->routeIs('admin.users*', 'admin.orders*', 'admin.cart-review*', 'admin.wallets*', 'admin.support*') ? 'active open' : '' }}">

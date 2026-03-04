@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ConfigController extends Controller
 {
@@ -25,6 +26,16 @@ class ConfigController extends Controller
         $stores = DB::table('featured_stores')->where('is_featured', true)->get();
         $promoBanners = DB::table('promo_banners')->where('is_active', true)->orderBy('sort_order')->get();
         $warehouses = DB::table('warehouses')->where('is_active', true)->orderBy('label')->get();
+
+        $apiBaseUrl = null;
+        $developmentMode = false;
+        if (Schema::hasTable('app_config')) {
+            $appConfig = DB::table('app_config')->first();
+            if ($appConfig) {
+                $apiBaseUrl = $appConfig->api_base_url ?? null;
+                $developmentMode = (bool) ($appConfig->development_mode ?? false);
+            }
+        }
 
         return response()->json([
             'theme' => [
@@ -82,6 +93,8 @@ class ConfigController extends Controller
                 'label' => $w->label,
                 'country_code' => $w->country_code ?? '',
             ])->toArray(),
+            'api_base_url' => $apiBaseUrl,
+            'development_mode' => $developmentMode,
         ]);
     }
 }

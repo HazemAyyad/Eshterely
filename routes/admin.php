@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AuthController as AdminAuthController;
 use App\Http\Controllers\Admin\CartReviewController;
+use App\Http\Controllers\Admin\Config\AppConfigController;
 use App\Http\Controllers\Admin\Config\FeaturedStoresController;
 use App\Http\Controllers\Admin\Config\MarketCountriesController;
 use App\Http\Controllers\Admin\Config\OnboardingController;
@@ -47,6 +48,8 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
         Route::resource('promo-banners', PromoBannersController::class)->except(['show'])->names('promo-banners');
         Route::get('warehouses/data', [WarehousesController::class, 'data'])->name('warehouses.data');
         Route::resource('warehouses', WarehousesController::class)->except(['show'])->names('warehouses');
+        Route::get('app-config', [AppConfigController::class, 'edit'])->name('app-config');
+        Route::patch('app-config', [AppConfigController::class, 'update']);
     });
 
     // Users
