@@ -17,9 +17,16 @@ class CitiesController extends Controller
 
         $query = City::query()->with('country');
 
-        if ($countryId) {
-            $query->where('country_id', $countryId);
-        } elseif ($countryCode) {
+        if ($countryId !== null && $countryId !== '') {
+            if (is_numeric($countryId)) {
+                $query->where('country_id', (int) $countryId);
+            } else {
+                $country = Country::where('code', $countryId)->first();
+                if ($country) {
+                    $query->where('country_id', $country->id);
+                }
+            }
+        } elseif ($countryCode !== null && $countryCode !== '') {
             $country = Country::where('code', $countryCode)->first();
             if ($country) {
                 $query->where('country_id', $country->id);

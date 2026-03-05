@@ -15,7 +15,8 @@ class CountriesController extends Controller
         $countries = Country::orderBy('name')->get(['id', 'code', 'name', 'flag_emoji', 'dial_code']);
 
         return response()->json($countries->map(fn ($c) => [
-            'id' => $c->code ?? (string) $c->id,
+            'id' => (string) $c->id,
+            'code' => $c->code ,
             'name' => $c->name,
             'flag_emoji' => $c->flag_emoji ?? '',
             'dial_code' => $c->dial_code ?? '',
