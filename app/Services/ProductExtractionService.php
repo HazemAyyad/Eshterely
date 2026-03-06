@@ -23,14 +23,14 @@ class ProductExtractionService
 
         $data = $this->extractFromMetaTags($html);
         if ($this->isValidResult($data)) {
-            // Amazon: meta tags often return wrong currency (e.g. GBP) or null image — try DOM merge
-            $isAmazon = str_contains(strtolower($url), 'amazon.');
-            $needsDomFallback = $isAmazon && (
+            // Meta tags often return wrong currency or null image for many stores — try DOM merge
+            $isUsdStore = $this->expectsUsdFromUrl($url, $storeKey);
+            $needsDomFallback = $isUsdStore && (
                 empty($data['image_url']) ||
                 (isset($data['currency']) && strtoupper((string) $data['currency']) !== 'USD')
             );
             if ($needsDomFallback) {
-                $domData = $this->extractFromDom($html);
+                $domData = $this->extractFromDom($html, $storeKey);
                 if ($domData !== null && $this->isValidResult($domData)) {
                     $data['image_url'] = $domData['image_url'] ?? $data['image_url'];
                     if (($domData['price'] ?? 0) > 0) {
@@ -42,7 +42,7 @@ class ProductExtractionService
             return $this->normalizeResult($data, $url, $storeKey, 'meta_tags');
         }
 
-        $data = $this->extractFromDom($html);
+        $data = $this->extractFromDom($html, $storeKey);
         if ($this->isValidResult($data)) {
             return $this->normalizeResult($data, $url, $storeKey, 'dom');
         }
@@ -280,9 +280,24 @@ class ProductExtractionService
     }
 
     /**
+     * Whether the URL/store typically shows prices in USD (e.g. amazon.com, ebay.com).
+     */
+    private function expectsUsdFromUrl(string $url, string $storeKey): bool
+    {
+        $host = strtolower(parse_url($url, PHP_URL_HOST) ?? '');
+        $usdDomains = ['amazon.com', 'ebay.com', 'walmart.com', 'etsy.com'];
+        foreach ($usdDomains as $d) {
+            if (str_contains($host, $d)) {
+                return true;
+            }
+        }
+        return in_array(strtolower($storeKey), ['amazon', 'ebay', 'walmart', 'etsy'], true);
+    }
+
+    /**
      * @return array<string, mixed>|null
      */
-    public function extractFromDom(string $html): ?array
+    public function extractFromDom(string $html, string $storeKey = 'unknown'): ?array
     {
         $previous = libxml_use_internal_errors(true);
         try {
@@ -300,42 +315,27 @@ class ProductExtractionService
                 return null;
             }
 
-            $price = $this->extractMainProductPriceFromDom($crawler);
+            $price = $this->extractMainProductPriceFromDom($crawler, $storeKey);
 
-            $imageUrl = null;
-            // Amazon: main product image selectors
-            $amazonImageSelectors = ['#landingImage', '#imgBlkFront', '[data-a-image-name="landingImage"]', 'img[data-old-hires]'];
-            foreach ($amazonImageSelectors as $sel) {
-                try {
-                    if ($crawler->filter($sel)->count() > 0) {
-                        $img = $crawler->filter($sel)->first();
-                        $src = $img->attr('src') ?? $img->attr('data-old-hires') ?? $img->attr('data-src');
-                        if ($src) {
-                            if (! str_starts_with($src, 'http')) {
-                                $src = str_starts_with($src, '//') ? 'https:' . $src : $src;
-                            }
-                            if (filter_var($src, FILTER_VALIDATE_URL)) {
-                                $imageUrl = $src;
-                                break;
-                            }
-                        }
-                    }
-                } catch (\Throwable) {
-                    continue;
-                }
-            }
+            $imageUrl = $this->extractProductImageFromDom($crawler, $storeKey);
             if ($imageUrl === null && $crawler->filter('[class*="product"] img, [id*="product"] img, main img, [data-product] img')->count() > 0) {
                 $img = $crawler->filter('[class*="product"] img, [id*="product"] img, main img, [data-product] img')->first();
                 $src = $img->attr('src') ?? $img->attr('data-src');
-                if ($src && filter_var($src, FILTER_VALIDATE_URL)) {
-                    $imageUrl = $src;
+                if ($src !== null && $src !== '') {
+                    $src = $this->normalizeImageUrl($src);
+                    if (filter_var($src, FILTER_VALIDATE_URL)) {
+                        $imageUrl = $src;
+                    }
                 }
             }
             if ($imageUrl === null && $crawler->filter('img')->count() > 0) {
                 $img = $crawler->filter('img')->first();
                 $src = $img->attr('src') ?? $img->attr('data-src');
-                if ($src && filter_var($src, FILTER_VALIDATE_URL)) {
-                    $imageUrl = $src;
+                if ($src !== null && $src !== '') {
+                    $src = $this->normalizeImageUrl($src);
+                    if (filter_var($src, FILTER_VALIDATE_URL)) {
+                        $imageUrl = $src;
+                    }
                 }
             }
 
@@ -354,12 +354,88 @@ class ProductExtractionService
     }
 
     /**
+     * Extract main product image URL with store-specific selectors.
+     */
+    private function extractProductImageFromDom(Crawler $crawler, string $storeKey): ?string
+    {
+        $selectors = match (strtolower($storeKey)) {
+            'amazon' => ['#landingImage', '#imgBlkFront', '[data-a-image-name="landingImage"]', 'img[data-old-hires]'],
+            'ebay' => ['#icImg', '#vi_main_img_fs', '.img.img500', '[itemprop="image"]', 'img[data-testid="product-image"]'],
+            'walmart' => ['[data-automation-id="product-image"]', '.prod-hero-image img', '[itemprop="image"]'],
+            'etsy' => ['#listing-page-image', '.wt-max-width-full', '[data-buy-box-listing-image] img'],
+            default => [],
+        };
+
+        foreach ($selectors as $sel) {
+            try {
+                if ($crawler->filter($sel)->count() === 0) {
+                    continue;
+                }
+                $img = $crawler->filter($sel)->first();
+                $src = $img->attr('src') ?? $img->attr('data-old-hires') ?? $img->attr('data-src') ?? $img->attr('data-zoom-src') ?? $img->attr('data-lazy-src');
+                if ($src !== null && $src !== '') {
+                    $src = $this->normalizeImageUrl($src);
+                    if (filter_var($src, FILTER_VALIDATE_URL)) {
+                        return $src;
+                    }
+                }
+            } catch (\Throwable) {
+                continue;
+            }
+        }
+        return null;
+    }
+
+    private function normalizeImageUrl(string $src): string
+    {
+        $src = trim($src);
+        if (! str_starts_with($src, 'http')) {
+            $src = str_starts_with($src, '//') ? 'https:' . $src : $src;
+        }
+        return $src;
+    }
+
+    /**
      * Extract main product price, avoiding import charges, shipping, tax, totals.
      */
-    private function extractMainProductPriceFromDom(Crawler $crawler): float
+    private function extractMainProductPriceFromDom(Crawler $crawler, string $storeKey = 'unknown'): float
     {
         $excludeKeywords = ['import', 'shipping', 'delivery', 'tax', 'total', 'charges', 'duties'];
         $candidates = [];
+
+        // Store-specific price selectors (try first)
+        $storeSelectors = match (strtolower($storeKey)) {
+            'amazon' => ['#corePrice_feature_div', '#corePriceDisplay_desktop_feature_div', '.a-price.a-price--primary', '[data-cel-widget*="corePrice"]', '.a-price .a-offscreen', '.a-price-whole'],
+            'ebay' => ['#prcIsum', '.notranslate', '[itemprop="price"]', '.u-flL.condText', '.notranslate.mm-price'],
+            'walmart' => ['[itemprop="price"]', '.price-current', '[data-automation-id="product-price"]', '.prod-PriceHero .price'],
+            'etsy' => ['.wt-text-title-larger', '[data-buy-box-region] .wt-text-title-larger', '.wt-text-title-03'],
+            default => [],
+        };
+
+        foreach ($storeSelectors as $sel) {
+            try {
+                if ($crawler->filter($sel)->count() === 0) {
+                    continue;
+                }
+                $el = $crawler->filter($sel)->first();
+                $text = trim($el->text());
+                $content = $el->attr('content') ?? $text;
+                $parentText = $this->getAncestorText($el, 2);
+                $combined = strtolower($text . ' ' . $content . ' ' . $parentText);
+                if ($this->containsAny($combined, $excludeKeywords)) {
+                    continue;
+                }
+                $parseText = $content !== '' ? $content : $text;
+                if (preg_match('/\$?€?£?([\d,]+\.?\d*)/', $parseText, $m)) {
+                    $val = (float) str_replace(',', '', $m[1]);
+                    if ($val > 0 && $val < 100000) {
+                        return $val;
+                    }
+                }
+            } catch (\Throwable) {
+                continue;
+            }
+        }
 
         $prioritySelectors = [
             '#corePrice_feature_div',
