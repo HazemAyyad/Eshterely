@@ -23,6 +23,22 @@ class ProductExtractionService
 
         $data = $this->extractFromMetaTags($html);
         if ($this->isValidResult($data)) {
+            // Amazon: meta tags often return wrong currency (e.g. GBP) or null image — try DOM merge
+            $isAmazon = str_contains(strtolower($url), 'amazon.');
+            $needsDomFallback = $isAmazon && (
+                empty($data['image_url']) ||
+                (isset($data['currency']) && strtoupper((string) $data['currency']) !== 'USD')
+            );
+            if ($needsDomFallback) {
+                $domData = $this->extractFromDom($html);
+                if ($domData !== null && $this->isValidResult($domData)) {
+                    $data['image_url'] = $domData['image_url'] ?? $data['image_url'];
+                    if (($domData['price'] ?? 0) > 0) {
+                        $data['price'] = $domData['price'];
+                        $data['currency'] = $domData['currency'] ?? 'USD';
+                    }
+                }
+            }
             return $this->normalizeResult($data, $url, $storeKey, 'meta_tags');
         }
 
@@ -287,7 +303,28 @@ class ProductExtractionService
             $price = $this->extractMainProductPriceFromDom($crawler);
 
             $imageUrl = null;
-            if ($crawler->filter('[class*="product"] img, [id*="product"] img, main img, [data-product] img')->count() > 0) {
+            // Amazon: main product image selectors
+            $amazonImageSelectors = ['#landingImage', '#imgBlkFront', '[data-a-image-name="landingImage"]', 'img[data-old-hires]'];
+            foreach ($amazonImageSelectors as $sel) {
+                try {
+                    if ($crawler->filter($sel)->count() > 0) {
+                        $img = $crawler->filter($sel)->first();
+                        $src = $img->attr('src') ?? $img->attr('data-old-hires') ?? $img->attr('data-src');
+                        if ($src) {
+                            if (! str_starts_with($src, 'http')) {
+                                $src = str_starts_with($src, '//') ? 'https:' . $src : $src;
+                            }
+                            if (filter_var($src, FILTER_VALIDATE_URL)) {
+                                $imageUrl = $src;
+                                break;
+                            }
+                        }
+                    }
+                } catch (\Throwable) {
+                    continue;
+                }
+            }
+            if ($imageUrl === null && $crawler->filter('[class*="product"] img, [id*="product"] img, main img, [data-product] img')->count() > 0) {
                 $img = $crawler->filter('[class*="product"] img, [id*="product"] img, main img, [data-product] img')->first();
                 $src = $img->attr('src') ?? $img->attr('data-src');
                 if ($src && filter_var($src, FILTER_VALIDATE_URL)) {
