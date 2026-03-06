@@ -44,13 +44,25 @@ class ProductExtractionService
         );
     }
 
+    /**
+     * Result is valid if we have a name AND at least price or image.
+     * Incomplete results (price=0 and image=null) trigger next extraction method.
+     */
     public function isValidResult(?array $data): bool
     {
         if ($data === null || ! is_array($data)) {
             return false;
         }
         $name = trim((string) ($data['name'] ?? ''));
-        return $name !== '';
+        if ($name === '') {
+            return false;
+        }
+        $price = (float) ($data['price'] ?? 0);
+        $imageUrl = $data['image_url'] ?? null;
+        $hasPrice = $price > 0;
+        $hasImage = $imageUrl !== null && trim((string) $imageUrl) !== '';
+
+        return $hasPrice || $hasImage;
     }
 
     /**
@@ -181,36 +193,32 @@ class ProductExtractionService
      */
     public function extractFromMetaTags(string $html): ?array
     {
-        $name = null;
-        if (preg_match('/<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)["\']/i', $html, $m)) {
-            $name = html_entity_decode(trim($m[1]), ENT_QUOTES, 'UTF-8');
-        }
-        if ($name === null && preg_match('/<meta[^>]+name=["\']twitter:title["\'][^>]+content=["\']([^"\']+)["\']/i', $html, $m)) {
-            $name = html_entity_decode(trim($m[1]), ENT_QUOTES, 'UTF-8');
-        }
-        if ($name === null && preg_match('/<title>([^<]+)<\/title>/i', $html, $m)) {
-            $name = html_entity_decode(trim($m[1]), ENT_QUOTES, 'UTF-8');
-        }
+        $name = $this->metaContent($html, 'og:title', 'property')
+            ?? $this->metaContent($html, 'twitter:title', 'name')
+            ?? $this->metaTitle($html);
         if ($name === null || trim($name) === '') {
             return null;
         }
+        $name = html_entity_decode(trim($name), ENT_QUOTES, 'UTF-8');
 
-        $imageUrl = null;
-        if (preg_match('/<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']/i', $html, $m)) {
-            $imageUrl = trim($m[1]);
-        }
-        if ($imageUrl === null && preg_match('/<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']/i', $html, $m)) {
-            $imageUrl = trim($m[1]);
-        }
-        if ($imageUrl !== null && ! filter_var($imageUrl, FILTER_VALIDATE_URL)) {
-            $imageUrl = null;
+        $imageUrl = $this->metaContent($html, 'og:image', 'property')
+            ?? $this->metaContent($html, 'twitter:image', 'name');
+        if ($imageUrl !== null) {
+            $imageUrl = trim($imageUrl);
+            if (! filter_var($imageUrl, FILTER_VALIDATE_URL)) {
+                $imageUrl = null;
+            }
         }
 
         $price = 0.0;
-        if (preg_match('/<meta[^>]+property=["\']product:price:amount["\'][^>]+content=["\']([^"\']+)["\']/i', $html, $m)) {
-            $price = (float) str_replace(',', '', trim($m[1]));
+        $priceStr = $this->metaContent($html, 'product:price:amount', 'property');
+        if ($priceStr !== null) {
+            $price = (float) str_replace(',', '', trim($priceStr));
         }
-        if ($price === 0.0 && preg_match('/"price"\s*:\s*["\']?([\d.]+)/', $html, $m)) {
+        if ($price === 0.0 && preg_match('/"(?:lowPrice|highPrice|price|priceAmount)"\s*:\s*["\']?([\d.]+)/', $html, $m)) {
+            $price = (float) $m[1];
+        }
+        if ($price === 0.0 && preg_match('/"price":\s*([\d.]+)/', $html, $m)) {
             $price = (float) $m[1];
         }
         if ($price === 0.0 && preg_match('/\$([\d,]+\.?\d*)/', $html, $m)) {
@@ -218,16 +226,41 @@ class ProductExtractionService
         }
 
         $currency = 'USD';
-        if (preg_match('/<meta[^>]+property=["\']product:price:currency["\'][^>]+content=["\']([^"\']+)["\']/i', $html, $m)) {
-            $currency = trim($m[1]);
+        $currencyStr = $this->metaContent($html, 'product:price:currency', 'property');
+        if ($currencyStr !== null) {
+            $currency = trim($currencyStr);
         }
 
         return [
-            'name' => trim($name),
+            'name' => $name,
             'price' => $price,
             'currency' => $currency,
             'image_url' => $imageUrl,
         ];
+    }
+
+    /**
+     * Extract meta content supporting both attribute orders: attr content / content attr.
+     */
+    private function metaContent(string $html, string $propOrName, string $attrType): ?string
+    {
+        $attr = preg_quote($attrType, '/');
+        $val = preg_quote($propOrName, '/');
+        if (preg_match('/<meta[^>]+' . $attr . '=["\']' . $val . '["\'][^>]+content=["\']([^"\']+)["\']/i', $html, $m)) {
+            return $m[1];
+        }
+        if (preg_match('/<meta[^>]+content=["\']([^"\']+)["\'][^>]+' . $attr . '=["\']' . $val . '["\']/i', $html, $m)) {
+            return $m[1];
+        }
+        return null;
+    }
+
+    private function metaTitle(string $html): ?string
+    {
+        if (preg_match('/<title>([^<]+)<\/title>/i', $html, $m)) {
+            return trim($m[1]);
+        }
+        return null;
     }
 
     /**
@@ -324,9 +357,10 @@ class ProductExtractionService
         }
 
         $meta = [];
-        foreach (['og:title', 'og:image', 'product:price:amount', 'product:price:currency', 'twitter:title', 'twitter:image'] as $prop) {
-            if (preg_match('/<meta[^>]+(?:property|name)=["\']' . preg_quote($prop, '/') . '["\'][^>]+content=["\']([^"\']+)["\']/i', $html, $m)) {
-                $meta[$prop] = trim($m[1]);
+        foreach (['og:title' => 'property', 'og:image' => 'property', 'product:price:amount' => 'property', 'product:price:currency' => 'property', 'twitter:title' => 'name', 'twitter:image' => 'name'] as $prop => $attr) {
+            $val = $this->metaContent($html, $prop, $attr);
+            if ($val !== null) {
+                $meta[$prop] = trim($val);
             }
         }
 
@@ -425,22 +459,27 @@ class ProductExtractionService
      */
     public function extractFromRegex(string $html): array
     {
-        $title = 'Product';
-        if (preg_match('/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/', $html, $m)) {
-            $title = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
-        } elseif (preg_match('/<title>([^<]+)<\/title>/', $html, $m)) {
-            $title = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
-        }
+        $title = $this->metaContent($html, 'og:title', 'property')
+            ?? $this->metaTitle($html)
+            ?? 'Product';
+        $title = html_entity_decode(trim($title), ENT_QUOTES, 'UTF-8');
 
-        $imageUrl = null;
-        if (preg_match('/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/', $html, $m)) {
-            $imageUrl = $m[1];
+        $imageUrl = $this->metaContent($html, 'og:image', 'property')
+            ?? $this->metaContent($html, 'twitter:image', 'name');
+        if ($imageUrl !== null && ! filter_var(trim($imageUrl), FILTER_VALIDATE_URL)) {
+            $imageUrl = null;
+        } elseif ($imageUrl !== null) {
+            $imageUrl = trim($imageUrl);
         }
 
         $price = 0.0;
-        if (preg_match('/"price"\s*:\s*["\']?([\d.]+)/', $html, $m)) {
+        if (preg_match('/"(?:lowPrice|highPrice|price|priceAmount)"\s*:\s*["\']?([\d.]+)/', $html, $m)) {
             $price = (float) $m[1];
-        } elseif (preg_match('/\$([\d,]+\.?\d*)/', $html, $m)) {
+        }
+        if ($price === 0.0 && preg_match('/"price"\s*:\s*["\']?([\d.]+)/', $html, $m)) {
+            $price = (float) $m[1];
+        }
+        if ($price === 0.0 && preg_match('/\$([\d,]+\.?\d*)/', $html, $m)) {
             $price = (float) str_replace(',', '', $m[1]);
         }
 
