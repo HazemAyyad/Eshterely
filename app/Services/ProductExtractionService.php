@@ -284,22 +284,7 @@ class ProductExtractionService
                 return null;
             }
 
-            $price = 0.0;
-            $priceSelectors = [
-                '[class*="price"]', '[id*="price"]', '[class*="a-price"]',
-                '[class*="product-price"]', '[class*="sale-price"]', '[class*="amount"]',
-            ];
-            foreach ($priceSelectors as $sel) {
-                if ($crawler->filter($sel)->count() > 0) {
-                    $text = trim($crawler->filter($sel)->first()->text());
-                    if (preg_match('/[\d,]+\.?\d*/', $text, $m)) {
-                        $price = (float) str_replace(',', '', $m[0]);
-                        if ($price > 0) {
-                            break;
-                        }
-                    }
-                }
-            }
+            $price = $this->extractMainProductPriceFromDom($crawler);
 
             $imageUrl = null;
             if ($crawler->filter('[class*="product"] img, [id*="product"] img, main img, [data-product] img')->count() > 0) {
@@ -329,6 +314,117 @@ class ProductExtractionService
             libxml_clear_errors();
             libxml_use_internal_errors($previous);
         }
+    }
+
+    /**
+     * Extract main product price, avoiding import charges, shipping, tax, totals.
+     */
+    private function extractMainProductPriceFromDom(Crawler $crawler): float
+    {
+        $excludeKeywords = ['import', 'shipping', 'delivery', 'tax', 'total', 'charges', 'duties'];
+        $candidates = [];
+
+        $prioritySelectors = [
+            '#corePrice_feature_div',
+            '#corePriceDisplay_desktop_feature_div',
+            '.a-price.a-price--primary',
+            '[data-cel-widget*="corePrice"]',
+            '.a-price .a-offscreen',
+            '.a-price-whole',
+        ];
+
+        foreach ($prioritySelectors as $sel) {
+            try {
+                if ($crawler->filter($sel)->count() === 0) {
+                    continue;
+                }
+                $nodes = $crawler->filter($sel);
+                foreach ($nodes as $i => $node) {
+                    $sub = new Crawler($node);
+                    $text = trim($sub->text());
+                    $parentText = $this->getAncestorText($sub, 3);
+                    $combined = strtolower($text . ' ' . $parentText);
+                    if ($this->containsAny($combined, $excludeKeywords)) {
+                        continue;
+                    }
+                    if (preg_match('/\$?([\d,]+\.?\d*)/', $text, $m)) {
+                        $val = (float) str_replace(',', '', $m[1]);
+                        if ($val > 0 && $val < 100000) {
+                            $candidates[] = $val;
+                        }
+                    }
+                }
+            } catch (\Throwable) {
+                continue;
+            }
+        }
+
+        if ($candidates !== []) {
+            return $candidates[0];
+        }
+
+        $fallbackSelectors = [
+            '[class*="a-price"]:not([class*="shipping"]):not([class*="import"])',
+            '[class*="product-price"]',
+            '[class*="sale-price"]',
+            '[class*="price"]',
+        ];
+
+        foreach ($fallbackSelectors as $sel) {
+            try {
+                if ($crawler->filter($sel)->count() === 0) {
+                    continue;
+                }
+                $el = $crawler->filter($sel)->first();
+                $text = trim($el->text());
+                $parentText = $this->getAncestorText($el, 2);
+                $combined = strtolower($text . ' ' . $parentText);
+                if ($this->containsAny($combined, $excludeKeywords)) {
+                    continue;
+                }
+                if (preg_match('/\$?([\d,]+\.?\d*)/', $text, $m)) {
+                    $val = (float) str_replace(',', '', $m[1]);
+                    if ($val > 0 && $val < 100000) {
+                        return $val;
+                    }
+                }
+            } catch (\Throwable) {
+                continue;
+            }
+        }
+
+        return 0.0;
+    }
+
+    private function getAncestorText(Crawler $crawler, int $levels): string
+    {
+        try {
+            $node = $crawler->getNode(0);
+            if ($node === null) {
+                return '';
+            }
+            $text = '';
+            for ($i = 0; $i < $levels && $node !== null; $i++) {
+                $node = $node->parentNode;
+                if ($node === null) {
+                    break;
+                }
+                $text .= ' ' . trim($node->textContent ?? '');
+            }
+            return $text;
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
+    private function containsAny(string $haystack, array $keywords): bool
+    {
+        foreach ($keywords as $kw) {
+            if (str_contains($haystack, $kw)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -420,8 +516,8 @@ class ProductExtractionService
             return null;
         }
         $jsonPayload = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $systemMessage = 'You extract product data from structured page data. Return ONLY valid JSON with keys: name, price, currency, image_url. No markdown.';
-        $userMessage = "Extract product data from this payload. Return JSON with name, price (float, 0 if not found), currency, image_url (string or null):\n\n" . $jsonPayload;
+        $systemMessage = 'You extract product data. Return ONLY valid JSON with keys: name, price, currency, image_url. No markdown.';
+        $userMessage = "Extract product data from this payload. Return JSON with name, price (BASE product price ONLY - not shipping, import charges, or total), currency, image_url (string or null):\n\n" . $jsonPayload;
 
         try {
             $response = OpenAI::chat()->create([
