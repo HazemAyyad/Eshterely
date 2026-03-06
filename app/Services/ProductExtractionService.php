@@ -23,23 +23,9 @@ class ProductExtractionService
 
         $data = $this->extractFromMetaTags($html);
         if ($this->isValidResult($data)) {
-            // Meta tags often return wrong currency or null image for many stores — try DOM merge
-            $isUsdStore = $this->expectsUsdFromUrl($url, $storeKey);
-            $needsDomFallback = $isUsdStore && (
-                empty($data['image_url']) ||
-                (isset($data['currency']) && strtoupper((string) $data['currency']) !== 'USD')
-            );
-            if ($needsDomFallback) {
-                $domData = $this->extractFromDom($html, $storeKey);
-                if ($domData !== null && $this->isValidResult($domData)) {
-                    $data['image_url'] = $domData['image_url'] ?? $data['image_url'];
-                    if (($domData['price'] ?? 0) > 0) {
-                        $data['price'] = $domData['price'];
-                        $data['currency'] = $domData['currency'] ?? 'USD';
-                    }
-                }
-            }
-            return $this->normalizeResult($data, $url, $storeKey, 'meta_tags');
+            $domData = $this->extractFromDom($html, $storeKey);
+            $merged = $this->mergeMetaWithDom($data, $domData, $url, $storeKey);
+            return $this->normalizeResult($merged['data'], $url, $storeKey, $merged['source']);
         }
 
         $data = $this->extractFromDom($html, $storeKey);
@@ -90,6 +76,11 @@ class ProductExtractionService
         $name = trim((string) ($data['name'] ?? 'Product'));
         if ($name === '') {
             $name = 'Product';
+        } else {
+            $cleaned = $this->stripProductTitleNoise($name);
+            if ($cleaned !== '') {
+                $name = $cleaned;
+            }
         }
 
         $price = isset($data['price']) ? (float) $data['price'] : 0.0;
@@ -292,6 +283,124 @@ class ProductExtractionService
             }
         }
         return in_array(strtolower($storeKey), ['amazon', 'ebay', 'walmart', 'etsy'], true);
+    }
+
+    /**
+     * Merge meta result with DOM. For Amazon: always run DOM and prefer DOM when stronger.
+     * For others: allow DOM to override meta when DOM has stronger price/title/image.
+     *
+     * @return array{data: array<string, mixed>, source: string}
+     */
+    private function mergeMetaWithDom(array $metaData, ?array $domData, string $url, string $storeKey): array
+    {
+        $isAmazon = str_contains(strtolower($url), 'amazon.');
+        $merged = $metaData;
+        $domImproved = false;
+
+        if ($domData !== null && $this->isValidResult($domData)) {
+            $merged = $this->mergeResults($metaData, $domData, $storeKey);
+            $domImproved = $merged !== $metaData || $this->isStrongerPrice($domData, $metaData)
+                || $this->isCleanerTitle((string) ($domData['name'] ?? ''), (string) ($metaData['name'] ?? ''));
+        }
+
+        $source = $domImproved ? 'meta_dom_merged' : 'meta_tags';
+        if ($domImproved && $isAmazon && $this->isStrongerPrice($domData, $metaData)) {
+            $source = 'dom';
+        }
+
+        return ['data' => $merged, 'source' => $source];
+    }
+
+    /**
+     * Merge override into base. Override fields replace base only when they meaningfully improve.
+     *
+     * @param  array<string, mixed>  $base
+     * @param  array<string, mixed>  $override
+     * @return array<string, mixed>
+     */
+    private function mergeResults(array $base, array $override, string $storeKey): array
+    {
+        $result = $base;
+
+        if ($this->isStrongerPrice($override, $base)) {
+            $result['price'] = (float) ($override['price'] ?? 0);
+            $result['currency'] = (string) ($override['currency'] ?? 'USD');
+        }
+
+        $overrideName = trim((string) ($override['name'] ?? ''));
+        $baseName = trim((string) ($base['name'] ?? ''));
+        if ($overrideName !== '' && $this->isCleanerTitle($overrideName, $baseName)) {
+            $result['name'] = $this->stripProductTitleNoise($overrideName) ?: $overrideName;
+        }
+
+        $overrideImage = $override['image_url'] ?? null;
+        if ($overrideImage !== null && trim((string) $overrideImage) !== '' && filter_var(trim((string) $overrideImage), FILTER_VALIDATE_URL)) {
+            $baseImage = $base['image_url'] ?? null;
+            if ($baseImage === null || trim((string) $baseImage) === '') {
+                $result['image_url'] = trim((string) $overrideImage);
+            } else {
+                $overrideImgStr = strtolower((string) $overrideImage);
+                if (str_contains($overrideImgStr, 'images-na.ssl-images-amazon.com') || str_contains($overrideImgStr, 'landing') || str_contains($overrideImgStr, 'imgblk')) {
+                    $result['image_url'] = trim((string) $overrideImage);
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * DOM has a stronger valid price when it has price > 0. Prefer DOM for visible product price.
+     */
+    private function isStrongerPrice(?array $domData, ?array $metaData): bool
+    {
+        if ($domData === null || ! is_array($domData)) {
+            return false;
+        }
+        $domPrice = (float) ($domData['price'] ?? 0);
+
+        return $domPrice > 0;
+    }
+
+    /**
+     * Candidate title is cleaner (e.g. DOM H1) than current (e.g. meta page title).
+     */
+    private function isCleanerTitle(string $candidate, string $current): bool
+    {
+        $candidate = trim($candidate);
+        $current = trim($current);
+        if ($candidate === '') {
+            return false;
+        }
+        $cleanCandidate = $this->stripProductTitleNoise($candidate);
+        if ($cleanCandidate === '' || mb_strlen($cleanCandidate) < 5) {
+            return false;
+        }
+        $currentHasNoise = preg_match('/^Amazon\.com\s*:/i', $current) === 1
+            || preg_match('/\s*:\s*[A-Za-z0-9\s&\-\']+$/u', $current) === 1;
+        $candidateHasNoise = preg_match('/^Amazon\.com\s*:/i', $candidate) === 1
+            || preg_match('/\s*:\s*[A-Za-z0-9\s&\-\']+$/u', $candidate) === 1;
+        if ($currentHasNoise && ! $candidateHasNoise) {
+            return true;
+        }
+        $cleanCurrent = $this->stripProductTitleNoise($current);
+        if ($cleanCurrent !== '' && $cleanCandidate !== $cleanCurrent && mb_strlen($cleanCandidate) <= mb_strlen($cleanCurrent) + 20) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Strip Amazon.com: prefix and generic category suffixes like ": Cell Phones & Accessories".
+     */
+    private function stripProductTitleNoise(string $title): string
+    {
+        $title = html_entity_decode(trim($title), ENT_QUOTES, 'UTF-8');
+        $title = preg_replace('/^Amazon\.com\s*:\s*/i', '', $title);
+        $title = preg_replace('/^Amazon\s*:\s*/i', '', $title);
+        $title = preg_replace('/\s*:\s*[A-Za-z0-9\s&\-\']+$/u', '', $title);
+        return trim($title);
     }
 
     /**
