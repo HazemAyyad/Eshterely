@@ -506,15 +506,20 @@ class ProductExtractionService
 
     /**
      * Extract main product price, avoiding import charges, shipping, tax, totals.
+     * For Amazon: collects candidates, scores them, returns best. For others: original logic.
      */
     private function extractMainProductPriceFromDom(Crawler $crawler, string $storeKey = 'unknown'): float
     {
-        $excludeKeywords = ['import', 'shipping', 'delivery', 'tax', 'total', 'charges', 'duties'];
-        $candidates = [];
+        $storeKey = strtolower($storeKey);
+        if ($storeKey === 'amazon') {
+            $candidates = $this->collectAmazonPriceCandidates($crawler);
+            $best = $this->pickBestAmazonPriceCandidate($candidates);
 
-        // Store-specific price selectors (try first)
-        $storeSelectors = match (strtolower($storeKey)) {
-            'amazon' => ['#corePrice_feature_div', '#corePriceDisplay_desktop_feature_div', '.a-price.a-price--primary', '[data-cel-widget*="corePrice"]', '.a-price .a-offscreen', '.a-price-whole'],
+            return $best !== null ? (float) $best['price'] : 0.0;
+        }
+
+        $excludeKeywords = ['import', 'shipping', 'delivery', 'tax', 'total', 'charges', 'duties'];
+        $storeSelectors = match ($storeKey) {
             'ebay' => ['#prcIsum', '.notranslate', '[itemprop="price"]', '.u-flL.condText', '.notranslate.mm-price'],
             'walmart' => ['[itemprop="price"]', '.price-current', '[data-automation-id="product-price"]', '.prod-PriceHero .price'],
             'etsy' => ['.wt-text-title-larger', '[data-buy-box-region] .wt-text-title-larger', '.wt-text-title-03'],
@@ -544,45 +549,6 @@ class ProductExtractionService
             } catch (\Throwable) {
                 continue;
             }
-        }
-
-        $prioritySelectors = [
-            '#corePrice_feature_div',
-            '#corePriceDisplay_desktop_feature_div',
-            '.a-price.a-price--primary',
-            '[data-cel-widget*="corePrice"]',
-            '.a-price .a-offscreen',
-            '.a-price-whole',
-        ];
-
-        foreach ($prioritySelectors as $sel) {
-            try {
-                if ($crawler->filter($sel)->count() === 0) {
-                    continue;
-                }
-                $nodes = $crawler->filter($sel);
-                foreach ($nodes as $i => $node) {
-                    $sub = new Crawler($node);
-                    $text = trim($sub->text());
-                    $parentText = $this->getAncestorText($sub, 3);
-                    $combined = strtolower($text . ' ' . $parentText);
-                    if ($this->containsAny($combined, $excludeKeywords)) {
-                        continue;
-                    }
-                    if (preg_match('/\$?([\d,]+\.?\d*)/', $text, $m)) {
-                        $val = (float) str_replace(',', '', $m[1]);
-                        if ($val > 0 && $val < 100000) {
-                            $candidates[] = $val;
-                        }
-                    }
-                }
-            } catch (\Throwable) {
-                continue;
-            }
-        }
-
-        if ($candidates !== []) {
-            return $candidates[0];
         }
 
         $fallbackSelectors = [
@@ -616,6 +582,162 @@ class ProductExtractionService
         }
 
         return 0.0;
+    }
+
+    /**
+     * Amazon-only: collect price candidates from high-priority buy-box / main pricing areas.
+     *
+     * @return array<int, array{price: float, text: string, selector: string, ancestor_text: string, source: string}>
+     */
+    private function collectAmazonPriceCandidates(Crawler $crawler): array
+    {
+        $candidates = [];
+
+        $selectorConfigs = [
+            ['selector' => '#corePrice_feature_div .a-offscreen', 'source' => 'corePrice_a-offscreen', 'priority' => 100],
+            ['selector' => '#corePriceDisplay_desktop_feature_div .a-offscreen', 'source' => 'corePriceDisplay_a-offscreen', 'priority' => 95],
+            ['selector' => '.priceToPay .a-offscreen', 'source' => 'priceToPay_a-offscreen', 'priority' => 90],
+            ['selector' => '#apex_desktop .a-offscreen', 'source' => 'apex_desktop_a-offscreen', 'priority' => 85],
+            ['selector' => '#corePrice_feature_div .a-price-whole', 'source' => 'corePrice_whole', 'priority' => 80],
+            ['selector' => '#corePriceDisplay_desktop_feature_div .a-price-whole', 'source' => 'corePriceDisplay_whole', 'priority' => 75],
+            ['selector' => '.priceToPay .a-price-whole', 'source' => 'priceToPay_whole', 'priority' => 70],
+            ['selector' => '.a-price.a-price--primary .a-offscreen', 'source' => 'primary_a-offscreen', 'priority' => 65],
+            ['selector' => '[data-cel-widget*="corePrice"] .a-offscreen', 'source' => 'corePrice_widget_a-offscreen', 'priority' => 60],
+            ['selector' => '#corePrice_feature_div', 'source' => 'corePrice_div', 'priority' => 50],
+            ['selector' => '#corePriceDisplay_desktop_feature_div', 'source' => 'corePriceDisplay_div', 'priority' => 45],
+            ['selector' => '.a-price.a-price--primary .a-price-whole', 'source' => 'primary_whole', 'priority' => 40],
+            ['selector' => '[data-cel-widget*="corePrice"] .a-price-whole', 'source' => 'corePrice_widget_whole', 'priority' => 35],
+            ['selector' => '.a-price .a-offscreen', 'source' => 'a-price_a-offscreen', 'priority' => 20],
+            ['selector' => '.a-price-whole', 'source' => 'a-price-whole', 'priority' => 10],
+        ];
+
+        $excludeKeywords = [
+            'shipping', 'delivery', 'import', 'import charges', 'tax', 'total', 'fees',
+            'coupon', 'savings', 'save', 'list price', 'was', 'typical price', 'lowest price',
+            'protection plan', 'trade-in', 'charges', 'duties',
+        ];
+
+        foreach ($selectorConfigs as $config) {
+            $sel = $config['selector'];
+            $source = $config['source'];
+            $basePriority = $config['priority'];
+            try {
+                if ($crawler->filter($sel)->count() === 0) {
+                    continue;
+                }
+                $nodes = $crawler->filter($sel);
+                foreach ($nodes as $i => $node) {
+                    $sub = new Crawler($node);
+                    $text = trim($sub->text());
+                    $content = $sub->attr('content') ?? $text;
+                    $parseText = $content !== '' ? $content : $text;
+                    $ancestorText = $this->getAncestorText($sub, 4);
+                    $combined = strtolower($text . ' ' . $content . ' ' . $ancestorText);
+
+                    if ($this->containsAny($combined, $excludeKeywords)) {
+                        continue;
+                    }
+
+                    if (preg_match('/\$?€?£?([\d,]+\.?\d*)/', $parseText, $m)) {
+                        $val = (float) str_replace(',', '', $m[1]);
+                        if ($val <= 0 || $val >= 100000) {
+                            continue;
+                        }
+
+                        $candidates[] = [
+                            'price' => $val,
+                            'text' => $parseText,
+                            'selector' => $sel,
+                            'ancestor_text' => $ancestorText,
+                            'source' => $source,
+                            'base_priority' => $basePriority,
+                        ];
+                    }
+                }
+            } catch (\Throwable) {
+                continue;
+            }
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * Score an Amazon price candidate. Higher = more likely to be the main visible product price.
+     */
+    private function scoreAmazonPriceCandidate(array $candidate): int
+    {
+        $score = $candidate['base_priority'] ?? 0;
+
+        $ancestor = strtolower($candidate['ancestor_text'] ?? '');
+        $penaltyKeywords = [
+            'list price' => -80,
+            'was' => -70,
+            'typical price' => -70,
+            'lowest price' => -60,
+            'list' => -50,
+            'strikethrough' => -60,
+            'crossed' => -50,
+        ];
+        foreach ($penaltyKeywords as $kw => $penalty) {
+            if (str_contains($ancestor, $kw)) {
+                $score += $penalty;
+            }
+        }
+
+        if (str_contains($candidate['source'] ?? '', 'a-offscreen') && ! str_contains($ancestor, 'list')) {
+            $score += 15;
+        }
+
+        if (str_contains($candidate['source'] ?? '', 'corePrice') || str_contains($candidate['source'] ?? '', 'priceToPay')) {
+            $score += 10;
+        }
+
+        $price = (float) ($candidate['price'] ?? 0);
+        $text = (string) ($candidate['text'] ?? '');
+        if ($price >= 1 && $price <= 10000 && preg_match('/\d+\.\d{2}/', $text)) {
+            $score += 5;
+        }
+        if ($price > 0 && $price < 1) {
+            $score -= 90;
+        }
+
+        return max(0, $score);
+    }
+
+    /**
+     * Pick the best Amazon price candidate by score. Prefer main visible price over list/variant.
+     *
+     * @param  array<int, array{price: float, text: string, selector: string, ancestor_text: string, source: string, base_priority?: int}>  $candidates
+     * @return array{price: float, text: string, selector: string, source: string}|null
+     */
+    private function pickBestAmazonPriceCandidate(array $candidates): ?array
+    {
+        if ($candidates === []) {
+            return null;
+        }
+
+        $scored = [];
+        foreach ($candidates as $c) {
+            $c['score'] = $this->scoreAmazonPriceCandidate($c);
+            $scored[] = $c;
+        }
+
+        usort($scored, static function ($a, $b) {
+            return ($b['score'] ?? 0) <=> ($a['score'] ?? 0);
+        });
+
+        $best = $scored[0];
+        if (($best['score'] ?? 0) < 5) {
+            return null;
+        }
+
+        return [
+            'price' => $best['price'],
+            'text' => $best['text'],
+            'selector' => $best['selector'],
+            'source' => $best['source'],
+        ];
     }
 
     private function getAncestorText(Crawler $crawler, int $levels): string
