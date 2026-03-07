@@ -10,16 +10,24 @@ class ProductExtractionService
     private const MAX_HTML_LENGTH = 15000;
 
     /**
+     * Failure reason when forced OpenAI extraction is skipped due to blocked/incomplete HTML.
+     */
+    private const OPENAI_BAD_INPUT_FAILURE_REASON = 'OpenAI forced extraction received blocked or incomplete HTML, not full rendered product content.';
+
+    /**
      * Main entry point. With strategy 'auto': JSON-LD → Meta → DOM → OpenAI → Regex.
      * With a forced strategy (jsonld, meta, dom, openai): run only that method; on failure return strategy_failed.
+     * For strategy 'openai', fetch metadata is used to avoid pretending OpenAI failed when HTML is blocked/incomplete.
      *
+     * @param  array{fetch_source?: string, html_strategy?: string, blocked_or_captcha?: bool}|null  $fetchMetadata
      * @return array<string, mixed>
      */
     public function extract(
         string $html,
         string $url,
         string $storeKey,
-        string $strategy = 'auto'
+        string $strategy = 'auto',
+        ?array $fetchMetadata = null
     ): array {
         $strategy = strtolower($strategy);
         if ($strategy === '') {
@@ -67,16 +75,32 @@ class ProductExtractionService
         }
 
         if ($strategy === 'openai') {
+            $failureReason = $this->openaiForcedFailureReason($html, $storeKey, $fetchMetadata);
+            if ($failureReason !== null) {
+                $result = $this->normalizeResult(
+                    ['name' => 'Product', 'price' => 0],
+                    $url,
+                    $storeKey,
+                    'strategy_failed'
+                );
+                $result['failure_reason'] = $failureReason;
+
+                return $result;
+            }
+
             $data = $this->extractWithOpenAI($html, $url, $storeKey);
             if ($this->isValidResult($data)) {
                 return $this->normalizeResult($data, $url, $storeKey, 'openai_forced');
             }
-            return $this->normalizeResult(
+            $result = $this->normalizeResult(
                 ['name' => 'Product', 'price' => 0],
                 $url,
                 $storeKey,
                 'strategy_failed'
             );
+            $result['failure_reason'] = 'OpenAI extraction did not return valid product data.';
+
+            return $result;
         }
 
         // strategy === 'auto': existing pipeline unchanged
@@ -108,6 +132,49 @@ class ProductExtractionService
             $storeKey,
             'regex'
         );
+    }
+
+    /**
+     * When strategy is openai, determine if we should skip OpenAI and return strategy_failed with a clear reason.
+     * Returns the failure_reason string if input is blocked/incomplete; null otherwise (run OpenAI).
+     *
+     * @param  array{fetch_source?: string, html_strategy?: string, blocked_or_captcha?: bool}|null  $fetchMetadata
+     */
+    private function openaiForcedFailureReason(string $html, string $storeKey, ?array $fetchMetadata): ?string
+    {
+        if ($fetchMetadata === null) {
+            return null;
+        }
+
+        $blockedOrCaptcha = $fetchMetadata['blocked_or_captcha'] ?? false;
+        if ($blockedOrCaptcha) {
+            return self::OPENAI_BAD_INPUT_FAILURE_REASON;
+        }
+
+        $storeKeyLower = strtolower($storeKey);
+        $htmlStrategy = $fetchMetadata['html_strategy'] ?? 'initial_html';
+        if ($storeKeyLower === 'amazon' && $htmlStrategy === 'initial_html' && $this->isAmazonHtmlIncomplete($html)) {
+            return self::OPENAI_BAD_INPUT_FAILURE_REASON;
+        }
+
+        return null;
+    }
+
+    /**
+     * Heuristic: Amazon product page HTML from direct fetch (initial shell) often lacks full product DOM.
+     */
+    private function isAmazonHtmlIncomplete(string $html): bool
+    {
+        $len = strlen($html);
+        if ($len < 5000) {
+            return true;
+        }
+        $lower = strtolower($html);
+        $hasProductMarkers = str_contains($lower, 'coreprice')
+            || str_contains($lower, 'pricetopay')
+            || str_contains($lower, 'producttitle');
+
+        return ! $hasProductMarkers;
     }
 
     /**

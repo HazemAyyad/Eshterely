@@ -35,7 +35,12 @@ class ProductImportController extends Controller
                 return response()->json(['message' => 'Could not fetch URL'], 400);
             }
 
-            $product = $extractionService->extract($html, $url, $storeKey, $strategy);
+            $fetchMetadata = [
+                'fetch_source' => $fetchResult['fetch_source'] ?? 'direct_http',
+                'html_strategy' => $fetchResult['html_strategy'] ?? 'initial_html',
+                'blocked_or_captcha' => $fetchResult['blocked_or_captcha'] ?? false,
+            ];
+            $product = $extractionService->extract($html, $url, $storeKey, $strategy, $fetchMetadata);
 
             $product['fetch_source'] = $fetchResult['fetch_source'] ?? 'direct_http';
             $product['html_strategy'] = $fetchResult['html_strategy'] ?? 'initial_html';

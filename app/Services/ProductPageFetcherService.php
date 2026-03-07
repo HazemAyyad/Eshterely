@@ -8,6 +8,8 @@ use Illuminate\Support\Str;
 /**
  * Fetches HTML for product URL import.
  * For Amazon: can use rendered-fetch (e.g. ScraperAPI) when configured; otherwise direct HTTP.
+ * When rendered fetch is configured for Amazon, the returned HTML is preferred for all extraction
+ * strategies (including forced OpenAI) so that OpenAI receives full product DOM, not initial shell.
  * For other stores: direct HTTP with improved headers.
  */
 class ProductPageFetcherService
