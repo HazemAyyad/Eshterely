@@ -9,6 +9,13 @@ class ProductExtractionService
 {
     private const MAX_HTML_LENGTH = 15000;
 
+    private readonly StructuredProductImportService $structuredImportService;
+
+    public function __construct(?StructuredProductImportService $structuredImportService = null)
+    {
+        $this->structuredImportService = $structuredImportService ?? app(StructuredProductImportService::class);
+    }
+
     /**
      * Failure reason when forced OpenAI extraction is skipped due to blocked/incomplete HTML.
      */
@@ -103,7 +110,53 @@ class ProductExtractionService
             return $result;
         }
 
-        // strategy === 'auto': existing pipeline unchanged
+        // strategy === 'auto': try structured integrations first, then existing HTML pipeline
+        $storeKeyLower = strtolower($storeKey);
+
+        if ($storeKeyLower === 'amazon') {
+            $structured = $this->structuredImportService->extractAmazonStructured($url);
+            if ($structured !== null && $this->isValidResult($structured)) {
+                return $structured;
+            }
+        }
+
+        if ($storeKeyLower === 'ebay') {
+            $structured = $this->structuredImportService->extractEbayStructured($url);
+            if ($structured !== null && $this->isValidResult($structured)) {
+                return $structured;
+            }
+        }
+
+        if ($storeKeyLower === 'walmart') {
+            $structured = $this->structuredImportService->extractWalmartStructured($url);
+            if ($structured !== null && $this->isValidResult($structured)) {
+                return $structured;
+            }
+        }
+
+        if ($storeKeyLower === 'aliexpress') {
+            $rendered = $this->structuredImportService->extractAliExpressRendered($url);
+            if ($rendered !== null && isset($rendered['html']) && $rendered['html'] !== '') {
+                $pipelineResult = $this->runHtmlOnlyPipeline($rendered['html'], $url, $storeKey);
+                $pipelineResult['scraperapi_raw'] = $rendered['scraperapi_raw'] ?? [];
+                $pipelineResult['extraction_source'] = 'aliexpress_rendered';
+                $pipelineResult['fetch_source'] = 'scraperapi';
+                $pipelineResult['html_strategy'] = 'rendered_html';
+                $pipelineResult['blocked_or_captcha'] = false;
+                return $pipelineResult;
+            }
+        }
+
+        return $this->runHtmlOnlyPipeline($html, $url, $storeKey);
+    }
+
+    /**
+     * Run JSON-LD → Meta → DOM → OpenAI → Regex on HTML. Returns normalized result (no scraperapi_raw).
+     *
+     * @return array<string, mixed>
+     */
+    private function runHtmlOnlyPipeline(string $html, string $url, string $storeKey): array
+    {
         $data = $this->extractFromJsonLd($html);
         if ($this->isValidResult($data)) {
             return $this->normalizeResult($data, $url, $storeKey, 'json_ld');

@@ -42,9 +42,15 @@ class ProductImportController extends Controller
             ];
             $product = $extractionService->extract($html, $url, $storeKey, $strategy, $fetchMetadata);
 
-            $product['fetch_source'] = $fetchResult['fetch_source'] ?? 'direct_http';
-            $product['html_strategy'] = $fetchResult['html_strategy'] ?? 'initial_html';
-            $product['blocked_or_captcha'] = $fetchResult['blocked_or_captcha'] ?? false;
+            if (! isset($product['fetch_source'])) {
+                $product['fetch_source'] = $fetchResult['fetch_source'] ?? 'direct_http';
+            }
+            if (! isset($product['html_strategy'])) {
+                $product['html_strategy'] = $fetchResult['html_strategy'] ?? 'initial_html';
+            }
+            if (! array_key_exists('blocked_or_captcha', $product)) {
+                $product['blocked_or_captcha'] = $fetchResult['blocked_or_captcha'] ?? false;
+            }
 
             return response()->json($product);
         } catch (\Exception $e) {
