@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    'product_import' => [
+        'rendered_fetcher' => env('PRODUCT_IMPORT_RENDERED_FETCHER', ''),
+        'scraperapi_key' => env('SCRAPERAPI_KEY'),
+        'zenrows_api_key' => env('ZENROWS_API_KEY'),
+        'brightdata_api_key' => env('BRIGHTDATA_API_KEY'),
+    ],
+
 ];
