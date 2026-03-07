@@ -162,35 +162,42 @@ class ProductExtractionService
 
     /**
      * Structured result is acceptable when we got a non-null response with scraperapi_raw and expected source.
-     * We do NOT require isValidResult (price/image) so that structured API is preferred whenever it returns data.
-     * For Amazon: also accept when raw has name/title or non-empty images so valid API responses are not rejected.
+     * Rejects placeholder names like "Product". For Amazon, also accept when raw has real name/title or images.
      */
     private function isStructuredResultAcceptable(?array $structured): bool
     {
         if ($structured === null || ! is_array($structured)) {
+            Log::debug('Amazon structured acceptance', ['result' => 'rejected', 'reason' => 'null_or_not_array']);
             return false;
         }
         $source = $structured['extraction_source'] ?? '';
         $validSources = ['amazon_structured_api', 'ebay_structured_api', 'walmart_structured_api'];
         if (! in_array($source, $validSources, true)) {
+            Log::debug('Amazon structured acceptance', ['result' => 'rejected', 'reason' => 'invalid_source', 'source' => $source]);
             return false;
         }
         $raw = $structured['scraperapi_raw'] ?? null;
         if (! is_array($raw) || $raw === []) {
+            Log::debug('Amazon structured acceptance', ['result' => 'rejected', 'reason' => 'missing_or_empty_scraperapi_raw']);
             return false;
         }
         $name = trim((string) ($structured['name'] ?? ''));
-        if ($name !== '') {
+        $isPlaceholder = strtolower($name) === 'product';
+        if ($name !== '' && ! $isPlaceholder) {
+            Log::debug('Amazon structured acceptance', ['result' => 'accepted', 'reason' => 'valid_name', 'name_preview' => substr($name, 0, 50)]);
             return true;
         }
         if ($source === 'amazon_structured_api') {
             $rawName = trim((string) ($raw['name'] ?? $raw['title'] ?? ''));
+            $rawIsPlaceholder = strtolower($rawName) === 'product';
             $rawImages = $raw['images'] ?? $raw['high_res_images'] ?? [];
             $hasImages = is_array($rawImages) && ! empty($rawImages);
-            if ($rawName !== '' || $hasImages) {
+            if (($rawName !== '' && ! $rawIsPlaceholder) || $hasImages) {
+                Log::debug('Amazon structured acceptance', ['result' => 'accepted', 'reason' => 'amazon_raw_name_or_images']);
                 return true;
             }
         }
+        Log::debug('Amazon structured acceptance', ['result' => 'rejected', 'reason' => 'placeholder_or_empty_name', 'name' => $name]);
         return false;
     }
 
