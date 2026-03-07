@@ -110,26 +110,27 @@ class ProductExtractionService
             return $result;
         }
 
-        // strategy === 'auto': try structured integrations first, then existing HTML pipeline
+        // strategy === 'auto': try StructuredProductImportService FIRST for supported stores; only then HTML pipeline
         $storeKeyLower = strtolower($storeKey);
 
         if ($storeKeyLower === 'amazon') {
             $structured = $this->structuredImportService->extractAmazonStructured($url);
-            if ($structured !== null && $this->isValidResult($structured)) {
+            if ($this->isStructuredResultAcceptable($structured)) {
                 return $structured;
             }
+            // Structured failed or unavailable → fall back to HTML pipeline
         }
 
         if ($storeKeyLower === 'ebay') {
             $structured = $this->structuredImportService->extractEbayStructured($url);
-            if ($structured !== null && $this->isValidResult($structured)) {
+            if ($this->isStructuredResultAcceptable($structured)) {
                 return $structured;
             }
         }
 
         if ($storeKeyLower === 'walmart') {
             $structured = $this->structuredImportService->extractWalmartStructured($url);
-            if ($structured !== null && $this->isValidResult($structured)) {
+            if ($this->isStructuredResultAcceptable($structured)) {
                 return $structured;
             }
         }
@@ -147,7 +148,30 @@ class ProductExtractionService
             }
         }
 
+        // Fallback: run existing HTML pipeline (JSON-LD → Meta → DOM → OpenAI → Regex)
         return $this->runHtmlOnlyPipeline($html, $url, $storeKey);
+    }
+
+    /**
+     * Structured result is acceptable when we got a non-null response with scraperapi_raw and expected source.
+     * We do NOT require isValidResult (price/image) so that structured API is preferred whenever it returns data.
+     */
+    private function isStructuredResultAcceptable(?array $structured): bool
+    {
+        if ($structured === null || ! is_array($structured)) {
+            return false;
+        }
+        $source = $structured['extraction_source'] ?? '';
+        $validSources = ['amazon_structured_api', 'ebay_structured_api', 'walmart_structured_api'];
+        if (! in_array($source, $validSources, true)) {
+            return false;
+        }
+        $raw = $structured['scraperapi_raw'] ?? null;
+        if (! is_array($raw) || $raw === []) {
+            return false;
+        }
+        $name = trim((string) ($structured['name'] ?? ''));
+        return $name !== '';
     }
 
     /**
