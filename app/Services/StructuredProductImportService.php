@@ -64,6 +64,42 @@ class StructuredProductImportService
     }
 
     /**
+     * Extract ScraperAPI-valid TLD from Amazon URL. Only returns TLD values accepted by the structured API.
+     */
+    public function extractAmazonTld(string $url): string
+    {
+        $host = strtolower(parse_url($url, PHP_URL_HOST) ?? '');
+        if (Str::contains($host, 'amazon.co.uk')) {
+            return 'co.uk';
+        }
+        if (Str::contains($host, 'amazon.com.au')) {
+            return 'com.au';
+        }
+        if (Str::contains($host, 'amazon.com')) {
+            return 'com';
+        }
+        if (Str::contains($host, 'amazon.ca')) {
+            return 'ca';
+        }
+        if (Str::contains($host, 'amazon.de')) {
+            return 'de';
+        }
+        if (Str::contains($host, 'amazon.es')) {
+            return 'es';
+        }
+        if (Str::contains($host, 'amazon.fr')) {
+            return 'fr';
+        }
+        if (Str::contains($host, 'amazon.it')) {
+            return 'it';
+        }
+        if (Str::contains($host, 'amazon.ae')) {
+            return 'ae';
+        }
+        return 'com';
+    }
+
+    /**
      * Extract eBay item ID from URLs like /itm/123456789012.
      */
     public function extractEbayItemId(string $url): ?string
@@ -109,7 +145,7 @@ class StructuredProductImportService
             return null;
         }
 
-        $tld = $this->amazonTldFromUrl($url);
+        $tld = $this->extractAmazonTld($url);
         $countryCode = $this->amazonCountryCodeFromTld($tld);
         $apiKey = config('services.product_import.scraperapi_key');
         if (empty($apiKey)) {
@@ -135,8 +171,10 @@ class StructuredProductImportService
 
             Log::debug('Amazon structured API response', [
                 'asin' => $asin,
+                'tld' => $tld,
                 'status' => $status,
                 'body_length' => strlen($body ?? ''),
+                'response_body' => $body !== null && $body !== '' ? substr($body, 0, 500) : '',
                 'raw_json_preview' => is_array($raw) ? json_encode(array_slice($raw, 0, 1)) : substr($body ?? '', 0, 300),
             ]);
 
@@ -484,6 +522,7 @@ class StructuredProductImportService
             'fr' => 'fr',
             'it' => 'it',
             'es' => 'es',
+            'ae' => 'ae',
             'co.jp' => 'jp',
             'in' => 'in',
             'com.au' => 'au',
