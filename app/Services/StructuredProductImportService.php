@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
@@ -34,17 +35,25 @@ class StructuredProductImportService
     ];
 
     /**
-     * Extract ASIN from Amazon URLs: /dp/{ASIN}, /gp/product/{ASIN}, /product/{ASIN}.
+     * Extract ASIN from Amazon URLs: /dp/{ASIN}, /dp/{ASIN}?, /gp/product/{ASIN}, /product/{ASIN}.
+     * Handles paths with product name prefix and /ref= or query.
      */
     public function extractAmazonAsin(string $url): ?string
     {
         $path = parse_url($url, PHP_URL_PATH);
-        if ($path === null || $path === '') {
-            return null;
+        if ($path !== null && $path !== '') {
+            if (preg_match('#/(?:dp|gp/product|product)/([A-Z0-9]{10})(?:/|$|\?)#i', $path, $m)) {
+                $asin = strtoupper($m[1]);
+                Log::debug('Amazon ASIN from path', ['url' => $url, 'asin' => $asin]);
+                return $asin;
+            }
         }
-        if (preg_match('#/(?:dp|gp/product|product)/([A-Z0-9]{10})#i', $path, $m)) {
-            return strtoupper($m[1]);
+        if (preg_match('#(?:/dp/|/gp/product/|/product/)([A-Z0-9]{10})(?:/|$|\?)#i', $url, $m)) {
+            $asin = strtoupper($m[1]);
+            Log::debug('Amazon ASIN from full URL', ['url' => $url, 'asin' => $asin]);
+            return $asin;
         }
+        Log::debug('Amazon ASIN not found', ['url' => $url]);
         return null;
     }
 
@@ -90,6 +99,7 @@ class StructuredProductImportService
     {
         $asin = $this->extractAmazonAsin($url);
         if ($asin === null) {
+            Log::debug('Amazon structured skipped: no ASIN', ['url' => $url]);
             return null;
         }
 
@@ -97,6 +107,7 @@ class StructuredProductImportService
         $countryCode = $this->amazonCountryCodeFromTld($tld);
         $apiKey = config('services.product_import.scraperapi_key');
         if (empty($apiKey)) {
+            Log::debug('Amazon structured skipped: no API key');
             return null;
         }
 
@@ -109,17 +120,59 @@ class StructuredProductImportService
 
         try {
             $response = Http::timeout(self::STRUCTURED_TIMEOUT)->get($apiUrl);
+            $status = $response->status();
+            $body = $response->body();
+            Log::debug('Amazon structured API response', [
+                'asin' => $asin,
+                'status' => $status,
+                'body_length' => strlen($body ?? ''),
+                'body_preview' => $body !== null && $body !== '' ? substr($body, 0, 200) : '',
+            ]);
+
             if (! $response->successful()) {
+                Log::debug('Amazon structured API failed: non-success status', ['status' => $status]);
                 return null;
             }
+
             $raw = $response->json();
             if (! is_array($raw)) {
+                $raw = is_string($body) ? json_decode($body, true) : null;
+            }
+            if (! is_array($raw)) {
+                Log::debug('Amazon structured API: response is not valid JSON array', ['body_preview' => substr($body ?? '', 0, 300)]);
                 return null;
             }
-            return $this->normalizeStructuredResult($raw, $url, 'amazon', 'amazon_structured_api');
-        } catch (\Throwable) {
+
+            $raw = $this->unwrapAmazonStructuredResponse($raw);
+            $normalized = $this->normalizeStructuredResult($raw, $url, 'amazon', 'amazon_structured_api');
+            Log::debug('Amazon structured normalized', [
+                'has_name' => ! empty(trim((string) ($normalized['name'] ?? ''))),
+                'name_preview' => substr(trim((string) ($normalized['name'] ?? '')), 0, 60),
+                'price' => $normalized['price'] ?? 0,
+                'has_scraperapi_raw' => isset($normalized['scraperapi_raw']) && is_array($normalized['scraperapi_raw']),
+            ]);
+            return $normalized;
+        } catch (\Throwable $e) {
+            Log::debug('Amazon structured API exception', ['message' => $e->getMessage(), 'url' => $url]);
             return null;
         }
+    }
+
+    /**
+     * Unwrap ScraperAPI response if it is nested under 'product' or 'data'.
+     *
+     * @param  array<string, mixed>  $raw
+     * @return array<string, mixed>
+     */
+    private function unwrapAmazonStructuredResponse(array $raw): array
+    {
+        if (isset($raw['product']) && is_array($raw['product'])) {
+            return $raw['product'];
+        }
+        if (isset($raw['data']) && is_array($raw['data'])) {
+            return $raw['data'];
+        }
+        return $raw;
     }
 
     /**
@@ -261,22 +314,24 @@ class StructuredProductImportService
         $imageUrl = null;
 
         if ($storeKey === 'amazon') {
-            $name = (string) ($rawResponse['name'] ?? 'Product');
-            $name = trim($name);
+            $name = trim((string) ($rawResponse['name'] ?? $rawResponse['title'] ?? 'Product'));
             if ($name === '') {
                 $name = 'Product';
-            }
-            if (isset($rawResponse['product_information']['asin'])) {
-                $name = $name ?: 'Product';
             }
             if (isset($rawResponse['images'][0]) && is_string($rawResponse['images'][0])) {
                 $imageUrl = $rawResponse['images'][0];
             }
+            if ($imageUrl === null && isset($rawResponse['high_res_images'][0]) && is_string($rawResponse['high_res_images'][0])) {
+                $imageUrl = $rawResponse['high_res_images'][0];
+            }
             if (isset($rawResponse['price']) && (is_float($rawResponse['price']) || is_numeric($rawResponse['price']))) {
                 $price = (float) $rawResponse['price'];
             }
-            if ($price === 0.0 && isset($rawResponse['pricing']) && is_string($rawResponse['pricing'])) {
-                if (preg_match('/[\d,]+\.?\d*/', $rawResponse['pricing'], $m)) {
+            if ($price === 0.0 && isset($rawResponse['pricing']) && (is_string($rawResponse['pricing']) || is_numeric($rawResponse['pricing']))) {
+                $pricingVal = $rawResponse['pricing'];
+                if (is_numeric($pricingVal)) {
+                    $price = (float) $pricingVal;
+                } elseif (is_string($pricingVal) && preg_match('/[\d,]+\.?\d*/', $pricingVal, $m)) {
                     $price = (float) str_replace(',', '', $m[0]);
                 }
             }

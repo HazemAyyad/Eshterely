@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Log;
 use OpenAI\Laravel\Facades\OpenAI;
 use Symfony\Component\DomCrawler\Crawler;
 
@@ -115,7 +116,14 @@ class ProductExtractionService
 
         if ($storeKeyLower === 'amazon') {
             $structured = $this->structuredImportService->extractAmazonStructured($url);
-            if ($this->isStructuredResultAcceptable($structured)) {
+            $acceptable = $this->isStructuredResultAcceptable($structured);
+            Log::debug('Amazon structured acceptance', [
+                'url' => $url,
+                'has_structured' => $structured !== null,
+                'extraction_source' => $structured['extraction_source'] ?? null,
+                'acceptable' => $acceptable,
+            ]);
+            if ($acceptable) {
                 return $structured;
             }
             // Structured failed or unavailable → fall back to HTML pipeline
@@ -155,6 +163,7 @@ class ProductExtractionService
     /**
      * Structured result is acceptable when we got a non-null response with scraperapi_raw and expected source.
      * We do NOT require isValidResult (price/image) so that structured API is preferred whenever it returns data.
+     * For Amazon: also accept when raw has name/title or non-empty images so valid API responses are not rejected.
      */
     private function isStructuredResultAcceptable(?array $structured): bool
     {
@@ -171,7 +180,18 @@ class ProductExtractionService
             return false;
         }
         $name = trim((string) ($structured['name'] ?? ''));
-        return $name !== '';
+        if ($name !== '') {
+            return true;
+        }
+        if ($source === 'amazon_structured_api') {
+            $rawName = trim((string) ($raw['name'] ?? $raw['title'] ?? ''));
+            $rawImages = $raw['images'] ?? $raw['high_res_images'] ?? [];
+            $hasImages = is_array($rawImages) && ! empty($rawImages);
+            if ($rawName !== '' || $hasImages) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
