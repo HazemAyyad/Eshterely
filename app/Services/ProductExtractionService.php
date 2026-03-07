@@ -10,12 +10,76 @@ class ProductExtractionService
     private const MAX_HTML_LENGTH = 15000;
 
     /**
-     * Main entry point. Tries JSON-LD → Meta → DOM → OpenAI → Regex.
+     * Main entry point. With strategy 'auto': JSON-LD → Meta → DOM → OpenAI → Regex.
+     * With a forced strategy (jsonld, meta, dom, openai): run only that method; on failure return strategy_failed.
      *
      * @return array<string, mixed>
      */
-    public function extract(string $html, string $url, string $storeKey): array
-    {
+    public function extract(
+        string $html,
+        string $url,
+        string $storeKey,
+        string $strategy = 'auto'
+    ): array {
+        $strategy = strtolower($strategy);
+        if ($strategy === '') {
+            $strategy = 'auto';
+        }
+
+        // Forced strategies: run only the requested method; on invalid result return strategy_failed.
+        if ($strategy === 'jsonld') {
+            $data = $this->extractFromJsonLd($html);
+            if ($this->isValidResult($data)) {
+                return $this->normalizeResult($data, $url, $storeKey, 'jsonld_forced');
+            }
+            return $this->normalizeResult(
+                ['name' => 'Product', 'price' => 0],
+                $url,
+                $storeKey,
+                'strategy_failed'
+            );
+        }
+
+        if ($strategy === 'meta') {
+            $data = $this->extractFromMetaTags($html);
+            if ($this->isValidResult($data)) {
+                return $this->normalizeResult($data, $url, $storeKey, 'meta_forced');
+            }
+            return $this->normalizeResult(
+                ['name' => 'Product', 'price' => 0],
+                $url,
+                $storeKey,
+                'strategy_failed'
+            );
+        }
+
+        if ($strategy === 'dom') {
+            $data = $this->extractFromDom($html, $storeKey);
+            if ($this->isValidResult($data)) {
+                return $this->normalizeResult($data, $url, $storeKey, 'dom_forced');
+            }
+            return $this->normalizeResult(
+                ['name' => 'Product', 'price' => 0],
+                $url,
+                $storeKey,
+                'strategy_failed'
+            );
+        }
+
+        if ($strategy === 'openai') {
+            $data = $this->extractWithOpenAI($html, $url, $storeKey);
+            if ($this->isValidResult($data)) {
+                return $this->normalizeResult($data, $url, $storeKey, 'openai_forced');
+            }
+            return $this->normalizeResult(
+                ['name' => 'Product', 'price' => 0],
+                $url,
+                $storeKey,
+                'strategy_failed'
+            );
+        }
+
+        // strategy === 'auto': existing pipeline unchanged
         $data = $this->extractFromJsonLd($html);
         if ($this->isValidResult($data)) {
             return $this->normalizeResult($data, $url, $storeKey, 'json_ld');

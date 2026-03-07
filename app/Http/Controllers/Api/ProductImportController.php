@@ -20,10 +20,12 @@ class ProductImportController extends Controller
         $validated = $request->validate([
             'url' => 'required|url',
             'store_key' => 'nullable|string',
+            'extraction_strategy' => 'nullable|string|in:auto,jsonld,meta,dom,openai',
         ]);
 
         $url = $validated['url'];
         $storeKey = $validated['store_key'] ?? $this->detectStoreKey($url);
+        $strategy = $validated['extraction_strategy'] ?? 'auto';
 
         try {
             $fetchResult = $pageFetcher->fetchHtml($url, $storeKey);
@@ -33,7 +35,7 @@ class ProductImportController extends Controller
                 return response()->json(['message' => 'Could not fetch URL'], 400);
             }
 
-            $product = $extractionService->extract($html, $url, $storeKey);
+            $product = $extractionService->extract($html, $url, $storeKey, $strategy);
 
             $product['fetch_source'] = $fetchResult['fetch_source'] ?? 'direct_http';
             $product['html_strategy'] = $fetchResult['html_strategy'] ?? 'initial_html';
