@@ -14,6 +14,12 @@ class StructuredProductImportService
 {
     private const STRUCTURED_TIMEOUT = 45;
 
+    private const AMAZON_STRUCTURED_TIMEOUT = 90;
+
+    private const AMAZON_STRUCTURED_RETRIES = 2;
+
+    private const AMAZON_STRUCTURED_RETRY_DELAY_SECONDS = 2;
+
     private const STORE_DISPLAY_NAMES = [
         'amazon' => 'Amazon',
         'ebay' => 'eBay',
@@ -160,56 +166,77 @@ class StructuredProductImportService
             'tld' => $tld,
         ]);
 
-        try {
-            $response = Http::timeout(self::STRUCTURED_TIMEOUT)->get($apiUrl);
-            $status = $response->status();
-            $body = $response->body();
-            $raw = $response->json();
-            if (! is_array($raw)) {
-                $raw = is_string($body) ? json_decode($body, true) : null;
+        $maxAttempts = self::AMAZON_STRUCTURED_RETRIES + 1;
+
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            try {
+                if ($attempt > 1) {
+                    sleep(self::AMAZON_STRUCTURED_RETRY_DELAY_SECONDS);
+                }
+
+                $response = Http::timeout(self::AMAZON_STRUCTURED_TIMEOUT)->get($apiUrl);
+                $status = $response->status();
+                $body = $response->body();
+                $raw = $response->json();
+                if (! is_array($raw)) {
+                    $raw = is_string($body) ? json_decode($body, true) : null;
+                }
+
+                Log::debug('Amazon structured API response', [
+                    'asin' => $asin,
+                    'tld' => $tld,
+                    'attempt' => $attempt,
+                    'status' => $status,
+                    'body_length' => strlen($body ?? ''),
+                    'response_body' => $body !== null && $body !== '' ? substr($body, 0, 500) : '',
+                    'raw_json_preview' => is_array($raw) ? json_encode(array_slice($raw, 0, 1)) : substr($body ?? '', 0, 300),
+                ]);
+
+                if (! $response->successful()) {
+                    Log::debug('Amazon structured API failed: non-success status', ['status' => $status, 'attempt' => $attempt]);
+                    return null;
+                }
+
+                if (! is_array($raw)) {
+                    Log::debug('Amazon structured API: response is not valid JSON', ['body_preview' => substr($body ?? '', 0, 300), 'attempt' => $attempt]);
+                    return null;
+                }
+
+                $originalRaw = $raw;
+                $raw = $this->unwrapAmazonStructuredResponse($raw);
+                $normalized = $this->normalizeStructuredResult($raw, $url, 'amazon', 'amazon_structured_api');
+                $normalized['scraperapi_raw'] = $originalRaw;
+                $normalized['extraction_source'] = 'amazon_structured_api';
+                $normalized['fetch_source'] = 'scraperapi';
+                $normalized['html_strategy'] = 'structured_api';
+                $normalized['blocked_or_captcha'] = false;
+
+                Log::debug('Amazon structured normalized result', [
+                    'normalized' => [
+                        'name' => $normalized['name'] ?? '',
+                        'price' => $normalized['price'] ?? 0,
+                        'image_url' => isset($normalized['image_url']) ? 'set' : 'null',
+                        'extraction_source' => $normalized['extraction_source'] ?? '',
+                    ],
+                ]);
+                return $normalized;
+            } catch (\Throwable $e) {
+                $isTimeout = str_contains(strtolower($e->getMessage()), 'timed out') || str_contains(strtolower($e->getMessage()), 'timeout');
+                Log::debug('Amazon structured API exception', [
+                    'asin' => $asin,
+                    'tld' => $tld,
+                    'attempt' => $attempt,
+                    'message' => $e->getMessage(),
+                    'url' => $url,
+                    'timeout' => $isTimeout,
+                ]);
+                if ($attempt === $maxAttempts) {
+                    return null;
+                }
             }
-
-            Log::debug('Amazon structured API response', [
-                'asin' => $asin,
-                'tld' => $tld,
-                'status' => $status,
-                'body_length' => strlen($body ?? ''),
-                'response_body' => $body !== null && $body !== '' ? substr($body, 0, 500) : '',
-                'raw_json_preview' => is_array($raw) ? json_encode(array_slice($raw, 0, 1)) : substr($body ?? '', 0, 300),
-            ]);
-
-            if (! $response->successful()) {
-                Log::debug('Amazon structured API failed: non-success status', ['status' => $status]);
-                return null;
-            }
-
-            if (! is_array($raw)) {
-                Log::debug('Amazon structured API: response is not valid JSON', ['body_preview' => substr($body ?? '', 0, 300)]);
-                return null;
-            }
-
-            $originalRaw = $raw;
-            $raw = $this->unwrapAmazonStructuredResponse($raw);
-            $normalized = $this->normalizeStructuredResult($raw, $url, 'amazon', 'amazon_structured_api');
-            $normalized['scraperapi_raw'] = $originalRaw;
-            $normalized['extraction_source'] = 'amazon_structured_api';
-            $normalized['fetch_source'] = 'scraperapi';
-            $normalized['html_strategy'] = 'structured_api';
-            $normalized['blocked_or_captcha'] = false;
-
-            Log::debug('Amazon structured normalized result', [
-                'normalized' => [
-                    'name' => $normalized['name'] ?? '',
-                    'price' => $normalized['price'] ?? 0,
-                    'image_url' => isset($normalized['image_url']) ? 'set' : 'null',
-                    'extraction_source' => $normalized['extraction_source'] ?? '',
-                ],
-            ]);
-            return $normalized;
-        } catch (\Throwable $e) {
-            Log::debug('Amazon structured API exception', ['message' => $e->getMessage(), 'url' => $url]);
-            return null;
         }
+
+        return null;
     }
 
     /**
