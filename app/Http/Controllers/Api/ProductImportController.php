@@ -52,6 +52,11 @@ class ProductImportController extends Controller
                 $product['blocked_or_captcha'] = $fetchResult['blocked_or_captcha'] ?? false;
             }
 
+            $raw = $product['scraperapi_raw'] ?? [];
+            if (is_array($raw) && $raw !== []) {
+                $product['variations'] = $this->extractVariationsFromRaw($raw);
+            }
+
             return response()->json($product);
         } catch (\Exception $e) {
             return response()->json([
@@ -70,5 +75,167 @@ class ProductImportController extends Controller
         if (Str::contains($url, 'aliexpress.')) return 'aliexpress';
         if (Str::contains($url, 'trendyol.')) return 'trendyol';
         return 'unknown';
+    }
+
+    /**
+     * Build variations array for Flutter from scraperapi_raw (size/color options).
+     * Supports: Amazon customization_options (color/size), eBay color + item_specifics,
+     * and generic variations[] / size_options / color_options.
+     *
+     * @param  array<string, mixed>  $raw
+     * @return array<int, array{type: string, options: array<int, string>, prices?: array<int, float>}>
+     */
+    private function extractVariationsFromRaw(array $raw): array
+    {
+        $out = [];
+
+        // --- Amazon: scraperapi_raw.customization_options ---
+        $custom = $raw['customization_options'] ?? null;
+        if (is_array($custom)) {
+            if (isset($custom['color']) && is_array($custom['color'])) {
+                $colorOpts = [];
+                foreach ($custom['color'] as $item) {
+                    if (! is_array($item)) {
+                        continue;
+                    }
+                    $value = $item['value'] ?? null;
+                    if ($value !== null && trim((string) $value) !== '') {
+                        $colorOpts[] = trim((string) $value);
+                    }
+                }
+                $colorOpts = array_values(array_unique($colorOpts));
+                if ($colorOpts !== []) {
+                    $out[] = ['type' => 'color', 'options' => $colorOpts];
+                }
+            }
+            if (isset($custom['size']) && is_array($custom['size'])) {
+                $sizeOpts = [];
+                foreach ($custom['size'] as $index => $item) {
+                    if (! is_array($item)) {
+                        continue;
+                    }
+                    $value = $item['value'] ?? $item['label'] ?? null;
+                    if ($value !== null && trim((string) $value) !== '') {
+                        $sizeOpts[] = trim((string) $value);
+                    } else {
+                        $sizeOpts[] = 'Size ' . ((int) $index + 1);
+                    }
+                }
+                $sizeOpts = array_values(array_unique($sizeOpts));
+                if ($sizeOpts !== []) {
+                    $out[] = ['type' => 'size', 'options' => $sizeOpts];
+                }
+            }
+        }
+
+        // --- eBay: top-level color + item_specifics (Size, Color, etc.) ---
+        if (isset($raw['color']) && trim((string) $raw['color']) !== '') {
+            $c = trim((string) $raw['color']);
+            if (! $this->variationOptionAlreadyAdded($out, 'color', $c)) {
+                $out[] = ['type' => 'color', 'options' => [$c]];
+            }
+        }
+        if (isset($raw['item_specifics']) && is_array($raw['item_specifics'])) {
+            $byLabel = [];
+            foreach ($raw['item_specifics'] as $spec) {
+                if (! is_array($spec)) {
+                    continue;
+                }
+                $label = isset($spec['label']) ? trim((string) $spec['label']) : '';
+                $value = isset($spec['value']) ? trim((string) $spec['value']) : '';
+                if ($label === '' || $value === '') {
+                    continue;
+                }
+                $labelLower = strtolower($label);
+                if ($labelLower === 'size' || $labelLower === 'color' || $labelLower === 'colour') {
+                    $type = $labelLower === 'size' ? 'size' : 'color';
+                    if (! isset($byLabel[$type])) {
+                        $byLabel[$type] = [];
+                    }
+                    if (! in_array($value, $byLabel[$type], true)) {
+                        $byLabel[$type][] = $value;
+                    }
+                }
+            }
+            foreach ($byLabel as $type => $opts) {
+                if ($opts !== [] && ! $this->variationTypeAlreadyAdded($out, $type)) {
+                    $out[] = ['type' => $type, 'options' => array_values($opts)];
+                }
+            }
+        }
+
+        // --- Generic: variations[] ---
+        if (isset($raw['variations']) && is_array($raw['variations'])) {
+            foreach ($raw['variations'] as $v) {
+                if (! is_array($v)) {
+                    continue;
+                }
+                $type = (string) ($v['type'] ?? $v['label'] ?? 'option');
+                $opts = $v['options'] ?? $v['values'] ?? [];
+                $opts = is_array($opts) ? array_map('strval', array_values($opts)) : [];
+                $prices = isset($v['prices']) && is_array($v['prices'])
+                    ? array_values(array_map(function ($p) {
+                        return is_numeric($p) ? (float) $p : 0.0;
+                    }, $v['prices']))
+                    : null;
+                if ($opts !== [] && ! $this->variationTypeAlreadyAdded($out, $type)) {
+                    $item = ['type' => $type, 'options' => $opts];
+                    if ($prices !== null && $prices !== []) {
+                        $item['prices'] = $prices;
+                    }
+                    $out[] = $item;
+                }
+            }
+        }
+
+        if (isset($raw['size_options']) && is_array($raw['size_options']) && ! $this->variationTypeAlreadyAdded($out, 'size')) {
+            $opts = array_map('strval', array_values($raw['size_options']));
+            if ($opts !== []) {
+                $out[] = ['type' => 'size', 'options' => $opts];
+            }
+        }
+        if (isset($raw['color_options']) && is_array($raw['color_options']) && ! $this->variationTypeAlreadyAdded($out, 'color')) {
+            $opts = array_map('strval', array_values($raw['color_options']));
+            if ($opts !== []) {
+                $out[] = ['type' => 'color', 'options' => $opts];
+            }
+        }
+
+        $info = $raw['product_information'] ?? [];
+        if (is_array($info) && isset($info['variants']) && is_array($info['variants'])) {
+            foreach ($info['variants'] as $v) {
+                if (! is_array($v)) {
+                    continue;
+                }
+                $type = (string) ($v['dimension'] ?? $v['type'] ?? 'option');
+                $opts = $v['options'] ?? $v['values'] ?? [];
+                $opts = is_array($opts) ? array_map('strval', array_values($opts)) : [];
+                if ($opts !== [] && ! $this->variationTypeAlreadyAdded($out, $type)) {
+                    $out[] = ['type' => $type, 'options' => $opts];
+                }
+            }
+        }
+
+        return array_values($out);
+    }
+
+    private function variationOptionAlreadyAdded(array $out, string $type, string $option): bool
+    {
+        foreach ($out as $v) {
+            if (($v['type'] ?? '') === $type && in_array($option, $v['options'] ?? [], true)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function variationTypeAlreadyAdded(array $out, string $type): bool
+    {
+        foreach ($out as $v) {
+            if (($v['type'] ?? '') === $type) {
+                return true;
+            }
+        }
+        return false;
     }
 }
