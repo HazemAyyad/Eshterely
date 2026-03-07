@@ -7,13 +7,13 @@ use Illuminate\Support\Str;
 
 /**
  * Fetches HTML for product URL import.
- * For Amazon: can use rendered-fetch (e.g. ScraperAPI) when configured; otherwise direct HTTP.
- * When rendered fetch is configured for Amazon, the returned HTML is preferred for all extraction
- * strategies (including forced OpenAI) so that OpenAI receives full product DOM, not initial shell.
+ * For Amazon, eBay, Walmart, AliExpress: uses ScraperAPI (render=true) when configured; otherwise direct HTTP.
  * For other stores: direct HTTP with improved headers.
  */
 class ProductPageFetcherService
 {
+    /** Store keys that use ScraperAPI for HTML fetch when configured. */
+    private const SCRAPERAPI_STORES = ['amazon', 'ebay', 'walmart', 'aliexpress'];
     private const DIRECT_TIMEOUT = 15;
 
     private const RENDERED_TIMEOUT = 45;
@@ -45,36 +45,36 @@ class ProductPageFetcherService
     ];
 
     /**
-     * Fetch HTML for a product URL. For Amazon, may use rendered fetcher when configured.
+     * Fetch HTML for a product URL. For Amazon, eBay, Walmart, AliExpress uses ScraperAPI when configured.
      *
      * @return array{html: string, fetch_source: string, html_strategy: string, blocked_or_captcha: bool}
      */
     public function fetchHtml(string $url, string $storeKey): array
     {
         $storeKey = strtolower($storeKey);
-        $isAmazon = $storeKey === 'amazon';
+        $useScraperApi = in_array($storeKey, self::SCRAPERAPI_STORES, true) && $this->shouldUseRenderedFetcher();
 
-        if ($isAmazon && $this->shouldUseRenderedFetcher()) {
-            $result = $this->fetchAmazonRendered($url);
+        if ($useScraperApi) {
+            $result = $this->fetchViaScraperApiRendered($url);
             if ($result !== null) {
                 return $result;
             }
         }
 
         $result = $this->fetchDirect($url);
-        $result['fetch_source'] = $isAmazon && $this->shouldUseRenderedFetcher() ? 'fallback_http' : 'direct_http';
+        $result['fetch_source'] = $useScraperApi ? 'fallback_http' : 'direct_http';
         $result['html_strategy'] = 'initial_html';
 
         return $result;
     }
 
     /**
-     * Try to fetch Amazon page via configured rendered-fetch provider (e.g. ScraperAPI).
+     * Try to fetch page via ScraperAPI with render=true (Amazon, eBay, Walmart, AliExpress).
      * Returns null on failure so caller can fall back to direct HTTP.
      *
      * @return array{html: string, fetch_source: string, html_strategy: string, blocked_or_captcha: bool}|null
      */
-    private function fetchAmazonRendered(string $url): ?array
+    private function fetchViaScraperApiRendered(string $url): ?array
     {
         $driver = config('services.product_import.rendered_fetcher', '');
         if ($driver === 'scraperapi') {
