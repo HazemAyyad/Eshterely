@@ -36,7 +36,6 @@ class CartReviewController extends Controller
                 return '<input type="number" step="0.01" min="0" class="form-control form-control-sm d-inline-block shipping-cost-input" style="width:80px" data-id="' . $item->id . '" data-url="' . $url . '" value="' . e($val) . '" placeholder="0"> <button type="button" class="btn btn-sm btn-outline-primary btn-save-shipping ms-1" data-id="' . $item->id . '" data-url="' . $url . '">' . __('admin.save') . '</button>';
             })
             ->editColumn('created_at', fn (CartItem $item) => $item->created_at?->format('Y-m-d H:i'))
-            ->addColumn('details_json', fn (CartItem $item) => json_encode($this->itemDetailsForModal($item)))
             ->addColumn('actions', function (CartItem $item) {
                 $approveUrl = route('admin.cart-review.update', $item->id);
                 $reviewBtns = $item->review_status === 'pending_review'
