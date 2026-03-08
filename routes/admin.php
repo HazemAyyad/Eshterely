@@ -66,6 +66,7 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
     Route::get('cart-review/data', [CartReviewController::class, 'data'])->name('cart-review.data');
     Route::get('cart-review', [CartReviewController::class, 'index'])->name('cart-review.index');
     Route::patch('cart-review/{id}/review', [CartReviewController::class, 'approveOrReject'])->name('cart-review.update');
+    Route::patch('cart-review/{id}/shipping', [CartReviewController::class, 'updateShipping'])->name('cart-review.shipping');
 
     // Wallets
     Route::get('wallets/data', [WalletController::class, 'data'])->name('wallets.data');

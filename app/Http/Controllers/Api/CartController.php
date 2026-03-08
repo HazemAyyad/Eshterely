@@ -28,6 +28,13 @@ class CartController extends Controller
             'source' => $i->source ?? 'paste_link',
             'review_status' => $i->review_status ?? 'pending_review',
             'shipping_cost' => $i->shipping_cost ? (float) $i->shipping_cost : null,
+            'variation_text' => $i->variation_text,
+            'weight' => $i->weight ? (float) $i->weight : null,
+            'weight_unit' => $i->weight_unit,
+            'length' => $i->length ? (float) $i->length : null,
+            'width' => $i->width ? (float) $i->width : null,
+            'height' => $i->height ? (float) $i->height : null,
+            'dimension_unit' => $i->dimension_unit,
         ]));
     }
 
@@ -45,6 +52,13 @@ class CartController extends Controller
             'product_id' => 'nullable|string',
             'country' => 'nullable|string',
             'source' => 'nullable|in:webview,paste_link',
+            'variation_text' => 'nullable|string|max:500',
+            'weight' => 'nullable|numeric|min:0',
+            'weight_unit' => 'nullable|string|max:10',
+            'length' => 'nullable|numeric|min:0',
+            'width' => 'nullable|numeric|min:0',
+            'height' => 'nullable|numeric|min:0',
+            'dimension_unit' => 'nullable|string|max:10',
         ]);
 
         $item = CartItem::create([
@@ -60,9 +74,38 @@ class CartController extends Controller
             'product_id' => $validated['product_id'] ?? null,
             'country' => $validated['country'] ?? null,
             'source' => $validated['source'] ?? 'paste_link',
+            'variation_text' => $validated['variation_text'] ?? null,
+            'weight' => $validated['weight'] ?? null,
+            'weight_unit' => $validated['weight_unit'] ?? null,
+            'length' => $validated['length'] ?? null,
+            'width' => $validated['width'] ?? null,
+            'height' => $validated['height'] ?? null,
+            'dimension_unit' => $validated['dimension_unit'] ?? null,
         ]);
 
-        return response()->json($item, 201);
+        return response()->json([
+            'id' => (string) $item->id,
+            'url' => $item->product_url,
+            'name' => $item->name,
+            'price' => (float) $item->unit_price,
+            'quantity' => $item->quantity,
+            'currency' => $item->currency,
+            'image_url' => $item->image_url,
+            'store_key' => $item->store_key,
+            'store_name' => $item->store_name,
+            'product_id' => $item->product_id,
+            'country' => $item->country,
+            'source' => $item->source ?? 'paste_link',
+            'review_status' => $item->review_status ?? 'pending_review',
+            'shipping_cost' => $item->shipping_cost ? (float) $item->shipping_cost : null,
+            'variation_text' => $item->variation_text,
+            'weight' => $item->weight ? (float) $item->weight : null,
+            'weight_unit' => $item->weight_unit,
+            'length' => $item->length ? (float) $item->length : null,
+            'width' => $item->width ? (float) $item->width : null,
+            'height' => $item->height ? (float) $item->height : null,
+            'dimension_unit' => $item->dimension_unit,
+        ], 201);
     }
 
     public function update(Request $request, int $id): JsonResponse

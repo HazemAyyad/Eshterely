@@ -11,7 +11,7 @@ class CartItem extends Model
         'user_id', 'product_url', 'name', 'unit_price', 'quantity', 'currency',
         'image_url', 'store_key', 'store_name', 'product_id', 'country',
         'weight', 'weight_unit', 'length', 'width', 'height', 'dimension_unit',
-        'source', 'review_status', 'shipping_cost',
+        'source', 'variation_text', 'review_status', 'shipping_cost',
     ];
 
     protected function casts(): array

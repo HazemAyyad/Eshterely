@@ -165,12 +165,15 @@ return [
     'rejected' => 'تم الرفض',
 
     // Cart Review
-    'cart_review_pending' => 'مراجعة عناصر السلة (بانتظار المراجعة)',
+    'cart_review_pending' => 'عناصر السلة - الكل',
     'approve' => 'موافقة',
     'reject' => 'رفض',
     'no_cart_items' => 'لا توجد عناصر بانتظار المراجعة',
     'item_approved' => 'تمت الموافقة على العنصر.',
     'item_rejected' => 'تم رفض العنصر.',
+    'shipping_cost_updated' => 'تم تحديث تكلفة الشحن.',
+    'shipping_cost' => 'تكلفة الشحن',
+    'user_name' => 'اسم المستخدم',
 
     // Wallets
     'wallets_title' => 'المحفظة - أرصدة المستخدمين',

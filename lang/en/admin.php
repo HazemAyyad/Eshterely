@@ -165,12 +165,15 @@ return [
     'rejected' => 'Rejected',
 
     // Cart Review
-    'cart_review_pending' => 'Cart Review (pending)',
+    'cart_review_pending' => 'Cart items - all',
     'approve' => 'Approve',
     'reject' => 'Reject',
     'no_cart_items' => 'No items pending review',
     'item_approved' => 'Item approved.',
     'item_rejected' => 'Item rejected.',
+    'shipping_cost_updated' => 'Shipping cost updated.',
+    'shipping_cost' => 'Shipping cost',
+    'user_name' => 'User name',
 
     // Wallets
     'wallets_title' => 'Wallets - User Balances',
