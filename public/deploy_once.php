@@ -35,7 +35,7 @@ if ($providedToken === '' || ! hash_equals($expectedToken, $providedToken)) {
 // 2) Bootstrap Laravel (works even when config is cached)
 // ---------------------------------------------------------------------------
 
-$app = require __DIR__ . '/bootstrap/app.php';
+$app = require __DIR__ . '/../bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
