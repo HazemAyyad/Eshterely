@@ -25,6 +25,8 @@ class PaymentService
         $currency = $order->currency ?? 'USD';
         $amount = $order->total_amount;
 
+        $idempotencyKey = $context['idempotency_key'] ?? $reference;
+
         $payment = Payment::create([
             'user_id' => $order->user_id,
             'order_id' => $order->id,
@@ -33,6 +35,7 @@ class PaymentService
             'amount' => $amount,
             'status' => PaymentStatus::Pending,
             'reference' => $reference,
+            'idempotency_key' => $idempotencyKey,
             'metadata' => $context['metadata'] ?? null,
         ]);
 
@@ -64,6 +67,19 @@ class PaymentService
         ]);
 
         return $attempt;
+    }
+
+    /**
+     * Update a payment attempt with response payload and status.
+     */
+    public function updateAttemptWithResponse(PaymentAttempt $attempt, array $responsePayload, string $status): PaymentAttempt
+    {
+        $attempt->update([
+            'response_payload' => $responsePayload,
+            'status' => $status,
+        ]);
+
+        return $attempt->fresh();
     }
 
     /**
