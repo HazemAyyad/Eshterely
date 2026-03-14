@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\MeController;
 use App\Http\Controllers\Api\NotificationsController;
 use App\Http\Controllers\Api\NotificationPrefsController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ProductImportController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SessionsController;
@@ -73,6 +74,10 @@ Route::middleware('auth:sanctum')->prefix('cart')->group(function () {
 // Orders (auth required)
 Route::middleware('auth:sanctum')->get('orders', [OrderController::class, 'index']);
 Route::middleware('auth:sanctum')->get('orders/{id}', [OrderController::class, 'show']);
+Route::middleware('auth:sanctum')->get('orders/{order}/payments', [OrderController::class, 'payments']);
+
+// Payments (auth required, policy: view own only)
+Route::middleware('auth:sanctum')->get('payments/{payment}', [PaymentController::class, 'show']);
 
 // Checkout (auth required)
 Route::middleware('auth:sanctum')->prefix('checkout')->group(function () {

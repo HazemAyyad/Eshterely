@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\PaymentResource;
 use App\Models\Order;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,6 +25,19 @@ class OrderController extends Controller
         $order = Order::where('user_id', $request->user()->id)->with('shipments.lineItems', 'shipments.trackingEvents')->findOrFail($id);
 
         return response()->json($this->formatOrder($order, true));
+    }
+
+    /**
+     * GET /api/orders/{order}/payments
+     * List payments for an order. User must own the order.
+     */
+    public function payments(Request $request, Order $order): \Illuminate\Http\Resources\Json\AnonymousResourceCollection
+    {
+        if ($order->user_id !== $request->user()->id) {
+            abort(404);
+        }
+
+        return PaymentResource::collection($order->payments()->orderByDesc('created_at')->get());
     }
 
     private function formatOrder(Order $o, bool $detailed = false): array

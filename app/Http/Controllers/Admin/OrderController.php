@@ -46,7 +46,7 @@ class OrderController extends Controller
 
     public function show(Order $order): View
     {
-        $order->load(['shipments.lineItems', 'shipments.trackingEvents', 'user']);
+        $order->load(['shipments.lineItems', 'shipments.trackingEvents', 'user', 'payments']);
         $priceLines = DB::table('order_price_lines')->where('order_id', $order->id)->get();
 
         return view('admin.orders.show', compact('order', 'priceLines'));
