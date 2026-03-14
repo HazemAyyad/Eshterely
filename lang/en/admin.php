@@ -188,4 +188,23 @@ return [
     'in_progress' => 'In progress',
     'resolved' => 'Resolved',
     'no_tickets' => 'No tickets',
+
+    // Shipping settings
+    'shipping_settings' => 'Shipping (Calculation)',
+    'shipping_settings_help' => 'Configure volumetric divisor, currency, fees and rounding used by the shipping quote engine.',
+    'shipping_settings_saved' => 'Shipping settings saved.',
+    'shipping_volumetric_divisor' => 'Volumetric divisor',
+    'shipping_volumetric_divisor_help' => 'e.g. 5000 for cm/kg; volume (cm³) / divisor = volumetric weight (kg).',
+    'shipping_default_currency' => 'Default currency',
+    'shipping_default_markup_percent' => 'Default markup %',
+    'shipping_min_charge' => 'Minimum shipping charge',
+    'shipping_warehouse_handling_fee' => 'Warehouse handling fee',
+    'shipping_multi_package_percent' => 'Multi-package extra %',
+    'shipping_carrier_discount_dhl' => 'DHL discount %',
+    'shipping_carrier_discount_ups' => 'UPS discount %',
+    'shipping_carrier_discount_fedex' => 'FedEx discount %',
+    'shipping_rounding_strategy' => 'Weight rounding',
+    'shipping_rounding_none' => 'None',
+    'shipping_rounding_nearest_kg' => 'Nearest kg',
+    'shipping_rounding_up_500g' => 'Up to 500g',
 ];

@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AuthController as AdminAuthController;
 use App\Http\Controllers\Admin\CartReviewController;
 use App\Http\Controllers\Admin\Config\AppConfigController;
 use App\Http\Controllers\Admin\Config\FeaturedStoresController;
+use App\Http\Controllers\Admin\Config\ShippingSettingsController;
 use App\Http\Controllers\Admin\Config\MarketCountriesController;
 use App\Http\Controllers\Admin\Config\OnboardingController;
 use App\Http\Controllers\Admin\Config\PromoBannersController;
@@ -50,6 +51,8 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
         Route::resource('warehouses', WarehousesController::class)->except(['show'])->names('warehouses');
         Route::get('app-config', [AppConfigController::class, 'edit'])->name('app-config');
         Route::patch('app-config', [AppConfigController::class, 'update']);
+        Route::get('shipping-settings', [ShippingSettingsController::class, 'edit'])->name('shipping-settings.edit');
+        Route::patch('shipping-settings', [ShippingSettingsController::class, 'update'])->name('shipping-settings.update');
     });
 
     // Users

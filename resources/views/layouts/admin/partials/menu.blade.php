@@ -72,6 +72,11 @@
                         <div>إعدادات التطبيق (API)</div>
                     </a>
                 </li>
+                <li class="menu-item {{ request()->routeIs('admin.config.shipping-settings*') ? 'active' : '' }}">
+                    <a href="{{ route('admin.config.shipping-settings.edit') }}" class="menu-link">
+                        <div>{{ __('admin.shipping_settings') }}</div>
+                    </a>
+                </li>
             </ul>
         </li>
         <li class="menu-item {{ request()->routeIs('admin.users*', 'admin.orders*', 'admin.cart-review*', 'admin.wallets*', 'admin.support*') ? 'active open' : '' }}">

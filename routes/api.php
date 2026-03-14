@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\CitiesController;
 use App\Http\Controllers\Api\ConfigController;
 use App\Http\Controllers\Api\CountriesController;
+use App\Http\Controllers\Api\ShippingQuoteController;
 use App\Http\Controllers\Api\FavoritesController;
 use App\Http\Controllers\Api\MeController;
 use App\Http\Controllers\Api\NotificationsController;
@@ -118,3 +119,6 @@ Route::get('warehouses', WarehousesController::class);
 
 // Product import (auth required)
 Route::middleware('auth:sanctum')->post('products/import-from-url', [ProductImportController::class, 'importFromUrl']);
+
+// Shipping quote preview (auth required, temporary for testing calculation engine)
+Route::middleware('auth:sanctum')->post('shipping/quote-preview', [ShippingQuoteController::class, 'quotePreview']);
