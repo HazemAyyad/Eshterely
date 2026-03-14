@@ -52,13 +52,18 @@ class SquareWebhookService
 
     protected function handlePaymentEvent(string $eventType, array $payload): void
     {
-        $data = $payload['data'] ?? null;
+        $data = $payload['data'] ?? [];
         if (! is_array($data)) {
             Log::warning('Square webhook payment event missing data', ['event_type' => $eventType]);
             return;
         }
 
-        $payment = $this->resolvePayment($data, $payload);
+        $paymentObject = $data['object']['payment'] ?? [];
+        if (! is_array($paymentObject)) {
+            $paymentObject = [];
+        }
+
+        $payment = $this->resolvePayment($data, $paymentObject, $payload);
         if ($payment === null) {
             Log::info('Square webhook payment not found', [
                 'event_type' => $eventType,
@@ -72,13 +77,12 @@ class SquareWebhookService
             'event_type' => $eventType,
         ]);
 
-        $object = $data['object'] ?? [];
-        $status = $this->normalizeSquareStatus($object);
+        $status = $this->normalizeSquareStatus($paymentObject);
 
         $this->addWebhookEvent($payment, $eventType, $payload);
 
         if ($status !== null) {
-            $this->applyPaymentStatus($payment, $status, $object);
+            $this->applyPaymentStatus($payment, $status, $paymentObject);
         }
     }
 
@@ -95,11 +99,11 @@ class SquareWebhookService
 
     /**
      * Resolve internal Payment from Square payment event data.
-     * Tries: provider_payment_id (data.id), provider_order_id (from object.order_id), metadata/reference.
+     * Uses data.object.payment: id (provider_payment_id), order_id (provider_order_id), reference_id / metadata.
      */
-    protected function resolvePayment(array $data, array $fullPayload): ?Payment
+    protected function resolvePayment(array $data, array $paymentObject, array $fullPayload): ?Payment
     {
-        $squarePaymentId = $data['id'] ?? null;
+        $squarePaymentId = $paymentObject['id'] ?? $data['id'] ?? null;
         if (is_string($squarePaymentId) && $squarePaymentId !== '') {
             $payment = Payment::where('provider', 'square')
                 ->where('provider_payment_id', $squarePaymentId)
@@ -109,8 +113,7 @@ class SquareWebhookService
             }
         }
 
-        $object = $data['object'] ?? [];
-        $orderId = $object['order_id'] ?? null;
+        $orderId = $paymentObject['order_id'] ?? null;
         if (is_string($orderId) && $orderId !== '') {
             $payment = Payment::where('provider', 'square')
                 ->where('provider_order_id', $orderId)
@@ -120,7 +123,7 @@ class SquareWebhookService
             }
         }
 
-        $reference = $object['reference_id'] ?? null;
+        $reference = $paymentObject['reference_id'] ?? null;
         if (is_string($reference) && $reference !== '') {
             $payment = Payment::where('reference', $reference)->first();
             if ($payment !== null) {
@@ -128,7 +131,7 @@ class SquareWebhookService
             }
         }
 
-        $metadata = $object['metadata'] ?? [];
+        $metadata = $paymentObject['metadata'] ?? [];
         if (is_array($metadata) && isset($metadata['reference'])) {
             $ref = $metadata['reference'];
             if (is_string($ref) && $ref !== '') {
@@ -169,11 +172,12 @@ class SquareWebhookService
 
     /**
      * Map Square payment status to our PaymentStatus.
+     * Reads from data.object.payment.status.
      * COMPLETED => paid; APPROVED/PENDING => processing; CANCELED => cancelled; FAILED => failed.
      */
-    protected function normalizeSquareStatus(array $object): ?PaymentStatus
+    protected function normalizeSquareStatus(array $paymentObject): ?PaymentStatus
     {
-        $status = $object['status'] ?? null;
+        $status = $paymentObject['status'] ?? null;
         if (! is_string($status)) {
             return null;
         }
@@ -204,8 +208,9 @@ class SquareWebhookService
 
     /**
      * Apply status change to payment. Idempotent for paid; stores provider_payment_id and paid_at when becoming paid.
+     * Uses fields from data.object.payment: id, order_id, status, failure_code, failure_message, card_details.status.
      */
-    protected function applyPaymentStatus(Payment $payment, PaymentStatus $newStatus, array $object): void
+    protected function applyPaymentStatus(Payment $payment, PaymentStatus $newStatus, array $paymentObject): void
     {
         if ($payment->status === $newStatus) {
             return;
@@ -216,7 +221,7 @@ class SquareWebhookService
             return;
         }
 
-        DB::transaction(function () use ($payment, $newStatus, $object): void {
+        DB::transaction(function () use ($payment, $newStatus, $paymentObject): void {
             $payment->refresh();
 
             if ($newStatus === PaymentStatus::Paid) {
@@ -226,17 +231,17 @@ class SquareWebhookService
                     'failure_code' => null,
                     'failure_message' => null,
                 ];
-                $squarePaymentId = $object['id'] ?? null;
+                $squarePaymentId = $paymentObject['id'] ?? null;
                 if (is_string($squarePaymentId) && $squarePaymentId !== '') {
                     $updates['provider_payment_id'] = $squarePaymentId;
                 }
-                $orderId = $object['order_id'] ?? null;
+                $orderId = $paymentObject['order_id'] ?? null;
                 if (is_string($orderId) && $orderId !== '' && ($payment->provider_order_id === null || $payment->provider_order_id === '')) {
                     $updates['provider_order_id'] = $orderId;
                 }
                 $payment->update($updates);
                 $this->paymentService->addEvent($payment, PaymentEventSource::Webhook, 'payment.paid', [
-                    'square_status' => $object['status'] ?? null,
+                    'square_status' => $paymentObject['status'] ?? null,
                 ], 'Square webhook: payment completed');
                 Log::info('Square webhook payment status changed', [
                     'payment_id' => $payment->id,
@@ -246,8 +251,10 @@ class SquareWebhookService
             }
 
             if ($newStatus === PaymentStatus::Failed) {
-                $code = $object['card_details']['status'] ?? $object['failure_code'] ?? null;
-                $message = $object['failure_message'] ?? null;
+                $cardDetails = $paymentObject['card_details'] ?? [];
+                $code = (is_array($cardDetails) ? ($cardDetails['status'] ?? null) : null)
+                    ?? $paymentObject['failure_code'] ?? null;
+                $message = $paymentObject['failure_message'] ?? null;
                 $this->paymentService->markFailed(
                     $payment,
                     is_string($code) ? $code : null,
@@ -273,7 +280,7 @@ class SquareWebhookService
             if ($newStatus === PaymentStatus::Processing) {
                 $payment->update(['status' => PaymentStatus::Processing]);
                 $this->paymentService->addEvent($payment, PaymentEventSource::Webhook, 'payment.processing', [
-                    'square_status' => $object['status'] ?? null,
+                    'square_status' => $paymentObject['status'] ?? null,
                 ], 'Square webhook: processing');
             }
         });

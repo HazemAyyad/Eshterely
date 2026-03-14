@@ -21,24 +21,43 @@ class SquareWebhookTest extends TestCase
         Config::set('square.webhook_notification_url', 'https://example.com/webhooks/square');
     }
 
-    /** @return array<string, mixed> */
-    protected function paymentUpdatedPayload(string $squarePaymentId, string $squareOrderId, string $status): array
+    /**
+     * Real Square payload shape: payment data lives under data.object.payment.
+     * @return array<string, mixed>
+     */
+    protected function paymentPayload(string $type, string $squarePaymentId, string $squareOrderId, string $status, array $paymentExtra = []): array
     {
+        $payment = array_merge([
+            'id' => $squarePaymentId,
+            'order_id' => $squareOrderId,
+            'status' => $status,
+        ], $paymentExtra);
+
         return [
             'merchant_id' => 'MERCHANT_ID',
-            'type' => 'payment.updated',
+            'type' => $type,
             'event_id' => 'evt_' . uniqid(),
             'created_at' => now()->toIso8601String(),
             'data' => [
                 'type' => 'payment',
                 'id' => $squarePaymentId,
                 'object' => [
-                    'id' => $squarePaymentId,
-                    'order_id' => $squareOrderId,
-                    'status' => $status,
+                    'payment' => $payment,
                 ],
             ],
         ];
+    }
+
+    /** @return array<string, mixed> */
+    protected function paymentUpdatedPayload(string $squarePaymentId, string $squareOrderId, string $status): array
+    {
+        return $this->paymentPayload('payment.updated', $squarePaymentId, $squareOrderId, $status);
+    }
+
+    /** @return array<string, mixed> */
+    protected function paymentCreatedPayload(string $squarePaymentId, string $squareOrderId, string $status): array
+    {
+        return $this->paymentPayload('payment.created', $squarePaymentId, $squareOrderId, $status);
     }
 
     public function test_valid_payment_updated_webhook_marks_payment_as_paid(): void
@@ -127,23 +146,10 @@ class SquareWebhookTest extends TestCase
             'provider_order_id' => 'sq-order-fail',
         ]);
 
-        $payload = [
-            'merchant_id' => 'MERCHANT_ID',
-            'type' => 'payment.updated',
-            'event_id' => 'evt_fail',
-            'created_at' => now()->toIso8601String(),
-            'data' => [
-                'type' => 'payment',
-                'id' => 'sq-pay-fail',
-                'object' => [
-                    'id' => 'sq-pay-fail',
-                    'order_id' => 'sq-order-fail',
-                    'status' => 'FAILED',
-                    'failure_code' => 'DECLINED',
-                    'failure_message' => 'Card declined',
-                ],
-            ],
-        ];
+        $payload = $this->paymentPayload('payment.updated', 'sq-pay-fail', 'sq-order-fail', 'FAILED', [
+            'failure_code' => 'DECLINED',
+            'failure_message' => 'Card declined',
+        ]);
 
         $response = $this->postJson(route('webhooks.square'), $payload);
 
@@ -153,6 +159,50 @@ class SquareWebhookTest extends TestCase
         $this->assertSame(PaymentStatus::Failed, $payment->status);
         $this->assertSame('DECLINED', $payment->failure_code);
         $this->assertSame('Card declined', $payment->failure_message);
+    }
+
+    public function test_cancelled_payment_webhook_marks_payment_cancelled(): void
+    {
+        Config::set('square.webhook_skip_verification', true);
+
+        $order = Order::factory()->create();
+        $payment = Payment::factory()->forOrder($order)->pending()->create([
+            'provider_order_id' => 'sq-order-cancel',
+        ]);
+
+        $payload = $this->paymentPayload('payment.updated', 'sq-pay-cancel', 'sq-order-cancel', 'CANCELED');
+
+        $response = $this->postJson(route('webhooks.square'), $payload);
+
+        $response->assertStatus(200);
+
+        $payment->refresh();
+        $this->assertSame(PaymentStatus::Cancelled, $payment->status);
+    }
+
+    public function test_payment_created_webhook_with_real_payload_shape(): void
+    {
+        Config::set('square.webhook_skip_verification', true);
+
+        $order = Order::factory()->create();
+        $payment = Payment::factory()->forOrder($order)->pending()->create([
+            'provider_order_id' => 'sq-order-created',
+        ]);
+
+        $payload = $this->paymentCreatedPayload('sq-pay-created', 'sq-order-created', 'COMPLETED');
+
+        $response = $this->postJson(route('webhooks.square'), $payload);
+
+        $response->assertStatus(200);
+
+        $payment->refresh();
+        $this->assertTrue($payment->isPaid());
+        $this->assertSame('sq-pay-created', $payment->provider_payment_id);
+
+        $events = $payment->events()->where('source', PaymentEventSource::Webhook)->get();
+        $this->assertGreaterThanOrEqual(1, $events->count());
+        $eventTypes = $events->pluck('event_type')->toArray();
+        $this->assertContains('payment.created', $eventTypes);
     }
 
     public function test_payment_resolved_by_provider_payment_id(): void
