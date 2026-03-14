@@ -1,11 +1,14 @@
 <?php
 
+use App\Http\Controllers\Webhooks\SquareWebhookController;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
 });
+
+Route::post('/webhooks/square', SquareWebhookController::class)->name('webhooks.square');
 
 /*
 | تشغيل أمر storage:link عبر الرابط (مفيد عندما لا يتوفر SSH أو الـ symlink لا يعمل).

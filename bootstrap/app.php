@@ -21,6 +21,10 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->validateCsrfTokens(except: [
+            'webhooks/square',
+        ]);
+
         $middleware->redirectGuestsTo(function ($request) {
             if ($request->is('admin') || $request->is('admin/*')) {
                 return route('admin.login');
