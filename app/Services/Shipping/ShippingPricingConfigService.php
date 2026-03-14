@@ -25,6 +25,13 @@ class ShippingPricingConfigService
     public const ROUNDING_NEAREST_KG = 'nearest_kg';
     public const ROUNDING_NONE = 'none';
 
+    /** Allowed values for rounding_strategy (validation and fallback checks). */
+    public const ROUNDING_STRATEGIES = [
+        self::ROUNDING_NONE,
+        self::ROUNDING_NEAREST_KG,
+        self::ROUNDING_UP_500G,
+    ];
+
     /** Default fallback when not set. Documented for operations. */
     private const DEFAULT_VOLUMETRIC_DIVISOR = 5000.0;
     private const DEFAULT_CURRENCY = 'USD';
@@ -119,9 +126,7 @@ class ShippingPricingConfigService
         if ($v === null || $v === '') {
             return self::ROUNDING_NEAREST_KG;
         }
-        $allowed = [self::ROUNDING_UP_500G, self::ROUNDING_NEAREST_KG, self::ROUNDING_NONE];
-
-        return in_array($v, $allowed, true) ? $v : self::ROUNDING_NEAREST_KG;
+        return in_array($v, self::ROUNDING_STRATEGIES, true) ? $v : self::ROUNDING_NEAREST_KG;
     }
 
     /**

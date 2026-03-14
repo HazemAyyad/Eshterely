@@ -6,9 +6,13 @@ declare(strict_types=1);
  * TEMPORARY DEPLOYMENT UTILITY SCRIPT
  * ===================================
  *
- * This file is TEMPORARY and must be DELETED immediately after use.
- * Use only when you do not have SSH access and need to run a limited set
- * of Artisan commands once.
+ * Intended only for development or emergency deployment when SSH is unavailable.
+ * Must NEVER be executed in production. Requires both a valid token and a
+ * non-production environment (see checks below). Do not expose this script
+ * publicly; remove or restrict access after use.
+ *
+ * This file is TEMPORARY and should be deleted once normal deployment (e.g. SSH)
+ * is available.
  */
 
 $expectedToken = 'eshterelyDeploy2026SecureToken123';
@@ -29,6 +33,15 @@ $app = require_once __DIR__ . '/../bootstrap/app.php';
 /** @var \Illuminate\Contracts\Console\Kernel $kernel */
 $kernel = $app->make(\Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
+
+if ($app->environment('production')) {
+    http_response_code(403);
+    exit('Deploy script disabled in production.');
+}
+if (!config('app.debug')) {
+    http_response_code(403);
+    exit('Deploy script disabled.');
+}
 
 $allowedCommands = [
     ['name' => 'optimize:clear', 'params' => []],

@@ -34,10 +34,7 @@ class ShippingSettingsController extends Controller
     public function update(Request $request): JsonResponse|RedirectResponse
     {
         $keys = ShippingPricingConfigService::editableKeys();
-        $rules = [];
-        foreach ($keys as $key) {
-            $rules[$key] = 'nullable|string|max:255';
-        }
+        $rules = $this->validationRulesForKeys($keys);
         $validated = $request->validate($rules);
 
         foreach ($keys as $key) {
@@ -51,6 +48,39 @@ class ShippingSettingsController extends Controller
         }
 
         return redirect()->route('admin.config.shipping-settings.edit')->with('success', __('admin.shipping_settings_saved'));
+    }
+
+    /**
+     * Validation rules per editable key: numeric settings use numeric|min:0,
+     * rounding_strategy is restricted to allowed values, currency remains string.
+     */
+    private function validationRulesForKeys(array $keys): array
+    {
+        $numericKeys = [
+            ShippingPricingConfigService::KEY_VOLUMETRIC_DIVISOR,
+            ShippingPricingConfigService::KEY_DEFAULT_MARKUP_PERCENT,
+            ShippingPricingConfigService::KEY_MIN_SHIPPING_CHARGE,
+            ShippingPricingConfigService::KEY_WAREHOUSE_HANDLING_FEE,
+            ShippingPricingConfigService::KEY_MULTI_PACKAGE_PERCENT,
+            ShippingPricingConfigService::KEY_CARRIER_DISCOUNT_DHL,
+            ShippingPricingConfigService::KEY_CARRIER_DISCOUNT_UPS,
+            ShippingPricingConfigService::KEY_CARRIER_DISCOUNT_FEDEX,
+        ];
+        $roundingKey = ShippingPricingConfigService::KEY_ROUNDING_STRATEGY;
+        $roundingAllowed = implode(',', ShippingPricingConfigService::ROUNDING_STRATEGIES);
+
+        $rules = [];
+        foreach ($keys as $key) {
+            if (in_array($key, $numericKeys, true)) {
+                $rules[$key] = 'nullable|numeric|min:0';
+            } elseif ($key === $roundingKey) {
+                $rules[$key] = 'nullable|in:' . $roundingAllowed;
+            } else {
+                $rules[$key] = 'nullable|string|max:255';
+            }
+        }
+
+        return $rules;
     }
 
     private function defaultForKey(string $key): string
