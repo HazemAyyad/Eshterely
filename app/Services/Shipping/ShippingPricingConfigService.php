@@ -21,6 +21,12 @@ class ShippingPricingConfigService
     public const KEY_CARRIER_DISCOUNT_FEDEX = 'carrier_discount_fedex';
     public const KEY_ROUNDING_STRATEGY = 'rounding_strategy';
 
+    /** Final pricing layer (confirm screen / cart / order) */
+    public const KEY_SERVICE_FEE = 'service_fee';
+    public const KEY_PLATFORM_MARKUP_PERCENT = 'platform_markup_percent';
+    public const KEY_MINIMUM_ORDER_FEE = 'minimum_order_fee';
+    public const KEY_MINIMUM_ORDER_THRESHOLD = 'minimum_order_threshold';
+
     /** Fallback package defaults when product data is missing weight/dimensions */
     public const KEY_SHIPPING_DEFAULT_WEIGHT = 'shipping_default_weight';
     public const KEY_SHIPPING_DEFAULT_WEIGHT_UNIT = 'shipping_default_weight_unit';
@@ -48,6 +54,10 @@ class ShippingPricingConfigService
     private const DEFAULT_WAREHOUSE_HANDLING_FEE = 0.0;
     private const DEFAULT_MULTI_PACKAGE_PERCENT = 0.0;
     private const DEFAULT_CARRIER_DISCOUNT = 0.0;
+    private const DEFAULT_SERVICE_FEE = 0.0;
+    private const DEFAULT_PLATFORM_MARKUP_PERCENT = 0.0;
+    private const DEFAULT_MINIMUM_ORDER_FEE = 0.0;
+    private const DEFAULT_MINIMUM_ORDER_THRESHOLD = 0.0;
     private const DEFAULT_FALLBACK_WEIGHT = 0.5;
     private const DEFAULT_FALLBACK_DIMENSION = 10.0;
 
@@ -139,6 +149,45 @@ class ShippingPricingConfigService
         return in_array($v, self::ROUNDING_STRATEGIES, true) ? $v : self::ROUNDING_NEAREST_KG;
     }
 
+    public function serviceFee(): float
+    {
+        $v = ShippingSetting::getValue(self::KEY_SERVICE_FEE);
+        if ($v === null || $v === '') {
+            return self::DEFAULT_SERVICE_FEE;
+        }
+        $f = (float) $v;
+        return $f >= 0 ? $f : self::DEFAULT_SERVICE_FEE;
+    }
+
+    public function platformMarkupPercent(): float
+    {
+        $v = ShippingSetting::getValue(self::KEY_PLATFORM_MARKUP_PERCENT);
+        if ($v === null || $v === '') {
+            return self::DEFAULT_PLATFORM_MARKUP_PERCENT;
+        }
+        return (float) $v;
+    }
+
+    public function minimumOrderFee(): float
+    {
+        $v = ShippingSetting::getValue(self::KEY_MINIMUM_ORDER_FEE);
+        if ($v === null || $v === '') {
+            return self::DEFAULT_MINIMUM_ORDER_FEE;
+        }
+        $f = (float) $v;
+        return $f >= 0 ? $f : self::DEFAULT_MINIMUM_ORDER_FEE;
+    }
+
+    public function minimumOrderThreshold(): float
+    {
+        $v = ShippingSetting::getValue(self::KEY_MINIMUM_ORDER_THRESHOLD);
+        if ($v === null || $v === '') {
+            return self::DEFAULT_MINIMUM_ORDER_THRESHOLD;
+        }
+        $f = (float) $v;
+        return $f >= 0 ? $f : self::DEFAULT_MINIMUM_ORDER_THRESHOLD;
+    }
+
     /** Fallback weight value as stored (use with shippingDefaultWeightUnit). */
     public function shippingDefaultWeight(): float
     {
@@ -217,6 +266,20 @@ class ShippingPricingConfigService
     }
 
     /**
+     * Snapshot of config values used for final pricing (confirm/cart/order).
+     */
+    public function snapshotForFinalPricing(): array
+    {
+        return [
+            'service_fee' => $this->serviceFee(),
+            'platform_markup_percent' => $this->platformMarkupPercent(),
+            'minimum_order_fee' => $this->minimumOrderFee(),
+            'minimum_order_threshold' => $this->minimumOrderThreshold(),
+            'rounding_strategy' => $this->roundingStrategy(),
+        ];
+    }
+
+    /**
      * All config keys that are editable from admin.
      */
     public static function editableKeys(): array
@@ -232,6 +295,10 @@ class ShippingPricingConfigService
             self::KEY_CARRIER_DISCOUNT_UPS,
             self::KEY_CARRIER_DISCOUNT_FEDEX,
             self::KEY_ROUNDING_STRATEGY,
+            self::KEY_SERVICE_FEE,
+            self::KEY_PLATFORM_MARKUP_PERCENT,
+            self::KEY_MINIMUM_ORDER_FEE,
+            self::KEY_MINIMUM_ORDER_THRESHOLD,
             self::KEY_SHIPPING_DEFAULT_WEIGHT,
             self::KEY_SHIPPING_DEFAULT_WEIGHT_UNIT,
             self::KEY_SHIPPING_DEFAULT_LENGTH,

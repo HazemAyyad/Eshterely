@@ -6,6 +6,7 @@ use App\Models\ShippingSetting;
 use App\Models\User;
 use App\Services\ProductExtractionService;
 use App\Services\ProductPageFetcherService;
+use App\Services\Shipping\FinalProductPricingService;
 use App\Services\Shipping\ProductImportShippingQuoteService;
 use App\Services\Shipping\ShippingPricingConfigService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -110,6 +111,25 @@ class ProductImportShippingIntegrationTest extends TestCase
         $this->assertSame([], $sq['missing_fields']);
         $this->assertSame('USD', $sq['currency']);
         $this->assertIsNumeric($sq['amount']);
+
+        $response->assertJsonStructure(['final_pricing' => [
+            'product_price',
+            'product_currency',
+            'shipping_amount',
+            'shipping_currency',
+            'service_fee',
+            'markup_amount',
+            'subtotal',
+            'final_total',
+            'carrier',
+            'pricing_mode',
+            'estimated',
+            'notes',
+        ]]);
+        $fp = $response->json('final_pricing');
+        $this->assertSame(29.99, $fp['product_price']);
+        $this->assertSame($sq['currency'], $fp['shipping_currency']);
+        $this->assertSame($sq['amount'], $fp['shipping_amount']);
     }
 
     public function test_shipping_quote_works_regardless_of_extraction_source(): void
@@ -149,6 +169,7 @@ class ProductImportShippingIntegrationTest extends TestCase
         $response->assertJsonPath('name', 'Test Product');
         $response->assertJsonPath('price', 19.99);
         $response->assertJsonPath('shipping_quote', null);
+        $response->assertJsonPath('final_pricing', null);
     }
 
     public function test_missing_dimensions_produce_estimated_quote(): void
@@ -176,6 +197,10 @@ class ProductImportShippingIntegrationTest extends TestCase
         $this->assertContains('length', $missing);
         $this->assertContains('width', $missing);
         $this->assertContains('height', $missing);
+
+        $fp = $response->json('final_pricing');
+        $this->assertNotNull($fp);
+        $this->assertTrue($fp['estimated']);
     }
 
     public function test_shipping_quote_uses_admin_config(): void
@@ -221,5 +246,28 @@ class ProductImportShippingIntegrationTest extends TestCase
         $response->assertStatus(200);
         $response->assertJsonPath('name', 'Test Product');
         $response->assertJsonPath('shipping_quote', null);
+        $response->assertJsonPath('final_pricing', null);
+    }
+
+    public function test_final_pricing_failure_returns_null_does_not_break_preview(): void
+    {
+        $product = $this->normalizedProductWithShippingData();
+        $this->mock(ProductPageFetcherService::class, function ($mock) {
+            $mock->shouldReceive('fetchHtml')->once()->andReturn(['html' => '<html></html>']);
+        });
+        $this->mock(ProductExtractionService::class, function ($mock) use ($product) {
+            $mock->shouldReceive('extract')->once()->andReturn($product);
+        });
+        $this->mock(FinalProductPricingService::class, function ($mock) {
+            $mock->shouldReceive('build')->once()->andThrow(new \RuntimeException('Pricing error'));
+        });
+
+        Sanctum::actingAs(User::factory()->create());
+        $response = $this->postJson('/api/products/import-from-url', ['url' => 'https://amazon.com/dp/B001']);
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('name', 'Test Product');
+        $response->assertJsonPath('final_pricing', null);
+        $this->assertNotNull($response->json('shipping_quote'));
     }
 }

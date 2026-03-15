@@ -12,7 +12,8 @@ namespace App\Services\Shipping;
 class ProductToShippingInputMapper
 {
     public function __construct(
-        private ShippingPricingConfigService $config
+        private ShippingPricingConfigService $config,
+        private PackageNormalizer $normalizer
     ) {}
 
     /**
@@ -131,9 +132,7 @@ class ProductToShippingInputMapper
         if ($u === null || $u === '') {
             return PackageNormalizer::WEIGHT_UNIT_KG;
         }
-        $u = strtolower(trim((string) $u));
-
-        return $u === 'lb' || $u === 'lbs' ? PackageNormalizer::WEIGHT_UNIT_LB : PackageNormalizer::WEIGHT_UNIT_KG;
+        return $this->normalizer->normalizeWeightUnit($u);
     }
 
     private function extractDimension(array $data, string $key): float

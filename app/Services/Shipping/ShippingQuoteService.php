@@ -3,10 +3,13 @@
 namespace App\Services\Shipping;
 
 use App\Services\Shipping\Contracts\CarrierPricingResolverInterface;
+use App\Services\Shipping\Contracts\CarrierSelectionStrategyInterface;
 
 /**
  * Main entry for shipping quotes.
  * Supports carrier = dhl | ups | fedex | auto. Uses carrier resolvers and config for all parameters.
+ * When carrier = auto, selection is delegated to CarrierSelectionStrategyInterface (default: cheapest).
+ * Structure allows future strategies: recommended carrier, ETA-based, country restrictions, priority rules.
  */
 class ShippingQuoteService
 {
@@ -14,7 +17,8 @@ class ShippingQuoteService
         private PackageNormalizer $normalizer,
         private VolumetricWeightCalculator $volumetricCalculator,
         private ShippingPricingConfigService $config,
-        private CarrierPricingResolverRegistry $resolverRegistry
+        private CarrierPricingResolverRegistry $resolverRegistry,
+        private CarrierSelectionStrategyInterface $carrierSelectionStrategy
     ) {}
 
     /**
@@ -81,7 +85,7 @@ class ShippingQuoteService
                     breakdown: $res->breakdown,
                 );
             }
-            $selectedResult = $this->selectBestResult($results);
+            $selectedResult = $this->carrierSelectionStrategy->select($results);
             if ($selectedResult === null && $carrierResults !== []) {
                 $selectedResult = $this->carrierResultToPricingResult($carrierResults[0]);
             }
@@ -152,24 +156,6 @@ class ShippingQuoteService
         }
 
         return 'default';
-    }
-
-    /**
-     * @param  list<CarrierPricingResult>  $results
-     */
-    private function selectBestResult(array $results): ?CarrierPricingResult
-    {
-        if ($results === []) {
-            return null;
-        }
-        $best = $results[0];
-        foreach ($results as $r) {
-            if ($r->amount < $best->amount) {
-                $best = $r;
-            }
-        }
-
-        return $best;
     }
 
     private function carrierResultToPricingResult(CarrierQuoteResult $r): CarrierPricingResult

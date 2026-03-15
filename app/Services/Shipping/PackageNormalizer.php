@@ -57,7 +57,10 @@ class PackageNormalizer
         );
     }
 
-    private function normalizeWeightUnit(?string $unit): string
+    /**
+     * Normalize weight unit to kg or lb only. Do not store aliases (e.g. lbs → lb).
+     */
+    public function normalizeWeightUnit(?string $unit): string
     {
         $u = strtolower(trim((string) $unit));
         if ($u === 'lb' || $u === 'lbs' || $u === 'pound' || $u === 'pounds') {

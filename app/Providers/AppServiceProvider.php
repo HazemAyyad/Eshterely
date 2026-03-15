@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Services\Payments\SquareService;
 use App\Services\Shipping\CarrierPricingResolverRegistry;
+use App\Services\Shipping\CheapestCarrierSelectionStrategy;
+use App\Services\Shipping\Contracts\CarrierSelectionStrategyInterface;
 use App\Services\Shipping\PackageNormalizer;
 use App\Services\Shipping\Resolvers\DhlPricingResolver;
 use App\Services\Shipping\Resolvers\FedexPricingResolver;
@@ -42,12 +44,14 @@ class AppServiceProvider extends ServiceProvider
 
             return $registry;
         });
+        $this->app->singleton(CarrierSelectionStrategyInterface::class, CheapestCarrierSelectionStrategy::class);
         $this->app->singleton(ShippingQuoteService::class, function ($app) {
             return new ShippingQuoteService(
                 $app->make(PackageNormalizer::class),
                 $app->make(VolumetricWeightCalculator::class),
                 $app->make(ShippingPricingConfigService::class),
-                $app->make(CarrierPricingResolverRegistry::class)
+                $app->make(CarrierPricingResolverRegistry::class),
+                $app->make(CarrierSelectionStrategyInterface::class)
             );
         });
     }

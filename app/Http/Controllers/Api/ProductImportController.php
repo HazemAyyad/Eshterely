@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\ProductExtractionService;
 use App\Services\ProductPageFetcherService;
+use App\Services\Shipping\FinalProductPricingService;
 use App\Services\Shipping\ProductImportShippingQuoteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 class ProductImportController extends Controller
 {
@@ -17,7 +19,7 @@ class ProductImportController extends Controller
      * Fetching is delegated to ProductPageFetcherService (direct HTTP or, for Amazon, rendered fetch when configured).
      * After extraction succeeds, a shipping quote preview is calculated from normalized product data (source-agnostic).
      */
-    public function importFromUrl(Request $request, ProductExtractionService $extractionService, ProductPageFetcherService $pageFetcher, ProductImportShippingQuoteService $shippingQuoteService): JsonResponse
+    public function importFromUrl(Request $request, ProductExtractionService $extractionService, ProductPageFetcherService $pageFetcher, ProductImportShippingQuoteService $shippingQuoteService, FinalProductPricingService $finalPricingService): JsonResponse
     {
         $validated = $request->validate([
             'url' => 'required|url',
@@ -75,6 +77,21 @@ class ProductImportController extends Controller
                 $shippingOverrides,
                 $product['extraction_source'] ?? null
             );
+
+            $product['final_pricing'] = null;
+            if ($product['shipping_quote'] !== null) {
+                try {
+                    $quantity = (int) ($validated['quantity'] ?? $product['quantity'] ?? 1);
+                    $quantity = $quantity < 1 ? 1 : $quantity;
+                    $pricing = $finalPricingService->build($product, $product['shipping_quote'], $quantity);
+                    $product['final_pricing'] = $pricing !== null ? $pricing->toArray() : null;
+                } catch (\Throwable $e) {
+                    Log::warning('Product import: final pricing calculation failed', [
+                        'message' => $e->getMessage(),
+                        'url' => $url,
+                    ]);
+                }
+            }
 
             return response()->json($product);
         } catch (\Exception $e) {

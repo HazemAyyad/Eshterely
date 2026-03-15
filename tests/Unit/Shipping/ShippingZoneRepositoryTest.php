@@ -19,4 +19,10 @@ class ShippingZoneRepositoryTest extends TestCase
         $repo = new ShippingZoneRepository();
         $this->assertSame(0.0, $repo->getBasePriceForWeight('dhl', 'zone_a', 5.0));
     }
+
+    public function test_get_zone_rate_info_returns_null_without_data(): void
+    {
+        $repo = new ShippingZoneRepository();
+        $this->assertNull($repo->getZoneRateInfo('dhl', 'US', 'DE', 2.5));
+    }
 }
