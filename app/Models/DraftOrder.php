@@ -59,4 +59,9 @@ class DraftOrder extends Model
     {
         return $this->hasMany(CartItem::class, 'draft_order_id');
     }
+
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class, 'draft_order_id');
+    }
 }

@@ -134,6 +134,7 @@ class DraftOrderService
             'draft_order_id' => $draft->id,
             'cart_item_id' => $cartItem->id,
             'imported_product_id' => $cartItem->imported_product_id,
+            'source_type' => $cartItem->source_type ?? ($cartItem->isImported() ? CartItem::SOURCE_IMPORTED : CartItem::SOURCE_PASTE_LINK),
             'product_snapshot' => $productSnapshot,
             'shipping_snapshot' => $cartItem->shipping_snapshot,
             'pricing_snapshot' => $cartItem->pricing_snapshot,

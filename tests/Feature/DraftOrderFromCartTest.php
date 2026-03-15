@@ -60,6 +60,7 @@ class DraftOrderFromCartTest extends TestCase
         $response = $this->postJson('/api/cart/create-draft-order');
         $response->assertStatus(201);
 
+        $data = $response->json('data') ?? $response->json();
         $response->assertJsonPath('data.status', 'draft');
         $response->assertJsonPath('data.currency', 'USD');
         $response->assertJsonPath('data.estimated', false);

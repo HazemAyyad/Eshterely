@@ -80,6 +80,7 @@ Route::middleware('auth:sanctum')->prefix('cart')->group(function () {
 Route::middleware('auth:sanctum')->prefix('draft-orders')->group(function () {
     Route::get('/', [DraftOrderController::class, 'index']);
     Route::get('{draft_order}', [DraftOrderController::class, 'show']);
+    Route::post('{draft_order}/checkout', [DraftOrderController::class, 'checkout']);
 });
 
 // Orders (auth required)

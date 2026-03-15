@@ -18,6 +18,7 @@ class DraftOrderItemResource extends JsonResource
 
         return [
             'id' => (string) $item->id,
+            'source_type' => $item->source_type,
             'cart_item_id' => $item->cart_item_id ? (string) $item->cart_item_id : null,
             'imported_product_id' => $item->imported_product_id ? (string) $item->imported_product_id : null,
             'product_snapshot' => $item->product_snapshot,

@@ -11,7 +11,7 @@ class OrderShipment extends Model
     protected $fillable = [
         'order_id', 'country_code', 'country_label', 'shipping_method', 'eta',
         'subtotal', 'shipping_fee', 'customs_duties', 'gross_weight_kg',
-        'dimensions', 'insurance_confirmed', 'status_tags',
+        'dimensions', 'insurance_confirmed', 'status_tags', 'shipping_snapshot',
     ];
 
     protected function casts(): array
@@ -22,6 +22,7 @@ class OrderShipment extends Model
             'customs_duties' => 'decimal:2',
             'gross_weight_kg' => 'decimal:4',
             'status_tags' => 'array',
+            'shipping_snapshot' => 'array',
         ];
     }
 

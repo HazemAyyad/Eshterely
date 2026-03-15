@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class DraftOrderItem extends Model
 {
@@ -11,6 +12,7 @@ class DraftOrderItem extends Model
         'draft_order_id',
         'cart_item_id',
         'imported_product_id',
+        'source_type',
         'product_snapshot',
         'shipping_snapshot',
         'pricing_snapshot',
@@ -46,5 +48,11 @@ class DraftOrderItem extends Model
     public function importedProduct(): BelongsTo
     {
         return $this->belongsTo(ImportedProduct::class);
+    }
+
+    /** Order line item created from this draft item (for cart restoration tracing). */
+    public function orderLineItem(): HasOne
+    {
+        return $this->hasOne(OrderLineItem::class, 'draft_order_item_id');
     }
 }
