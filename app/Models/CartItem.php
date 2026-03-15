@@ -16,7 +16,7 @@ class CartItem extends Model
     public const REVIEW_STATUS_REJECTED = 'rejected';
 
     protected $fillable = [
-        'user_id', 'imported_product_id', 'product_url', 'name', 'unit_price', 'quantity', 'currency',
+        'user_id', 'imported_product_id', 'draft_order_id', 'product_url', 'name', 'unit_price', 'quantity', 'currency',
         'image_url', 'store_key', 'store_name', 'product_id', 'country',
         'weight', 'weight_unit', 'length', 'width', 'height', 'dimension_unit',
         'source', 'variation_text', 'review_status', 'shipping_cost',
@@ -63,5 +63,16 @@ class CartItem extends Model
     public function importedProduct(): BelongsTo
     {
         return $this->belongsTo(ImportedProduct::class);
+    }
+
+    public function draftOrder(): BelongsTo
+    {
+        return $this->belongsTo(DraftOrder::class);
+    }
+
+    /** Whether this item is attached to a draft order (excluded from active cart). */
+    public function isAttachedToDraft(): bool
+    {
+        return $this->draft_order_id !== null;
     }
 }

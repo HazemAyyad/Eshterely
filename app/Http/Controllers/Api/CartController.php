@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CartItemResource;
+use App\Http\Resources\DraftOrderResource;
 use App\Models\CartItem;
+use App\Services\DraftOrderService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -12,13 +14,16 @@ use Illuminate\Http\Request;
 class CartController extends Controller
 {
     use AuthorizesRequests;
+
     /**
-     * List cart items (user's own).
+     * List active cart items (user's own, not attached to a draft order).
      * Imported items use stored pricing_snapshot and shipping_snapshot only; no recalculation on read.
      */
     public function index(Request $request): JsonResponse
     {
-        $items = CartItem::where('user_id', $request->user()->id)->get();
+        $items = CartItem::where('user_id', $request->user()->id)
+            ->whereNull('draft_order_id')
+            ->get();
 
         return response()->json($items->map(fn (CartItem $i) => (new CartItemResource($i))->toArray($request)));
     }
@@ -73,7 +78,7 @@ class CartController extends Controller
 
     public function update(Request $request, int $id): JsonResponse
     {
-        $item = CartItem::findOrFail($id);
+        $item = CartItem::whereNull('draft_order_id')->findOrFail($id);
         $this->authorize('update', $item);
 
         $validated = $request->validate(['quantity' => 'required|integer|min:1']);
@@ -90,7 +95,7 @@ class CartController extends Controller
 
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $item = CartItem::findOrFail($id);
+        $item = CartItem::whereNull('draft_order_id')->findOrFail($id);
         $this->authorize('delete', $item);
         $item->delete();
 
@@ -99,8 +104,29 @@ class CartController extends Controller
 
     public function clear(Request $request): JsonResponse
     {
-        CartItem::where('user_id', $request->user()->id)->delete();
+        CartItem::where('user_id', $request->user()->id)->whereNull('draft_order_id')->delete();
 
         return response()->json(['message' => 'Cart cleared']);
+    }
+
+    /**
+     * Create a draft order from the user's active cart.
+     * Snapshots are copied only; no recalculation. Cart items are marked as attached to the draft.
+     */
+    public function createDraftOrder(Request $request, DraftOrderService $draftOrderService): JsonResponse
+    {
+        $items = CartItem::where('user_id', $request->user()->id)->whereNull('draft_order_id')->get();
+
+        if ($items->isEmpty()) {
+            return response()->json(['message' => 'Cart is empty.'], 422);
+        }
+
+        $draft = $draftOrderService->createFromCart($items);
+
+        if ($draft === null) {
+            return response()->json(['message' => 'Could not create draft order.'], 422);
+        }
+
+        return (new DraftOrderResource($draft))->response()->setStatusCode(201);
     }
 }

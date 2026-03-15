@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\CitiesController;
 use App\Http\Controllers\Api\ConfigController;
 use App\Http\Controllers\Api\CountriesController;
+use App\Http\Controllers\Api\DraftOrderController;
 use App\Http\Controllers\Api\ShippingQuoteController;
 use App\Http\Controllers\Api\FavoritesController;
 use App\Http\Controllers\Api\MeController;
@@ -69,9 +70,16 @@ Route::middleware('auth:sanctum')->prefix('cart')->group(function () {
     Route::get('/', [CartController::class, 'index']);
     Route::get('items', [CartController::class, 'index']);
     Route::post('items', [CartController::class, 'store']);
+    Route::post('create-draft-order', [CartController::class, 'createDraftOrder']);
     Route::patch('items/{id}', [CartController::class, 'update']);
     Route::delete('items/{id}', [CartController::class, 'destroy']);
     Route::delete('/', [CartController::class, 'clear']);
+});
+
+// Draft orders (auth required, ownership enforced)
+Route::middleware('auth:sanctum')->prefix('draft-orders')->group(function () {
+    Route::get('/', [DraftOrderController::class, 'index']);
+    Route::get('{draft_order}', [DraftOrderController::class, 'show']);
 });
 
 // Orders (auth required)

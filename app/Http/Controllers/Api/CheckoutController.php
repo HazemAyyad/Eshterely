@@ -21,7 +21,7 @@ class CheckoutController extends Controller
      */
     public function review(Request $request): JsonResponse
     {
-        $items = CartItem::where('user_id', $request->user()->id)->get();
+        $items = CartItem::where('user_id', $request->user()->id)->whereNull('draft_order_id')->get();
         $defaultAddress = Address::where('user_id', $request->user()->id)->where('is_default', true)->with('country')->first();
         $wallet = Wallet::firstOrCreate(
             ['user_id' => $request->user()->id],
@@ -65,7 +65,7 @@ class CheckoutController extends Controller
 
     public function confirm(Request $request): JsonResponse
     {
-        $items = CartItem::where('user_id', $request->user()->id)->get();
+        $items = CartItem::where('user_id', $request->user()->id)->whereNull('draft_order_id')->get();
         if ($items->isEmpty()) {
             return response()->json(['message' => 'Cart is empty'], 400);
         }
@@ -133,7 +133,7 @@ class CheckoutController extends Controller
             }
         }
 
-        CartItem::where('user_id', $request->user()->id)->delete();
+        CartItem::where('user_id', $request->user()->id)->whereNull('draft_order_id')->delete();
 
         return response()->json([
             'message' => 'Order placed',
