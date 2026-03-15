@@ -42,4 +42,8 @@ return [
         'brightdata_api_key' => env('BRIGHTDATA_API_KEY'),
     ],
 
+    'shipping' => [
+        'default_destination_country' => env('SHIPPING_DEFAULT_DESTINATION_COUNTRY', 'US'),
+    ],
+
 ];

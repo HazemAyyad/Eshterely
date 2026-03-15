@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\ProductExtractionService;
 use App\Services\ProductPageFetcherService;
+use App\Services\Shipping\ProductImportShippingQuoteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -14,13 +15,17 @@ class ProductImportController extends Controller
     /**
      * Import product data from URL. Uses hybrid pipeline: JSON-LD -> meta tags -> DOM -> OpenAI -> regex.
      * Fetching is delegated to ProductPageFetcherService (direct HTTP or, for Amazon, rendered fetch when configured).
+     * After extraction succeeds, a shipping quote preview is calculated from normalized product data (source-agnostic).
      */
-    public function importFromUrl(Request $request, ProductExtractionService $extractionService, ProductPageFetcherService $pageFetcher): JsonResponse
+    public function importFromUrl(Request $request, ProductExtractionService $extractionService, ProductPageFetcherService $pageFetcher, ProductImportShippingQuoteService $shippingQuoteService): JsonResponse
     {
         $validated = $request->validate([
             'url' => 'required|url',
             'store_key' => 'nullable|string',
             'extraction_strategy' => 'nullable|string|in:auto,jsonld,meta,dom,openai',
+            'destination_country' => 'nullable|string|max:10',
+            'warehouse_mode' => 'nullable|boolean',
+            'quantity' => 'nullable|integer|min:1',
         ]);
 
         $url = $validated['url'];
@@ -56,6 +61,18 @@ class ProductImportController extends Controller
             if (is_array($raw) && $raw !== []) {
                 $product['variations'] = $this->extractVariationsFromRaw($raw);
             }
+
+            $shippingOverrides = array_filter([
+                'destination_country' => $validated['destination_country'] ?? null,
+                'warehouse_mode' => isset($validated['warehouse_mode']) ? (bool) $validated['warehouse_mode'] : null,
+                'quantity' => $validated['quantity'] ?? null,
+            ], fn ($v) => $v !== null);
+
+            $product['shipping_quote'] = $shippingQuoteService->quoteFromProduct(
+                $product,
+                $shippingOverrides,
+                $product['extraction_source'] ?? null
+            );
 
             return response()->json($product);
         } catch (\Exception $e) {
