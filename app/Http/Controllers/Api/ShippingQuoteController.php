@@ -17,7 +17,7 @@ class ShippingQuoteController extends Controller
     {
         $validated = $request->validate([
             'destination_country' => 'required|string|max:10',
-            'carrier' => 'nullable|string|max:50',
+            'carrier' => 'nullable|string|in:dhl,ups,fedex,auto',
             'warehouse_mode' => 'boolean',
             'weight' => 'required|numeric|min:0',
             'weight_unit' => 'nullable|string|in:kg,lb,lbs',

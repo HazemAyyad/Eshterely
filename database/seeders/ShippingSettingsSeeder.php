@@ -24,6 +24,12 @@ class ShippingSettingsSeeder extends Seeder
             ShippingPricingConfigService::KEY_CARRIER_DISCOUNT_UPS => '0',
             ShippingPricingConfigService::KEY_CARRIER_DISCOUNT_FEDEX => '0',
             ShippingPricingConfigService::KEY_ROUNDING_STRATEGY => ShippingPricingConfigService::ROUNDING_NEAREST_KG,
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_WEIGHT => '0.5',
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_WEIGHT_UNIT => 'kg',
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_LENGTH => '10',
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_WIDTH => '10',
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_HEIGHT => '10',
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_DIMENSION_UNIT => 'cm',
         ];
 
         foreach ($defaults as $key => $value) {

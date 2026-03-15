@@ -19,21 +19,32 @@ final class ShippingQuoteResult
         public array $appliedConfigSnapshot = [],
         /** @var list<CarrierQuoteResult> */
         public array $carrierResults = [],
+        public string $pricingMode = 'default',
+        public array $calculationBreakdown = [],
     ) {}
 
     public function toArray(): array
     {
-        return [
+        $base = [
             'carrier' => $this->carrier,
             'warehouse_mode' => $this->warehouseMode,
+            'pricing_mode' => $this->pricingMode,
+            'actual_weight' => $this->actualWeightKg,
+            'volumetric_weight' => $this->volumetricWeightKg,
+            'chargeable_weight' => $this->chargeableWeightKg,
+            'currency' => $this->currency,
+            'amount' => $this->finalAmount,
+            'notes' => $this->calculationNotes,
+            'calculation_breakdown' => $this->calculationBreakdown,
             'actual_weight_kg' => $this->actualWeightKg,
             'volumetric_weight_kg' => $this->volumetricWeightKg,
             'chargeable_weight_kg' => $this->chargeableWeightKg,
-            'currency' => $this->currency,
             'final_amount' => $this->finalAmount,
             'calculation_notes' => $this->calculationNotes,
             'applied_config_snapshot' => $this->appliedConfigSnapshot,
             'carrier_results' => array_map(fn (CarrierQuoteResult $r) => $r->toArray(), $this->carrierResults),
         ];
+
+        return $base;
     }
 }

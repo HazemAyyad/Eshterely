@@ -26,6 +26,7 @@ class ProductImportController extends Controller
             'destination_country' => 'nullable|string|max:10',
             'warehouse_mode' => 'nullable|boolean',
             'quantity' => 'nullable|integer|min:1',
+            'carrier' => 'nullable|string|in:dhl,ups,fedex,auto',
         ]);
 
         $url = $validated['url'];
@@ -66,6 +67,7 @@ class ProductImportController extends Controller
                 'destination_country' => $validated['destination_country'] ?? null,
                 'warehouse_mode' => isset($validated['warehouse_mode']) ? (bool) $validated['warehouse_mode'] : null,
                 'quantity' => $validated['quantity'] ?? null,
+                'carrier' => $validated['carrier'] ?? null,
             ], fn ($v) => $v !== null);
 
             $product['shipping_quote'] = $shippingQuoteService->quoteFromProduct(

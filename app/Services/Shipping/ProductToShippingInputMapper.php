@@ -6,18 +6,14 @@ namespace App\Services\Shipping;
  * Maps normalized product preview/extraction data to ShippingQuoteService input.
  * Source-agnostic: works with output from ScraperAPI, HTML pipeline, or any extractor
  * that populates the standard normalized fields.
+ * Fallback package values (weight, dimensions) are loaded from ShippingPricingConfigService
+ * when product data does not contain valid values.
  */
 class ProductToShippingInputMapper
 {
-    /** Default weight (kg) when product weight is missing. */
-    private const FALLBACK_WEIGHT_KG = 0.5;
-
-    /** Default dimensions (cm) when product dimensions are missing. */
-    private const FALLBACK_LENGTH_CM = 10.0;
-
-    private const FALLBACK_WIDTH_CM = 10.0;
-
-    private const FALLBACK_HEIGHT_CM = 10.0;
+    public function __construct(
+        private ShippingPricingConfigService $config
+    ) {}
 
     /**
      * Build shipping quote input from normalized product data.
@@ -41,40 +37,46 @@ class ProductToShippingInputMapper
 
         if ($weight <= 0) {
             $missing[] = 'weight';
-            $weight = self::FALLBACK_WEIGHT_KG;
-            $weightUnit = PackageNormalizer::WEIGHT_UNIT_KG;
+            $weight = $this->config->shippingDefaultWeight();
+            $weightUnit = $this->config->shippingDefaultWeightUnit() === 'lb' ? PackageNormalizer::WEIGHT_UNIT_LB : PackageNormalizer::WEIGHT_UNIT_KG;
         }
         $hasAnyDimension = $length > 0 || $width > 0 || $height > 0;
+        $dimUnit = $this->config->shippingDefaultDimensionUnit();
+        $defaultDimUnit = $dimUnit === 'in' ? PackageNormalizer::DIMENSION_UNIT_IN : PackageNormalizer::DIMENSION_UNIT_CM;
         if (! $hasAnyDimension) {
             $missing[] = 'length';
             $missing[] = 'width';
             $missing[] = 'height';
-            $length = self::FALLBACK_LENGTH_CM;
-            $width = self::FALLBACK_WIDTH_CM;
-            $height = self::FALLBACK_HEIGHT_CM;
-            $dimensionUnit = PackageNormalizer::DIMENSION_UNIT_CM;
+            $length = $this->config->shippingDefaultLength();
+            $width = $this->config->shippingDefaultWidth();
+            $height = $this->config->shippingDefaultHeight();
+            $dimensionUnit = $defaultDimUnit;
         } else {
             if ($length <= 0) {
                 $missing[] = 'length';
-                $length = self::FALLBACK_LENGTH_CM;
+                $length = $this->config->shippingDefaultLength();
             }
             if ($width <= 0) {
                 $missing[] = 'width';
-                $width = self::FALLBACK_WIDTH_CM;
+                $width = $this->config->shippingDefaultWidth();
             }
             if ($height <= 0) {
                 $missing[] = 'height';
-                $height = self::FALLBACK_HEIGHT_CM;
+                $height = $this->config->shippingDefaultHeight();
             }
         }
 
         $destinationCountry = (string) ($overrides['destination_country'] ?? $normalizedProduct['destination_country'] ?? config('services.shipping.default_destination_country', 'US'));
         $destinationCountry = strtoupper(substr(trim($destinationCountry), 0, 10)) ?: 'US';
         $warehouseMode = (bool) ($overrides['warehouse_mode'] ?? $normalizedProduct['warehouse_mode'] ?? false);
+        $carrier = isset($overrides['carrier']) && $overrides['carrier'] !== '' && $overrides['carrier'] !== null
+            ? (string) $overrides['carrier']
+            : null;
 
         $input = [
             'destination_country' => $destinationCountry,
             'warehouse_mode' => $warehouseMode,
+            'carrier' => $carrier,
             'weight' => $weight,
             'weight_unit' => $weightUnit,
             'length' => $length,

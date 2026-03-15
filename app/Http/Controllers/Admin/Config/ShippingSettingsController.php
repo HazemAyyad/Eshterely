@@ -65,9 +65,15 @@ class ShippingSettingsController extends Controller
             ShippingPricingConfigService::KEY_CARRIER_DISCOUNT_DHL,
             ShippingPricingConfigService::KEY_CARRIER_DISCOUNT_UPS,
             ShippingPricingConfigService::KEY_CARRIER_DISCOUNT_FEDEX,
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_WEIGHT,
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_LENGTH,
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_WIDTH,
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_HEIGHT,
         ];
         $roundingKey = ShippingPricingConfigService::KEY_ROUNDING_STRATEGY;
         $roundingAllowed = implode(',', ShippingPricingConfigService::ROUNDING_STRATEGIES);
+        $weightUnitKey = ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_WEIGHT_UNIT;
+        $dimensionUnitKey = ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_DIMENSION_UNIT;
 
         $rules = [];
         foreach ($keys as $key) {
@@ -75,6 +81,10 @@ class ShippingSettingsController extends Controller
                 $rules[$key] = 'nullable|numeric|min:0';
             } elseif ($key === $roundingKey) {
                 $rules[$key] = 'nullable|in:' . $roundingAllowed;
+            } elseif ($key === $weightUnitKey) {
+                $rules[$key] = 'nullable|string|in:kg,lb,lbs';
+            } elseif ($key === $dimensionUnitKey) {
+                $rules[$key] = 'nullable|string|in:cm,in';
             } else {
                 $rules[$key] = 'nullable|string|max:255';
             }
@@ -96,6 +106,12 @@ class ShippingSettingsController extends Controller
             ShippingPricingConfigService::KEY_CARRIER_DISCOUNT_UPS,
             ShippingPricingConfigService::KEY_CARRIER_DISCOUNT_FEDEX => '0',
             ShippingPricingConfigService::KEY_ROUNDING_STRATEGY => ShippingPricingConfigService::ROUNDING_NEAREST_KG,
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_WEIGHT => '0.5',
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_WEIGHT_UNIT => 'kg',
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_LENGTH => '10',
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_WIDTH => '10',
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_HEIGHT => '10',
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_DIMENSION_UNIT => 'cm',
             default => '',
         };
     }

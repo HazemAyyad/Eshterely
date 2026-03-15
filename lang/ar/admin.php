@@ -204,5 +204,13 @@ return [
     'shipping_rounding_none' => 'بدون',
     'shipping_rounding_nearest_kg' => 'أقرب كغ',
     'shipping_rounding_up_500g' => 'حتى 500غ',
+    'shipping_fallback_defaults_section' => 'قيم افتراضية للطرد',
+    'shipping_fallback_defaults_help' => 'تُستخدم عندما تكون بيانات المنتج تفتقد الوزن أو الأبعاد (مثلاً أثناء الاستيراد). سيُعلّم العرض بأنه تقديري.',
+    'shipping_default_weight' => 'الوزن الافتراضي',
+    'shipping_default_weight_unit' => 'وحدة الوزن الافتراضية',
+    'shipping_default_length' => 'الطول الافتراضي',
+    'shipping_default_width' => 'العرض الافتراضي',
+    'shipping_default_height' => 'الارتفاع الافتراضي',
+    'shipping_default_dimension_unit' => 'وحدة الأبعاد الافتراضية',
     'no_tickets' => 'لا توجد تذاكر',
 ];

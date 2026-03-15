@@ -65,6 +65,7 @@ class ProductImportShippingQuoteService
 
         return [
             'carrier' => $result->carrier ?? 'auto',
+            'pricing_mode' => $result->pricingMode ?? 'default',
             'warehouse_mode' => $result->warehouseMode,
             'actual_weight' => $result->actualWeightKg,
             'volumetric_weight' => $result->volumetricWeightKg,
@@ -74,6 +75,7 @@ class ProductImportShippingQuoteService
             'estimated' => $estimated,
             'missing_fields' => $missingFields,
             'notes' => $notes,
+            'calculation_breakdown' => $result->calculationBreakdown ?? [],
         ];
     }
 }

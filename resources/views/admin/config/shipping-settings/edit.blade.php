@@ -75,6 +75,41 @@
                         @endforeach
                     </select>
                 </div>
+                <div class="col-12 mt-3">
+                    <h6 class="text-muted">{{ __('admin.shipping_fallback_defaults_section') }}</h6>
+                    <p class="small text-muted">{{ __('admin.shipping_fallback_defaults_help') }}</p>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">{{ __('admin.shipping_default_weight') }}</label>
+                    <input type="text" name="shipping_default_weight" class="form-control" value="{{ old('shipping_default_weight', $values['shipping_default_weight'] ?? '0.5') }}" placeholder="0.5">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">{{ __('admin.shipping_default_weight_unit') }}</label>
+                    <select name="shipping_default_weight_unit" class="form-select">
+                        <option value="kg" {{ old('shipping_default_weight_unit', $values['shipping_default_weight_unit'] ?? 'kg') === 'kg' ? 'selected' : '' }}>kg</option>
+                        <option value="lb" {{ old('shipping_default_weight_unit', $values['shipping_default_weight_unit'] ?? 'kg') === 'lb' ? 'selected' : '' }}>lb</option>
+                    </select>
+                </div>
+                <div class="col-md-4"></div>
+                <div class="col-md-4">
+                    <label class="form-label">{{ __('admin.shipping_default_length') }}</label>
+                    <input type="text" name="shipping_default_length" class="form-control" value="{{ old('shipping_default_length', $values['shipping_default_length'] ?? '10') }}" placeholder="10">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">{{ __('admin.shipping_default_width') }}</label>
+                    <input type="text" name="shipping_default_width" class="form-control" value="{{ old('shipping_default_width', $values['shipping_default_width'] ?? '10') }}" placeholder="10">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">{{ __('admin.shipping_default_height') }}</label>
+                    <input type="text" name="shipping_default_height" class="form-control" value="{{ old('shipping_default_height', $values['shipping_default_height'] ?? '10') }}" placeholder="10">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">{{ __('admin.shipping_default_dimension_unit') }}</label>
+                    <select name="shipping_default_dimension_unit" class="form-select">
+                        <option value="cm" {{ old('shipping_default_dimension_unit', $values['shipping_default_dimension_unit'] ?? 'cm') === 'cm' ? 'selected' : '' }}>cm</option>
+                        <option value="in" {{ old('shipping_default_dimension_unit', $values['shipping_default_dimension_unit'] ?? 'cm') === 'in' ? 'selected' : '' }}>in</option>
+                    </select>
+                </div>
             </div>
             <div class="mt-4">
                 <button type="submit" class="btn btn-primary">{{ __('admin.save') }}</button>

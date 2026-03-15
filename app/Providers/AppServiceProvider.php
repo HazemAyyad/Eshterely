@@ -3,7 +3,11 @@
 namespace App\Providers;
 
 use App\Services\Payments\SquareService;
+use App\Services\Shipping\CarrierPricingResolverRegistry;
 use App\Services\Shipping\PackageNormalizer;
+use App\Services\Shipping\Resolvers\DhlPricingResolver;
+use App\Services\Shipping\Resolvers\FedexPricingResolver;
+use App\Services\Shipping\Resolvers\UpsPricingResolver;
 use App\Services\Shipping\ShippingPricingConfigService;
 use App\Services\Shipping\ShippingQuoteService;
 use App\Services\Shipping\VolumetricWeightCalculator;
@@ -29,11 +33,21 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(VolumetricWeightCalculator::class, function ($app) {
             return new VolumetricWeightCalculator($app->make(ShippingPricingConfigService::class));
         });
+        $this->app->singleton(CarrierPricingResolverRegistry::class, function ($app) {
+            $registry = new CarrierPricingResolverRegistry();
+            $config = $app->make(ShippingPricingConfigService::class);
+            $registry->register(new DhlPricingResolver($config));
+            $registry->register(new UpsPricingResolver($config));
+            $registry->register(new FedexPricingResolver($config));
+
+            return $registry;
+        });
         $this->app->singleton(ShippingQuoteService::class, function ($app) {
             return new ShippingQuoteService(
                 $app->make(PackageNormalizer::class),
                 $app->make(VolumetricWeightCalculator::class),
-                $app->make(ShippingPricingConfigService::class)
+                $app->make(ShippingPricingConfigService::class),
+                $app->make(CarrierPricingResolverRegistry::class)
             );
         });
     }

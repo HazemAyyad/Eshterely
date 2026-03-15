@@ -21,6 +21,14 @@ class ShippingPricingConfigService
     public const KEY_CARRIER_DISCOUNT_FEDEX = 'carrier_discount_fedex';
     public const KEY_ROUNDING_STRATEGY = 'rounding_strategy';
 
+    /** Fallback package defaults when product data is missing weight/dimensions */
+    public const KEY_SHIPPING_DEFAULT_WEIGHT = 'shipping_default_weight';
+    public const KEY_SHIPPING_DEFAULT_WEIGHT_UNIT = 'shipping_default_weight_unit';
+    public const KEY_SHIPPING_DEFAULT_LENGTH = 'shipping_default_length';
+    public const KEY_SHIPPING_DEFAULT_WIDTH = 'shipping_default_width';
+    public const KEY_SHIPPING_DEFAULT_HEIGHT = 'shipping_default_height';
+    public const KEY_SHIPPING_DEFAULT_DIMENSION_UNIT = 'shipping_default_dimension_unit';
+
     public const ROUNDING_UP_500G = 'up_to_500g';
     public const ROUNDING_NEAREST_KG = 'nearest_kg';
     public const ROUNDING_NONE = 'none';
@@ -40,6 +48,8 @@ class ShippingPricingConfigService
     private const DEFAULT_WAREHOUSE_HANDLING_FEE = 0.0;
     private const DEFAULT_MULTI_PACKAGE_PERCENT = 0.0;
     private const DEFAULT_CARRIER_DISCOUNT = 0.0;
+    private const DEFAULT_FALLBACK_WEIGHT = 0.5;
+    private const DEFAULT_FALLBACK_DIMENSION = 10.0;
 
     public function volumetricDivisor(): float
     {
@@ -129,6 +139,67 @@ class ShippingPricingConfigService
         return in_array($v, self::ROUNDING_STRATEGIES, true) ? $v : self::ROUNDING_NEAREST_KG;
     }
 
+    /** Fallback weight value as stored (use with shippingDefaultWeightUnit). */
+    public function shippingDefaultWeight(): float
+    {
+        $v = ShippingSetting::getValue(self::KEY_SHIPPING_DEFAULT_WEIGHT);
+        if ($v === null || $v === '') {
+            return self::DEFAULT_FALLBACK_WEIGHT;
+        }
+        $f = (float) $v;
+
+        return $f > 0 ? $f : self::DEFAULT_FALLBACK_WEIGHT;
+    }
+
+    public function shippingDefaultWeightUnit(): string
+    {
+        $v = ShippingSetting::getValue(self::KEY_SHIPPING_DEFAULT_WEIGHT_UNIT);
+        if ($v === null || $v === '') {
+            return 'kg';
+        }
+        $u = strtolower(trim((string) $v));
+
+        return $u === 'lb' || $u === 'lbs' ? 'lb' : 'kg';
+    }
+
+    /** Fallback length as stored (use with shippingDefaultDimensionUnit). */
+    public function shippingDefaultLength(): float
+    {
+        return $this->shippingDefaultDimension(self::KEY_SHIPPING_DEFAULT_LENGTH);
+    }
+
+    public function shippingDefaultWidth(): float
+    {
+        return $this->shippingDefaultDimension(self::KEY_SHIPPING_DEFAULT_WIDTH);
+    }
+
+    public function shippingDefaultHeight(): float
+    {
+        return $this->shippingDefaultDimension(self::KEY_SHIPPING_DEFAULT_HEIGHT);
+    }
+
+    private function shippingDefaultDimension(string $key): float
+    {
+        $v = ShippingSetting::getValue($key);
+        if ($v === null || $v === '') {
+            return self::DEFAULT_FALLBACK_DIMENSION;
+        }
+        $f = (float) $v;
+
+        return $f > 0 ? $f : self::DEFAULT_FALLBACK_DIMENSION;
+    }
+
+    public function shippingDefaultDimensionUnit(): string
+    {
+        $v = ShippingSetting::getValue(self::KEY_SHIPPING_DEFAULT_DIMENSION_UNIT);
+        if ($v === null || $v === '') {
+            return 'cm';
+        }
+        $u = strtolower(trim((string) $v));
+
+        return $u === 'in' || $u === 'inch' || $u === 'inches' ? 'in' : 'cm';
+    }
+
     /**
      * Snapshot of config values used for a quote (for transparency; avoid exposing sensitive data).
      */
@@ -137,8 +208,10 @@ class ShippingPricingConfigService
         return [
             'volumetric_divisor' => $this->volumetricDivisor(),
             'default_currency' => $this->defaultCurrency(),
+            'default_markup_percent' => $this->defaultMarkupPercent(),
             'min_shipping_charge' => $this->minShippingCharge(),
             'warehouse_handling_fee' => $this->warehouseHandlingFee(),
+            'multi_package_percent' => $this->multiPackagePercent(),
             'rounding_strategy' => $this->roundingStrategy(),
         ];
     }
@@ -159,6 +232,12 @@ class ShippingPricingConfigService
             self::KEY_CARRIER_DISCOUNT_UPS,
             self::KEY_CARRIER_DISCOUNT_FEDEX,
             self::KEY_ROUNDING_STRATEGY,
+            self::KEY_SHIPPING_DEFAULT_WEIGHT,
+            self::KEY_SHIPPING_DEFAULT_WEIGHT_UNIT,
+            self::KEY_SHIPPING_DEFAULT_LENGTH,
+            self::KEY_SHIPPING_DEFAULT_WIDTH,
+            self::KEY_SHIPPING_DEFAULT_HEIGHT,
+            self::KEY_SHIPPING_DEFAULT_DIMENSION_UNIT,
         ];
     }
 }

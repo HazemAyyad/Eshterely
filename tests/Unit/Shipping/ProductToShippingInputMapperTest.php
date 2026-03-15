@@ -2,17 +2,38 @@
 
 namespace Tests\Unit\Shipping;
 
+use App\Models\ShippingSetting;
+use App\Services\Shipping\ShippingPricingConfigService;
 use App\Services\Shipping\ProductToShippingInputMapper;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class ProductToShippingInputMapperTest extends TestCase
 {
+    use RefreshDatabase;
+
     private ProductToShippingInputMapper $mapper;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->mapper = new ProductToShippingInputMapper;
+        $this->seedFallbackDefaults();
+        $this->mapper = app(ProductToShippingInputMapper::class);
+    }
+
+    private function seedFallbackDefaults(): void
+    {
+        $defaults = [
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_WEIGHT => '0.5',
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_WEIGHT_UNIT => 'kg',
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_LENGTH => '10',
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_WIDTH => '10',
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_HEIGHT => '10',
+            ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_DIMENSION_UNIT => 'cm',
+        ];
+        foreach ($defaults as $key => $value) {
+            ShippingSetting::setValue($key, $value);
+        }
     }
 
     public function test_has_enough_data_with_weight_only(): void
@@ -43,9 +64,9 @@ class ProductToShippingInputMapperTest extends TestCase
         $this->assertContains('width', $result['missing_fields']);
         $this->assertContains('height', $result['missing_fields']);
         $this->assertSame(2.0, $result['input']['weight']);
-        $this->assertSame(10.0, $result['input']['length']);
-        $this->assertSame(10.0, $result['input']['width']);
-        $this->assertSame(10.0, $result['input']['height']);
+        $this->assertSame(10.0, (float) $result['input']['length']);
+        $this->assertSame(10.0, (float) $result['input']['width']);
+        $this->assertSame(10.0, (float) $result['input']['height']);
     }
 
     public function test_from_normalized_product_with_overrides(): void

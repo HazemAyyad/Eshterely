@@ -207,4 +207,12 @@ return [
     'shipping_rounding_none' => 'None',
     'shipping_rounding_nearest_kg' => 'Nearest kg',
     'shipping_rounding_up_500g' => 'Up to 500g',
+    'shipping_fallback_defaults_section' => 'Fallback package defaults',
+    'shipping_fallback_defaults_help' => 'Used when product data is missing weight or dimensions (e.g. during import). Quote will be marked as estimated.',
+    'shipping_default_weight' => 'Default weight',
+    'shipping_default_weight_unit' => 'Default weight unit',
+    'shipping_default_length' => 'Default length',
+    'shipping_default_width' => 'Default width',
+    'shipping_default_height' => 'Default height',
+    'shipping_default_dimension_unit' => 'Default dimension unit',
 ];
