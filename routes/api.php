@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\NotificationPrefsController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentCheckoutController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\ImportedProductController;
 use App\Http\Controllers\Api\ProductImportController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SessionsController;
@@ -119,6 +120,13 @@ Route::get('warehouses', WarehousesController::class);
 
 // Product import (auth required)
 Route::middleware('auth:sanctum')->post('products/import-from-url', [ProductImportController::class, 'importFromUrl']);
+
+// Imported product confirm & add-to-cart (auth required)
+Route::middleware('auth:sanctum')->prefix('imported-products')->group(function () {
+    Route::post('confirm', [ImportedProductController::class, 'confirm']);
+    Route::get('{imported_product}', [ImportedProductController::class, 'show']);
+    Route::post('{imported_product}/add-to-cart', [ImportedProductController::class, 'addToCart']);
+});
 
 // Shipping quote preview (auth required, temporary for testing calculation engine)
 Route::middleware('auth:sanctum')->post('shipping/quote-preview', [ShippingQuoteController::class, 'quotePreview']);

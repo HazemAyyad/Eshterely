@@ -38,6 +38,7 @@ php artisan db:seed --class=AdminSeeder
 | **Notifications** | `GET /api/notifications`, `PATCH /api/notifications/{id}/read` |
 | **Warehouses** | `GET /api/warehouses` |
 | **Product Import** | `POST /api/products/import-from-url` |
+| **Imported Products** | `POST /api/imported-products/confirm`, `GET /api/imported-products/{id}`, `POST /api/imported-products/{id}/add-to-cart` |
 
 Most endpoints require `Authorization: Bearer {token}` (Sanctum).
 
