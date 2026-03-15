@@ -227,6 +227,8 @@ class ImportedProductConfirmAndCartTest extends TestCase
         $this->assertEquals('Paste link item', $items[0]['name']);
         $this->assertEquals('paste_link', $items[0]['source']);
         $this->assertNull($items[0]['imported_product_id']);
+        $this->assertEquals('paste_link', $items[0]['source_type']);
+        $this->assertFalse($items[0]['needs_review']);
     }
 
     public function test_confirm_validates_required_fields(): void

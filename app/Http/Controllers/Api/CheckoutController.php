@@ -15,6 +15,10 @@ use Illuminate\Support\Str;
 
 class CheckoutController extends Controller
 {
+    /**
+     * Checkout review. Uses cart item unit_price and shipping_cost as stored (snapshot for imported items).
+     * No silent recalculation of shipping or pricing.
+     */
     public function review(Request $request): JsonResponse
     {
         $items = CartItem::where('user_id', $request->user()->id)->get();

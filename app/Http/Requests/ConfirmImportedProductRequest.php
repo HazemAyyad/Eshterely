@@ -53,6 +53,9 @@ class ConfirmImportedProductRequest extends FormRequest
             'final_pricing.estimated' => ['nullable', 'boolean'],
             'final_pricing.notes' => ['nullable', 'array'],
             'extraction_source' => ['nullable', 'string', 'max:100'],
+            // Trust model preparation: optional preview reference for future server-side verification
+            'preview_token' => ['nullable', 'string', 'max:255'],
+            'preview_id' => ['nullable', 'string', 'max:100'],
         ];
     }
 
@@ -124,6 +127,8 @@ class ConfirmImportedProductRequest extends FormRequest
             'missing_fields' => $shippingQuote['missing_fields'] ?? null,
             'import_metadata' => array_filter([
                 'extraction_source' => $this->input('extraction_source'),
+                'preview_token' => $this->input('preview_token'),
+                'preview_id' => $this->input('preview_id'),
             ], fn ($v) => $v !== null && $v !== ''),
         ];
     }

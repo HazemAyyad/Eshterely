@@ -7,6 +7,7 @@ use App\Http\Requests\ConfirmImportedProductRequest;
 use App\Http\Resources\ImportedProductResource;
 use App\Models\CartItem;
 use App\Models\ImportedProduct;
+use App\Services\CartItemReviewService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -34,7 +35,7 @@ class ImportedProductController extends Controller
      * Add a confirmed imported product to the user's cart.
      * Preserves pricing and shipping snapshots; marks imported product as added_to_cart.
      */
-    public function addToCart(Request $request, ImportedProduct $importedProduct): JsonResponse
+    public function addToCart(Request $request, ImportedProduct $importedProduct, CartItemReviewService $reviewService): JsonResponse
     {
         if ($importedProduct->user_id !== $request->user()->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
@@ -48,6 +49,7 @@ class ImportedProductController extends Controller
 
         $shippingSnapshot = $importedProduct->shipping_quote_snapshot ?? [];
         $shippingAmount = (float) ($shippingSnapshot['amount'] ?? 0);
+        $needsReview = $reviewService->importedProductNeedsReview($importedProduct);
 
         $cartItem = CartItem::create([
             'user_id' => $request->user()->id,
@@ -63,7 +65,7 @@ class ImportedProductController extends Controller
             'product_id' => null,
             'country' => $importedProduct->country,
             'source' => CartItem::SOURCE_IMPORTED,
-            'review_status' => 'pending_review',
+            'review_status' => CartItem::REVIEW_STATUS_PENDING,
             'shipping_cost' => $shippingAmount > 0 ? $shippingAmount : null,
             'pricing_snapshot' => $importedProduct->final_pricing_snapshot,
             'shipping_snapshot' => $importedProduct->shipping_quote_snapshot,
@@ -73,6 +75,11 @@ class ImportedProductController extends Controller
             'width' => $this->packageValue($importedProduct, 'width'),
             'height' => $this->packageValue($importedProduct, 'height'),
             'dimension_unit' => $importedProduct->package_info['dimension_unit'] ?? null,
+            'estimated' => $importedProduct->estimated,
+            'missing_fields' => $importedProduct->missing_fields,
+            'carrier' => $importedProduct->carrier,
+            'pricing_mode' => $importedProduct->pricing_mode,
+            'needs_review' => $needsReview,
         ]);
 
         $importedProduct->update(['status' => ImportedProduct::STATUS_ADDED_TO_CART]);
@@ -80,23 +87,7 @@ class ImportedProductController extends Controller
         return response()->json([
             'message' => 'Added to cart',
             'imported_product' => new ImportedProductResource($importedProduct->fresh()),
-            'cart_item' => [
-                'id' => (string) $cartItem->id,
-                'url' => $cartItem->product_url,
-                'name' => $cartItem->name,
-                'price' => (float) $cartItem->unit_price,
-                'quantity' => $cartItem->quantity,
-                'currency' => $cartItem->currency,
-                'image_url' => $cartItem->image_url,
-                'store_key' => $cartItem->store_key,
-                'store_name' => $cartItem->store_name,
-                'country' => $cartItem->country,
-                'source' => $cartItem->source,
-                'review_status' => $cartItem->review_status ?? 'pending_review',
-                'shipping_cost' => $cartItem->shipping_cost ? (float) $cartItem->shipping_cost : null,
-                'pricing_snapshot' => $cartItem->pricing_snapshot,
-                'shipping_snapshot' => $cartItem->shipping_snapshot,
-            ],
+            'cart_item' => (new \App\Http\Resources\CartItemResource($cartItem))->toArray($request),
         ], 201);
     }
 
@@ -121,4 +112,5 @@ class ImportedProductController extends Controller
         }
         return (float) $v;
     }
+
 }

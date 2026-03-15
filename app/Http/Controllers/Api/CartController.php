@@ -3,42 +3,24 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\CartItemResource;
 use App\Models\CartItem;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class CartController extends Controller
 {
+    use AuthorizesRequests;
+    /**
+     * List cart items (user's own).
+     * Imported items use stored pricing_snapshot and shipping_snapshot only; no recalculation on read.
+     */
     public function index(Request $request): JsonResponse
     {
         $items = CartItem::where('user_id', $request->user()->id)->get();
 
-        return response()->json($items->map(fn ($i) => [
-            'id' => (string) $i->id,
-            'url' => $i->product_url,
-            'name' => $i->name,
-            'price' => (float) $i->unit_price,
-            'quantity' => $i->quantity,
-            'currency' => $i->currency,
-            'image_url' => $i->image_url,
-            'store_key' => $i->store_key,
-            'store_name' => $i->store_name,
-            'product_id' => $i->product_id,
-            'country' => $i->country,
-            'source' => $i->source ?? 'paste_link',
-            'imported_product_id' => $i->imported_product_id,
-            'review_status' => $i->review_status ?? 'pending_review',
-            'shipping_cost' => $i->shipping_cost ? (float) $i->shipping_cost : null,
-            'pricing_snapshot' => $i->pricing_snapshot,
-            'shipping_snapshot' => $i->shipping_snapshot,
-            'variation_text' => $i->variation_text,
-            'weight' => $i->weight ? (float) $i->weight : null,
-            'weight_unit' => $i->weight_unit,
-            'length' => $i->length ? (float) $i->length : null,
-            'width' => $i->width ? (float) $i->width : null,
-            'height' => $i->height ? (float) $i->height : null,
-            'dimension_unit' => $i->dimension_unit,
-        ]));
+        return response()->json($items->map(fn (CartItem $i) => (new CartItemResource($i))->toArray($request)));
     }
 
     public function store(Request $request): JsonResponse
@@ -86,34 +68,13 @@ class CartController extends Controller
             'dimension_unit' => $validated['dimension_unit'] ?? null,
         ]);
 
-        return response()->json([
-            'id' => (string) $item->id,
-            'url' => $item->product_url,
-            'name' => $item->name,
-            'price' => (float) $item->unit_price,
-            'quantity' => $item->quantity,
-            'currency' => $item->currency,
-            'image_url' => $item->image_url,
-            'store_key' => $item->store_key,
-            'store_name' => $item->store_name,
-            'product_id' => $item->product_id,
-            'country' => $item->country,
-            'source' => $item->source ?? 'paste_link',
-            'review_status' => $item->review_status ?? 'pending_review',
-            'shipping_cost' => $item->shipping_cost ? (float) $item->shipping_cost : null,
-            'variation_text' => $item->variation_text,
-            'weight' => $item->weight ? (float) $item->weight : null,
-            'weight_unit' => $item->weight_unit,
-            'length' => $item->length ? (float) $item->length : null,
-            'width' => $item->width ? (float) $item->width : null,
-            'height' => $item->height ? (float) $item->height : null,
-            'dimension_unit' => $item->dimension_unit,
-        ], 201);
+        return response()->json((new CartItemResource($item))->toArray($request), 201);
     }
 
     public function update(Request $request, int $id): JsonResponse
     {
-        $item = CartItem::where('user_id', $request->user()->id)->findOrFail($id);
+        $item = CartItem::findOrFail($id);
+        $this->authorize('update', $item);
 
         $validated = $request->validate(['quantity' => 'required|integer|min:1']);
 
@@ -129,7 +90,9 @@ class CartController extends Controller
 
     public function destroy(Request $request, int $id): JsonResponse
     {
-        CartItem::where('user_id', $request->user()->id)->where('id', $id)->delete();
+        $item = CartItem::findOrFail($id);
+        $this->authorize('delete', $item);
+        $item->delete();
 
         return response()->json(['message' => 'Removed']);
     }
