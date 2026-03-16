@@ -3,6 +3,7 @@
 namespace App\Services\Admin;
 
 use App\Enums\Payment\PaymentStatus;
+use App\Enums\Payment\PaymentEventSource;
 use App\Models\CartItem;
 use App\Models\DraftOrder;
 use App\Models\ImportedProduct;
@@ -107,7 +108,7 @@ class AdminDashboardMetricsService
             ],
             'recent_payments' => $recentPayments,
             'recent_attempts' => $recentAttempts,
-            'recent_webhook_success' => \App\Models\PaymentEvent::where('event_type', 'webhook_success')
+            'recent_webhook_success' => \App\Models\PaymentEvent::where('source', PaymentEventSource::Webhook)
                 ->orderByDesc('created_at')
                 ->limit(10)
                 ->get(),
