@@ -91,18 +91,23 @@ foreach ($allowedCommands as $cmd) {
         }
     }
 
-    // Run composer dump-autoload (not an Artisan command)
+    // Run composer dump-autoload (not an Artisan command); skip if exec() is disabled (e.g. shared hosting)
     if ($cmd['name'] === '__composer_dump_autoload__') {
         echo ">>> Running: composer dump-autoload\n";
-        $basePath = $app->basePath();
-        $output = [];
-        $exitCode = 0;
-        $prevCwd = getcwd();
-        @chdir($basePath);
-        @exec('composer dump-autoload 2>&1', $output, $exitCode);
-        @chdir($prevCwd);
-        echo htmlspecialchars(implode("\n", $output), ENT_QUOTES, 'UTF-8');
-        echo "\nExit code: {$exitCode}\n";
+        if (!function_exists('exec')) {
+            echo "   INFO  exec() is disabled on this server; skipped. Run 'composer dump-autoload' manually via SSH if needed.\n";
+            echo "Exit code: 0\n";
+        } else {
+            $basePath = $app->basePath();
+            $output = [];
+            $exitCode = 0;
+            $prevCwd = getcwd();
+            @chdir($basePath);
+            @exec('composer dump-autoload 2>&1', $output, $exitCode);
+            @chdir($prevCwd);
+            echo htmlspecialchars(implode("\n", $output), ENT_QUOTES, 'UTF-8');
+            echo "\nExit code: {$exitCode}\n";
+        }
         echo "----------------------------------------\n";
         continue;
     }
