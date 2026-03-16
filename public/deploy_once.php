@@ -48,7 +48,8 @@ $allowedCommands = [
     ['name' => 'config:clear', 'params' => []],
     ['name' => 'cache:clear', 'params' => []],
     ['name' => 'migrate', 'params' => ['--force' => true]],
-    ['name' => 'db:seed', 'params' => ['--class' => 'Database\\Seeders\\ShippingConfigurationSeeder', '--force' => true]],
+    // Regenerate Composer autoload (e.g. after deploy) so classes like Kreait\Firebase\Factory are found
+    ['name' => '__composer_dump_autoload__', 'params' => []],
     ['name' => 'storage:link', 'params' => []],
 ];
 
@@ -58,6 +59,22 @@ $lines[] = '';
 
 header('Content-Type: text/html; charset=UTF-8');
 echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Deploy output</title></head><body><pre>';
+
+// Check Firebase credentials path: directory and file must exist and be readable
+$firebaseCredentialsPath = base_path('storage/firebase/firebase_credentials.json');
+$firebaseDir = dirname($firebaseCredentialsPath);
+$dirExists = is_dir($firebaseDir);
+$fileExists = is_file($firebaseCredentialsPath);
+$fileReadable = $fileExists && is_readable($firebaseCredentialsPath);
+echo ">>> Checking Firebase credentials (storage/firebase/firebase_credentials.json)\n";
+echo "   Resolved path: " . htmlspecialchars($firebaseCredentialsPath, ENT_QUOTES, 'UTF-8') . "\n";
+echo "   Directory exists: " . ($dirExists ? 'yes' : 'no') . "\n";
+echo "   File exists: " . ($fileExists ? 'yes' : 'no') . "\n";
+echo "   File readable: " . ($fileReadable ? 'yes' : 'no') . "\n";
+if (!$dirExists || !$fileExists || !$fileReadable) {
+    echo "   WARNING  FCM will not work until the credentials file is present and readable.\n";
+}
+echo "----------------------------------------\n";
 
 foreach ($allowedCommands as $cmd) {
     $commandName = $cmd['name'] . (isset($cmd['params']['--force']) ? ' --force' : '');
@@ -72,6 +89,22 @@ foreach ($allowedCommands as $cmd) {
             echo "----------------------------------------\n";
             continue;
         }
+    }
+
+    // Run composer dump-autoload (not an Artisan command)
+    if ($cmd['name'] === '__composer_dump_autoload__') {
+        echo ">>> Running: composer dump-autoload\n";
+        $basePath = $app->basePath();
+        $output = [];
+        $exitCode = 0;
+        $prevCwd = getcwd();
+        @chdir($basePath);
+        @exec('composer dump-autoload 2>&1', $output, $exitCode);
+        @chdir($prevCwd);
+        echo htmlspecialchars(implode("\n", $output), ENT_QUOTES, 'UTF-8');
+        echo "\nExit code: {$exitCode}\n";
+        echo "----------------------------------------\n";
+        continue;
     }
 
     echo htmlspecialchars(">>> Running: php artisan {$commandName}\n", ENT_QUOTES, 'UTF-8');
