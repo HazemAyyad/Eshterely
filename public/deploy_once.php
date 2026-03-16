@@ -48,6 +48,7 @@ $allowedCommands = [
     ['name' => 'config:clear', 'params' => []],
     ['name' => 'cache:clear', 'params' => []],
     ['name' => 'migrate', 'params' => ['--force' => true]],
+    ['name' => 'db:seed', 'params' => ['--class' => 'Database\\Seeders\\ShippingConfigurationSeeder', '--force' => true]],
     ['name' => 'storage:link', 'params' => []],
 ];
 

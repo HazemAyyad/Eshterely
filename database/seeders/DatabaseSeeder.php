@@ -13,7 +13,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             AppConfigSeeder::class,
-            ShippingSettingsSeeder::class,
+            ShippingConfigurationSeeder::class,
             CountrySeeder::class,
             CitySeeder::class,
             AdminSeeder::class,
