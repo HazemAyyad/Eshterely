@@ -7,7 +7,7 @@ use App\Models\Address;
 use App\Models\City;
 use App\Models\Country;
 use App\Models\User;
-use App\Models\UserDeviceToken;
+use App\Services\Fcm\DeviceTokenService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -220,12 +220,19 @@ class MeController extends Controller
         $validated = $request->validate([
             'fcm_token' => ['required', 'string', 'max:500'],
             'device_type' => ['nullable', 'string', 'max:20'],
+            'platform' => ['nullable', 'string', 'max:30'],
+            'device_name' => ['nullable', 'string', 'max:100'],
+            'app_version' => ['nullable', 'string', 'max:50'],
         ]);
 
         $user = $request->user();
-        UserDeviceToken::updateOrCreate(
-            ['user_id' => $user->id, 'fcm_token' => $validated['fcm_token']],
-            ['device_type' => $validated['device_type'] ?? 'unknown', 'updated_at' => now()]
+        app(DeviceTokenService::class)->upsertToken(
+            $user,
+            $validated['fcm_token'],
+            $validated['device_type'] ?? null,
+            $validated['platform'] ?? null,
+            $validated['device_name'] ?? null,
+            $validated['app_version'] ?? null
         );
 
         return response()->json(['message' => 'FCM token updated']);

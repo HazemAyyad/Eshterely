@@ -91,4 +91,5 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
     // Notifications
     Route::get('notifications/send', [NotificationController::class, 'showSendForm'])->name('notifications.send');
     Route::post('notifications/send', [NotificationController::class, 'send'])->name('notifications.send.submit');
+    Route::post('notifications/send-to-user/{user}', [NotificationController::class, 'sendToUser'])->name('notifications.send-to-user');
 });

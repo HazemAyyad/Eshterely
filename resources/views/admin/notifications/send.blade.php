@@ -71,6 +71,30 @@
                     <input type="text" name="action_route" class="form-control" value="{{ old('action_route') }}">
                 </div>
             </div>
+            <hr class="my-4">
+            <h6 class="mb-2">Push (FCM)</h6>
+            <div class="form-check form-switch mb-3">
+                <input type="checkbox" name="send_fcm" value="1" class="form-check-input" id="sendFcm" {{ old('send_fcm') ? 'checked' : '' }}>
+                <label class="form-check-label" for="sendFcm">إرسال إشعار push (FCM) أيضاً</label>
+            </div>
+            <div class="row g-4 mb-4" id="fcmFields">
+                <div class="col-12">
+                    <label class="form-label">رابط الصورة (اختياري)</label>
+                    <input type="url" name="image_url" class="form-control" placeholder="https://..." value="{{ old('image_url') }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">target_type</label>
+                    <input type="text" name="target_type" class="form-control" placeholder="order" value="{{ old('target_type') }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">target_id</label>
+                    <input type="text" name="target_id" class="form-control" value="{{ old('target_id') }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">route_key</label>
+                    <input type="text" name="route_key" class="form-control" placeholder="order_detail" value="{{ old('route_key') }}">
+                </div>
+            </div>
             <button type="submit" class="btn btn-primary">{{ __('admin.send') }}</button>
         </form>
     </div>
@@ -86,6 +110,10 @@ document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('sendAll')?.checked) {
         document.getElementById('userSelectWrap').style.display = 'none';
     }
+    document.getElementById('sendFcm')?.addEventListener('change', function() {
+        document.getElementById('fcmFields').style.display = this.checked ? 'block' : 'none';
+    });
+    document.getElementById('fcmFields').style.display = document.getElementById('sendFcm')?.checked ? 'block' : 'none';
 });
 </script>
 @endpush

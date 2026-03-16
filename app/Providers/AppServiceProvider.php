@@ -14,6 +14,8 @@ use App\Services\Shipping\ShippingPricingConfigService;
 use App\Services\Shipping\ShippingQuoteService;
 use App\Services\Shipping\VolumetricWeightCalculator;
 use Illuminate\Support\ServiceProvider;
+use Kreait\Firebase\Contract\Messaging;
+use Kreait\Firebase\Factory;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -22,6 +24,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $credentialsPath = config('firebase.credentials');
+        if ($credentialsPath !== null && $credentialsPath !== '' && is_file($credentialsPath)) {
+            $this->app->singleton(Messaging::class, function () use ($credentialsPath) {
+                return (new Factory)->withServiceAccount($credentialsPath)->createMessaging();
+            });
+        }
+
         $this->app->singleton(SquareService::class, function () {
             return new SquareService(
                 accessToken: (string) config('square.access_token'),

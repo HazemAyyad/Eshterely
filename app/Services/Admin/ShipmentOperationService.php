@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\OrderOperationLog;
 use App\Models\OrderShipment;
 use App\Models\OrderShipmentEvent;
+use App\Services\Fcm\OrderShipmentNotificationTrigger;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -16,7 +17,8 @@ use Illuminate\Support\Facades\DB;
 class ShipmentOperationService
 {
     public function __construct(
-        protected OrderStatusWorkflowService $workflow
+        protected OrderStatusWorkflowService $workflow,
+        protected OrderShipmentNotificationTrigger $notificationTrigger
     ) {}
 
     /**
@@ -57,7 +59,9 @@ class ShipmentOperationService
                 'tracking_number' => $trackingNumber,
             ], 'Tracking number assigned');
 
-            return $shipment->fresh();
+            $shipment = $shipment->fresh(['order.user']);
+            $this->notificationTrigger->onShipmentTrackingAssigned($shipment);
+            return $shipment;
         });
     }
 
@@ -123,6 +127,8 @@ class ShipmentOperationService
 
             if ($eventType === OrderShipmentEvent::TYPE_DELIVERED) {
                 $this->markShipmentDeliveredAt($shipment, $event->event_time ?? now());
+                $shipmentRefreshed = $shipment->fresh(['order.user']);
+                $this->notificationTrigger->onShipmentDelivered($shipmentRefreshed);
             }
 
             return $event;
@@ -146,7 +152,9 @@ class ShipmentOperationService
                 'order_shipment_id' => $shipment->id,
             ], 'Shipment marked delivered');
 
-            return $shipment->fresh();
+            $shipment = $shipment->fresh(['order.user']);
+            $this->notificationTrigger->onShipmentDelivered($shipment);
+            return $shipment;
         });
     }
 

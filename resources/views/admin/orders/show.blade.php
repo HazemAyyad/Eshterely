@@ -90,6 +90,22 @@
                 @endforelse
             </div>
         </div>
+        @if($order->user)
+        <div class="card border-0 shadow-sm mt-4">
+            <div class="card-header"><h5 class="mb-0">Send push to customer</h5></div>
+            <div class="card-body">
+                <form method="POST" action="{{ route('admin.notifications.send-to-user', $order->user) }}" class="ajax-submit-form">
+                    @csrf
+                    <input type="text" name="title" class="form-control form-control-sm mb-2" placeholder="Title" required maxlength="200">
+                    <textarea name="body" class="form-control form-control-sm mb-2" rows="2" placeholder="Body" maxlength="1000"></textarea>
+                    <input type="hidden" name="target_type" value="order">
+                    <input type="hidden" name="target_id" value="{{ $order->id }}">
+                    <input type="hidden" name="route_key" value="order_detail">
+                    <button type="submit" class="btn btn-sm btn-primary">Send</button>
+                </form>
+            </div>
+        </div>
+        @endif
     </div>
 </div>
 

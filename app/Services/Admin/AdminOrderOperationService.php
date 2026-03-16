@@ -6,6 +6,7 @@ use App\Models\Admin;
 use App\Models\Order;
 use App\Models\OrderOperationLog;
 use App\Models\OrderShipment;
+use App\Services\Fcm\OrderShipmentNotificationTrigger;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -14,7 +15,8 @@ use Illuminate\Support\Facades\DB;
 class AdminOrderOperationService
 {
     public function __construct(
-        protected OrderStatusWorkflowService $workflow
+        protected OrderStatusWorkflowService $workflow,
+        protected OrderShipmentNotificationTrigger $notificationTrigger
     ) {}
 
     /**
@@ -67,7 +69,11 @@ class AdminOrderOperationService
                 'to' => $newStatus,
             ], "Status changed from {$oldStatus} to {$newStatus}");
 
-            return $order->fresh();
+            $order = $order->fresh();
+            if ($newStatus === Order::STATUS_PROCESSING) {
+                $this->notificationTrigger->onOrderProcessing($order);
+            }
+            return $order;
         });
     }
 

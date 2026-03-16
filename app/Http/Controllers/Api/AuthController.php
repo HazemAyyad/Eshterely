@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\OtpCode;
 use App\Models\User;
-use App\Models\UserDeviceToken;
+use App\Services\Fcm\DeviceTokenService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -154,10 +154,7 @@ class AuthController extends Controller
         if (empty($fcmToken)) {
             return;
         }
-        UserDeviceToken::updateOrCreate(
-            ['user_id' => $user->id, 'fcm_token' => $fcmToken],
-            ['device_type' => $deviceType ?? 'unknown', 'updated_at' => now()]
-        );
+        app(DeviceTokenService::class)->upsertToken($user, $fcmToken, $deviceType);
     }
 
     public function forgotPassword(Request $request): JsonResponse

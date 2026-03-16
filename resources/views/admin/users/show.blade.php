@@ -86,6 +86,17 @@
                         <i class="icon-base ti tabler-arrow-left me-2"></i>{{ __('admin.back_to_list') }}
                     </a>
                 </div>
+                <hr class="my-4">
+                <h6 class="mb-2">Send push (FCM)</h6>
+                <form method="POST" action="{{ route('admin.notifications.send-to-user', $user) }}" class="ajax-submit-form">
+                    @csrf
+                    <input type="text" name="title" class="form-control form-control-sm mb-2" placeholder="Title" required maxlength="200">
+                    <textarea name="body" class="form-control form-control-sm mb-2" rows="2" placeholder="Body" maxlength="1000"></textarea>
+                    <input type="url" name="image_url" class="form-control form-control-sm mb-2" placeholder="Image URL (optional)">
+                    <input type="hidden" name="target_type" value="user">
+                    <input type="hidden" name="target_id" value="{{ $user->id }}">
+                    <button type="submit" class="btn btn-sm btn-primary">Send</button>
+                </form>
             </div>
         </div>
         <!-- /User Card -->

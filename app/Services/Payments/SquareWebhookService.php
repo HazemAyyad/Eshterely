@@ -7,6 +7,7 @@ use App\Enums\Payment\PaymentStatus;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentEvent;
+use App\Services\Fcm\OrderShipmentNotificationTrigger;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -23,7 +24,8 @@ class SquareWebhookService
     ];
 
     public function __construct(
-        protected PaymentService $paymentService
+        protected PaymentService $paymentService,
+        protected OrderShipmentNotificationTrigger $notificationTrigger
     ) {}
 
     /**
@@ -222,7 +224,8 @@ class SquareWebhookService
             return;
         }
 
-        DB::transaction(function () use ($payment, $newStatus, $paymentObject): void {
+        $notifyPaymentPaid = null;
+        DB::transaction(function () use ($payment, $newStatus, $paymentObject, &$notifyPaymentPaid): void {
             $payment->refresh();
 
             if ($newStatus === PaymentStatus::Paid) {
@@ -249,6 +252,7 @@ class SquareWebhookService
                     'payment_id' => $payment->id,
                     'status' => 'paid',
                 ]);
+                $notifyPaymentPaid = $payment->id;
                 return;
             }
 
@@ -286,6 +290,13 @@ class SquareWebhookService
                 ], 'Square webhook: processing');
             }
         });
+
+        if ($notifyPaymentPaid !== null) {
+            $paymentForNotification = Payment::with('order.user')->find($notifyPaymentPaid);
+            if ($paymentForNotification && $paymentForNotification->order) {
+                $this->notificationTrigger->onPaymentSuccess($paymentForNotification);
+            }
+        }
     }
 
     /**
