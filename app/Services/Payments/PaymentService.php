@@ -19,11 +19,14 @@ class PaymentService
     /**
      * Create a pending payment for an order. User is taken from order when available.
      */
+    /**
+     * Create a pending payment for an order. Uses order snapshot total when present (payment-safe).
+     */
     public function createPendingPaymentForOrder(Order $order, array $context = []): Payment
     {
         $reference = $this->referenceGenerator->generate();
         $currency = $order->currency ?? 'USD';
-        $amount = $order->total_amount;
+        $amount = $order->order_total_snapshot ?? $order->total_amount;
 
         $idempotencyKey = $context['idempotency_key'] ?? $reference;
 

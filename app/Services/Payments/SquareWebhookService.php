@@ -4,6 +4,7 @@ namespace App\Services\Payments;
 
 use App\Enums\Payment\PaymentEventSource;
 use App\Enums\Payment\PaymentStatus;
+use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentEvent;
 use Illuminate\Support\Facades\DB;
@@ -243,6 +244,7 @@ class SquareWebhookService
                 $this->paymentService->addEvent($payment, PaymentEventSource::Webhook, 'payment.paid', [
                     'square_status' => $paymentObject['status'] ?? null,
                 ], 'Square webhook: payment completed');
+                $this->syncOrderToPaid($payment);
                 Log::info('Square webhook payment status changed', [
                     'payment_id' => $payment->id,
                     'status' => 'paid',
@@ -284,6 +286,27 @@ class SquareWebhookService
                 ], 'Square webhook: processing');
             }
         });
+    }
+
+    /**
+     * When payment becomes paid, update order status to paid and set placed_at.
+     * Idempotent: only updates if order is still pending_payment (duplicate webhooks do not duplicate transitions).
+     */
+    protected function syncOrderToPaid(Payment $payment): void
+    {
+        $updated = Order::where('id', $payment->order_id)
+            ->where('status', Order::STATUS_PENDING_PAYMENT)
+            ->update([
+                'status' => Order::STATUS_PAID,
+                'placed_at' => now(),
+            ]);
+
+        if ($updated > 0) {
+            Log::info('Square webhook: order marked paid', [
+                'order_id' => $payment->order_id,
+                'payment_id' => $payment->id,
+            ]);
+        }
     }
 
     /**

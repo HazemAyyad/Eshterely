@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class DraftOrder extends Model
 {
     public const STATUS_DRAFT = 'draft';
+    public const STATUS_CONVERTED = 'converted';
 
     /** Future granular review states (keys in review_state json): needs_admin_review, needs_reprice, needs_shipping_completion */
     public const REVIEW_STATE_NEEDS_ADMIN_REVIEW = 'needs_admin_review';
@@ -18,6 +19,8 @@ class DraftOrder extends Model
     protected $fillable = [
         'user_id',
         'status',
+        'converted_order_id',
+        'converted_at',
         'currency',
         'subtotal_snapshot',
         'shipping_total_snapshot',
@@ -42,7 +45,13 @@ class DraftOrder extends Model
             'review_state' => 'array',
             'notes' => 'array',
             'warnings' => 'array',
+            'converted_at' => 'datetime',
         ];
+    }
+
+    public function convertedOrder(): BelongsTo
+    {
+        return $this->belongsTo(Order::class, 'converted_order_id');
     }
 
     public function user(): BelongsTo

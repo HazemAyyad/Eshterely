@@ -13,7 +13,7 @@ class OrderController extends Controller
     public function index(Request $request): JsonResponse
     {
         $orders = Order::where('user_id', $request->user()->id)
-            ->with('shipments.lineItems', 'shipments.trackingEvents')
+            ->with('shipments.lineItems', 'shipments.trackingEvents', 'payments')
             ->orderByDesc('placed_at')
             ->get();
 
@@ -22,7 +22,7 @@ class OrderController extends Controller
 
     public function show(Request $request, int $id): JsonResponse
     {
-        $order = Order::where('user_id', $request->user()->id)->with('shipments.lineItems', 'shipments.trackingEvents')->findOrFail($id);
+        $order = Order::where('user_id', $request->user()->id)->with('shipments.lineItems', 'shipments.trackingEvents', 'payments')->findOrFail($id);
 
         return response()->json($this->formatOrder($order, true));
     }
@@ -47,6 +47,8 @@ class OrderController extends Controller
             'order_number' => $o->order_number,
             'origin' => $o->origin,
             'status' => $o->status,
+            'payment_status' => $this->orderPaymentStatus($o),
+            'payment_reference' => $this->orderPaymentReference($o),
             'placed_date' => $o->placed_at?->format('M j, Y'),
             'delivered_on' => $o->delivered_at?->format('M j, Y'),
             'total_amount' => '$' . number_format($o->total_amount, 2),
@@ -83,5 +85,25 @@ class OrderController extends Controller
         }
 
         return $base;
+    }
+
+    private function orderPaymentStatus(Order $o): string
+    {
+        if ($o->status === Order::STATUS_PAID) {
+            return 'paid';
+        }
+        if ($o->status === Order::STATUS_PENDING_PAYMENT && $o->relationLoaded('payments')) {
+            return $o->payments->contains(fn ($p) => $p->status->value === 'paid') ? 'paid' : 'pending_payment';
+        }
+        return $o->status;
+    }
+
+    private function orderPaymentReference(Order $o): ?string
+    {
+        if (! $o->relationLoaded('payments')) {
+            return null;
+        }
+        $paid = $o->payments->filter(fn ($p) => $p->paid_at !== null)->sortByDesc('paid_at')->first();
+        return $paid?->reference;
     }
 }

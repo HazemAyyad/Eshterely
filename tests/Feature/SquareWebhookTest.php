@@ -228,8 +228,7 @@ class SquareWebhookTest extends TestCase
     {
         Config::set('square.webhook_skip_verification', true);
 
-        $response = $this->withBody('', 'application/json')
-            ->post(route('webhooks.square'));
+        $response = $this->call('POST', route('webhooks.square'), [], [], [], [], '');
 
         $response->assertStatus(400);
     }

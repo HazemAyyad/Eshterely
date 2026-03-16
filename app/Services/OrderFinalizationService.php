@@ -54,6 +54,12 @@ class OrderFinalizationService
             }
         }
 
+        $draftOrder->update([
+            'status' => DraftOrder::STATUS_CONVERTED,
+            'converted_order_id' => $order->id,
+            'converted_at' => now(),
+        ]);
+
         return $order->load(['shipments.lineItems']);
     }
 

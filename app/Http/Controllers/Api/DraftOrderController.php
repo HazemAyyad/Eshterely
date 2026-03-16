@@ -61,7 +61,7 @@ class DraftOrderController extends Controller
 
         $order = $this->finalizationService->createOrderFromDraft($draft_order);
 
-        return (new OrderResource($order->load('shipments.lineItems')))
+        return (new OrderResource($order->load(['shipments.lineItems', 'payments'])))
             ->response()
             ->setStatusCode(201);
     }

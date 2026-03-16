@@ -12,6 +12,8 @@ class Order extends Model
 {
     use HasFactory;
     public const STATUS_PENDING_PAYMENT = 'pending_payment';
+    public const STATUS_PAID = 'paid';
+    public const STATUS_CANCELLED = 'cancelled';
 
     protected $fillable = [
         'user_id', 'draft_order_id', 'order_number', 'origin', 'status', 'placed_at', 'delivered_at',

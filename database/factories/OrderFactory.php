@@ -28,4 +28,13 @@ class OrderFactory extends Factory
             'currency' => 'USD',
         ];
     }
+
+    public function pendingPayment(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => Order::STATUS_PENDING_PAYMENT,
+            'placed_at' => null,
+            'order_total_snapshot' => $attributes['total_amount'] ?? 0,
+        ]);
+    }
 }

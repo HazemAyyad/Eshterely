@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\MeController;
 use App\Http\Controllers\Api\NotificationsController;
 use App\Http\Controllers\Api\NotificationPrefsController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\OrderPaymentController;
 use App\Http\Controllers\Api\PaymentCheckoutController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ImportedProductController;
@@ -87,6 +88,7 @@ Route::middleware('auth:sanctum')->prefix('draft-orders')->group(function () {
 Route::middleware('auth:sanctum')->get('orders', [OrderController::class, 'index']);
 Route::middleware('auth:sanctum')->get('orders/{id}', [OrderController::class, 'show']);
 Route::middleware('auth:sanctum')->get('orders/{order}/payments', [OrderController::class, 'payments']);
+Route::middleware('auth:sanctum')->post('orders/{order}/start-payment', [OrderPaymentController::class, 'startPayment']);
 Route::middleware('auth:sanctum')->post('orders/{order}/pay', PaymentCheckoutController::class);
 
 // Payments (auth required, policy: view own only)
