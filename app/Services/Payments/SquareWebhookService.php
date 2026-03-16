@@ -271,6 +271,10 @@ class SquareWebhookService
                     'payment_id' => $payment->id,
                     'status' => 'failed',
                 ]);
+                $paymentForNotification = Payment::with('order.user')->find($payment->id);
+                if ($paymentForNotification && $paymentForNotification->order) {
+                    $this->notificationTrigger->onPaymentFailed($paymentForNotification);
+                }
                 return;
             }
 

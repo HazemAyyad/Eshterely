@@ -42,7 +42,9 @@ class AdminOrderOperationService
                 'review_state' => $reviewState,
             ], 'Order marked as reviewed');
 
-            return $order->fresh();
+            $order = $order->fresh();
+            $this->notificationTrigger->onReviewCompleted($order);
+            return $order;
         });
     }
 
@@ -72,6 +74,14 @@ class AdminOrderOperationService
             $order = $order->fresh();
             if ($newStatus === Order::STATUS_PROCESSING) {
                 $this->notificationTrigger->onOrderProcessing($order);
+            } elseif ($newStatus === Order::STATUS_SHIPPED_TO_WAREHOUSE || $newStatus === Order::STATUS_INTERNATIONAL_SHIPPING) {
+                $this->notificationTrigger->onOrderShipped($order);
+            } elseif ($newStatus === Order::STATUS_IN_TRANSIT) {
+                $this->notificationTrigger->onOrderInTransit($order);
+            } elseif ($newStatus === Order::STATUS_DELIVERED) {
+                $this->notificationTrigger->onOrderDelivered($order);
+            } elseif ($newStatus === Order::STATUS_CANCELLED) {
+                $this->notificationTrigger->onOrderCancelled($order);
             }
             return $order;
         });

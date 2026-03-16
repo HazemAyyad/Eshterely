@@ -11,6 +11,8 @@ use App\Models\UserDeviceToken;
 use App\Services\Fcm\DeviceTokenService;
 use App\Services\Fcm\FcmNotificationService;
 use App\Services\Fcm\NotificationDispatchService;
+use App\Models\Payment;
+use App\Services\Admin\AdminOrderOperationService;
 use App\Services\Fcm\OrderShipmentNotificationTrigger;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -128,5 +130,91 @@ class FcmNotificationsTest extends TestCase
         $this->assertSame('123', $data['target_id']);
         $this->assertSame('order_detail', $data['route_key']);
         $this->assertSame('{"key":"value"}', $data['payload']);
+    }
+
+    public function test_order_created_dispatches_notification(): void
+    {
+        $user = User::factory()->create();
+        $order = Order::factory()->create(['user_id' => $user->id]);
+        $dispatch = NotificationDispatch::where('type', NotificationDispatch::TYPE_SYSTEM_EVENT)
+            ->where('order_id', $order->id)
+            ->whereJsonContains('meta->event', OrderShipmentNotificationTrigger::TYPE_ORDER_CREATED)
+            ->first();
+        $this->assertNotNull($dispatch);
+        $this->assertSame('Order Created', $dispatch->title);
+        $this->assertSame($user->id, $dispatch->user_id);
+    }
+
+    public function test_order_status_updated_dispatches_notification(): void
+    {
+        $user = User::factory()->create();
+        $order = Order::factory()->create(['user_id' => $user->id, 'status' => Order::STATUS_PAID]);
+        Payment::factory()->forOrder($order)->paid()->create();
+        $admin = $this->admin();
+        app(AdminOrderOperationService::class)->updateStatus($order, $admin, Order::STATUS_PROCESSING);
+        $dispatch = NotificationDispatch::where('type', NotificationDispatch::TYPE_SYSTEM_EVENT)
+            ->where('order_id', $order->id)
+            ->whereJsonContains('meta->status', Order::STATUS_PROCESSING)
+            ->first();
+        $this->assertNotNull($dispatch);
+        $this->assertSame($user->id, $dispatch->user_id);
+    }
+
+    public function test_payment_failed_dispatches_notification(): void
+    {
+        $user = User::factory()->create();
+        $order = Order::factory()->create(['user_id' => $user->id]);
+        $payment = Payment::factory()->forOrder($order)->pending()->create();
+        $trigger = app(OrderShipmentNotificationTrigger::class);
+        $trigger->onPaymentFailed($payment);
+        $dispatch = NotificationDispatch::where('type', NotificationDispatch::TYPE_SYSTEM_EVENT)
+            ->where('order_id', $order->id)
+            ->whereJsonContains('meta->event', OrderShipmentNotificationTrigger::TYPE_PAYMENT_FAILED)
+            ->first();
+        $this->assertNotNull($dispatch);
+        $this->assertSame('Payment Failed', $dispatch->title);
+        $this->assertSame($user->id, $dispatch->user_id);
+    }
+
+    public function test_shipment_tracking_assigned_dispatches_notification(): void
+    {
+        $user = User::factory()->create();
+        $order = Order::factory()->create(['user_id' => $user->id]);
+        $shipment = OrderShipment::create([
+            'order_id' => $order->id,
+            'country_code' => 'US',
+            'country_label' => 'US',
+            'subtotal' => 10,
+            'shipping_fee' => 5,
+            'tracking_number' => '1Z999AA10123456784',
+        ]);
+        $trigger = app(OrderShipmentNotificationTrigger::class);
+        $trigger->onShipmentTrackingAssigned($shipment);
+        $dispatch = NotificationDispatch::where('type', NotificationDispatch::TYPE_SYSTEM_EVENT)
+            ->where('shipment_id', $shipment->id)
+            ->first();
+        $this->assertNotNull($dispatch);
+        $this->assertSame('Shipment Update', $dispatch->title);
+        $this->assertSame($user->id, $dispatch->user_id);
+    }
+
+    public function test_system_event_data_includes_type_and_reference_id(): void
+    {
+        $data = FcmNotificationService::systemEventData(
+            'order_created',
+            '456',
+            'Order Created',
+            'Your order has been created.',
+            'order',
+            '456',
+            'order_detail',
+            ['order_id' => 456]
+        );
+        $this->assertSame('order_created', $data['type']);
+        $this->assertSame('456', $data['reference_id']);
+        $this->assertSame('Order Created', $data['title']);
+        $this->assertSame('Your order has been created.', $data['body']);
+        $this->assertSame('order', $data['target_type']);
+        $this->assertSame('456', $data['target_id']);
     }
 }

@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Models\Order;
+use App\Observers\OrderObserver;
 use App\Services\Payments\SquareService;
 use App\Services\Shipping\CarrierPricingResolverRegistry;
 use App\Services\Shipping\CheapestCarrierSelectionStrategy;
@@ -70,6 +72,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        Order::observe(OrderObserver::class);
     }
 }

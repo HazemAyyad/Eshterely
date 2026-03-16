@@ -158,4 +158,30 @@ class FcmNotificationService
         }
         return $data;
     }
+
+    /**
+     * Build full system notification data for FCM: title, body, type, reference_id + deep-link fields.
+     * All values are stringified for FCM data payload.
+     *
+     * @param array<string, mixed> $meta
+     */
+    public static function systemEventData(
+        string $type,
+        string $referenceId,
+        string $title,
+        string $body,
+        ?string $targetType = null,
+        ?string $targetId = null,
+        ?string $routeKey = null,
+        array $meta = []
+    ): array {
+        $data = [
+            'type' => $type,
+            'reference_id' => (string) $referenceId,
+            'title' => $title,
+            'body' => $body,
+        ];
+        $base = self::dataPayload($targetType, $targetId, $routeKey, $meta);
+        return array_merge($data, $base);
+    }
 }
