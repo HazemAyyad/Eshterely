@@ -17,6 +17,7 @@ use App\Services\Shipping\ShippingZoneRepository;
 use App\Services\Shipping\Contracts\ShippingZoneRepositoryInterface;
 use App\Services\Shipping\ShippingQuoteService;
 use App\Services\Shipping\VolumetricWeightCalculator;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\ServiceProvider;
 use Kreait\Firebase\Contract\Messaging;
 use Kreait\Firebase\Factory;
@@ -76,6 +77,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Paginator::useBootstrapFive();
         Order::observe(OrderObserver::class);
     }
 }

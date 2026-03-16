@@ -5,26 +5,33 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Notification;
 use App\Models\User;
-use App\Services\Fcm\FcmNotificationService;
+use App\Services\Admin\AdminNotificationPayloadService;
 use App\Services\Fcm\NotificationDispatchService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
 class NotificationController extends Controller
 {
     public function __construct(
-        protected NotificationDispatchService $dispatchService
+        protected NotificationDispatchService $dispatchService,
+        protected AdminNotificationPayloadService $payloadService
     ) {}
 
     public function showSendForm(): View
     {
-        return view('admin.notifications.send');
+        return view('admin.notifications.send', [
+            'routeKeys' => $this->payloadService->routeKeys(),
+            'targetTypes' => $this->payloadService->targetTypes(),
+            'actionLabelPresets' => $this->payloadService->actionLabelPresets(),
+        ]);
     }
 
     public function send(Request $request): RedirectResponse|JsonResponse
     {
+        $payloadService = $this->payloadService;
         $validated = $request->validate([
             'user_id' => 'nullable|exists:users,id',
             'send_to_all' => 'boolean',
@@ -33,12 +40,14 @@ class NotificationController extends Controller
             'type' => 'nullable|string|max:30',
             'important' => 'boolean',
             'action_label' => 'nullable|string|max:100',
-            'action_route' => 'nullable|string|max:200',
+            'action_label_custom' => 'nullable|string|max:100',
+            'action_route_override' => 'nullable|string|max:200',
             'send_fcm' => 'boolean',
+            'image' => 'nullable|image|mimes:jpeg,png,webp,gif|max:512',
             'image_url' => 'nullable|string|url|max:500',
-            'target_type' => 'nullable|string|max:50',
+            'target_type' => $payloadService->targetTypeRules(),
             'target_id' => 'nullable|string|max:100',
-            'route_key' => 'nullable|string|max:100',
+            'route_key' => $payloadService->routeKeyRules(),
         ]);
 
         $userIds = [];
@@ -50,8 +59,28 @@ class NotificationController extends Controller
             if ($request->ajax() || $request->wantsJson()) {
                 return response()->json(['success' => false, 'errors' => ['user_id' => [__('admin.error')]]], 422);
             }
-            return redirect()->back()->withErrors(['user_id' => 'اختر مستخدماً أو فعّل "إرسال للجميع".']);
+            return redirect()->back()->withErrors(['user_id' => __('admin.notification_choose_user_or_all')]);
         }
+
+        $actionLabel = $this->resolveActionLabel(
+            $validated['action_label'] ?? null,
+            $validated['action_label_custom'] ?? null
+        );
+        $routeKey = $validated['route_key'] ?? null;
+        $targetType = $validated['target_type'] ?? null;
+        $targetId = trim((string) ($validated['target_id'] ?? ''));
+        if (strtolower($targetType ?? '') === 'none') {
+            $targetType = null;
+            $targetId = '';
+        }
+        $actionRoute = $this->payloadService->resolveActionRoute(
+            $routeKey,
+            $targetType,
+            $targetId ?: null,
+            $validated['action_route_override'] ?? null
+        );
+
+        $imageUrl = $this->resolveImageUrl($request, $validated);
 
         foreach ($userIds as $userId) {
             Notification::create([
@@ -61,27 +90,26 @@ class NotificationController extends Controller
                 'subtitle' => $validated['subtitle'] ?? null,
                 'read' => false,
                 'important' => $request->boolean('important'),
-                'action_label' => $validated['action_label'] ?? null,
-                'action_route' => $validated['action_route'] ?? null,
+                'action_label' => $actionLabel,
+                'action_route' => $actionRoute,
             ]);
         }
 
         if ($request->boolean('send_fcm')) {
             $body = $validated['subtitle'] ?? $validated['title'];
-            $meta = null;
-            if (! empty($validated['target_type']) || ! empty($validated['target_id']) || ! empty($validated['route_key'])) {
-                $meta = array_filter([
-                    'target_type' => $validated['target_type'] ?? null,
-                    'target_id' => $validated['target_id'] ?? null,
-                    'route_key' => $validated['route_key'] ?? null,
-                ]);
-            }
+            $meta = $this->payloadService->buildMeta(
+                $routeKey,
+                $targetType,
+                $targetId ?: null,
+                $actionLabel,
+                $actionRoute
+            );
             $this->dispatchService->sendBulk(
                 $validated['title'],
                 $body,
-                $validated['image_url'] ?? null,
+                $imageUrl,
                 null,
-                $meta ?: null,
+                $meta !== [] ? $meta : null,
                 $request->user('admin'),
                 $request->boolean('send_to_all') ? null : $userIds
             );
@@ -102,16 +130,25 @@ class NotificationController extends Controller
             'title' => 'required|string|max:200',
             'body' => 'nullable|string|max:1000',
             'image_url' => 'nullable|string|url|max:500',
-            'target_type' => 'nullable|string|max:50',
+            'target_type' => $this->payloadService->targetTypeRules(),
             'target_id' => 'nullable|string|max:100',
-            'route_key' => 'nullable|string|max:100',
+            'route_key' => $this->payloadService->routeKeyRules(),
         ]);
 
-        $meta = array_filter([
-            'target_type' => $validated['target_type'] ?? null,
-            'target_id' => $validated['target_id'] ?? null,
-            'route_key' => $validated['route_key'] ?? null,
-        ]) ?: null;
+        $targetType = $validated['target_type'] ?? null;
+        $targetId = trim((string) ($validated['target_id'] ?? ''));
+        if (strtolower($targetType ?? '') === 'none') {
+            $targetType = null;
+            $targetId = '';
+        }
+        $meta = $this->payloadService->buildMeta(
+            $validated['route_key'] ?? null,
+            $targetType,
+            $targetId ?: null,
+            null,
+            null
+        );
+        $meta = $meta !== [] ? $meta : null;
 
         $this->dispatchService->sendToUser(
             $user,
@@ -127,5 +164,29 @@ class NotificationController extends Controller
             return response()->json(['success' => true, 'message' => __('admin.success')]);
         }
         return redirect()->route('admin.users.show', $user)->with('success', __('admin.success'));
+    }
+
+    private function resolveActionLabel(?string $actionLabel, ?string $actionLabelCustom): ?string
+    {
+        if ($actionLabel === 'custom' && $actionLabelCustom !== null && trim($actionLabelCustom) !== '') {
+            return trim($actionLabelCustom);
+        }
+        if ($actionLabel !== null && trim($actionLabel) !== '' && $actionLabel !== 'custom') {
+            return trim($actionLabel);
+        }
+        return null;
+    }
+
+    private function resolveImageUrl(Request $request, array $validated): ?string
+    {
+        if ($request->hasFile('image') && $request->file('image')->isValid()) {
+            $disk = config('notifications.image.disk', 'public');
+            $dir = config('notifications.image.directory', 'notifications');
+            $path = $request->file('image')->store($dir, $disk);
+            if ($path) {
+                return Storage::disk($disk)->url($path);
+            }
+        }
+        return ! empty($validated['image_url']) ? $validated['image_url'] : null;
     }
 }

@@ -8,9 +8,11 @@ use App\Models\Order;
 use App\Models\OrderShipment;
 use App\Models\User;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Dispatch FCM notifications and persist send history for auditability.
+ * When meta is provided, it is merged into the FCM data payload so the app can deep-link.
  */
 class NotificationDispatchService
 {
@@ -20,9 +22,9 @@ class NotificationDispatchService
     ) {}
 
     /**
-     * Send to one user and log. Optional deep-link meta.
+     * Send to one user and log. Optional deep-link meta (passed to FCM data payload).
      *
-     * @param array{target_type?: string, target_id?: string, route_key?: string, payload?: string}|null $meta
+     * @param array{target_type?: string, target_id?: string, route_key?: string, action_label?: string, action_route?: string}|null $meta
      */
     public function sendToUser(
         User $user,
@@ -45,8 +47,9 @@ class NotificationDispatchService
             $createdBy
         );
 
-        $result = $this->fcm->sendToUser($user, $title, $body, $imageUrl, $this->stringifyData($data));
-        $this->updateDispatchFromResult($dispatch, $result);
+        $fcmData = $this->buildFcmData($data, $meta);
+        $result = $this->fcm->sendToUser($user, $title, $body, $imageUrl, $fcmData);
+        $this->updateDispatchFromResult($dispatch, $result, 1, $fcmData);
         return $dispatch->fresh();
     }
 
@@ -75,8 +78,9 @@ class NotificationDispatchService
             $createdBy
         );
 
-        $result = $this->fcm->sendToTokens($tokens, $title, $body, $imageUrl, $this->stringifyData($data));
-        $this->updateDispatchFromResult($dispatch, $result);
+        $fcmData = $this->buildFcmData($data, $meta);
+        $result = $this->fcm->sendToTokens($tokens, $title, $body, $imageUrl, $fcmData);
+        $this->updateDispatchFromResult($dispatch, $result, count($tokens), $fcmData);
         return $dispatch->fresh();
     }
 
@@ -112,8 +116,10 @@ class NotificationDispatchService
         } else {
             $users = User::all();
         }
-        $result = $this->fcm->sendToUsers($users, $title, $body, $imageUrl, $this->stringifyData($data));
-        $this->updateDispatchFromResult($dispatch, $result);
+        $targetCount = $users->count();
+        $fcmData = $this->buildFcmData($data, $meta);
+        $result = $this->fcm->sendToUsers($users, $title, $body, $imageUrl, $fcmData);
+        $this->updateDispatchFromResult($dispatch, $result, $targetCount, $fcmData);
         return $dispatch->fresh();
     }
 
@@ -141,9 +147,25 @@ class NotificationDispatchService
             null
         );
 
-        $result = $this->fcm->sendToUser($user, $title, $body, null, $this->stringifyData($data));
-        $this->updateDispatchFromResult($dispatch, $result);
+        $fcmData = $this->buildFcmData($data, $meta);
+        $result = $this->fcm->sendToUser($user, $title, $body, null, $fcmData);
+        $this->updateDispatchFromResult($dispatch, $result, 1, $fcmData);
         return $dispatch->fresh();
+    }
+
+    /**
+     * Build FCM data payload: merge optional $data with $meta (meta wins). All values stringified.
+     */
+    private function buildFcmData(?array $data, ?array $meta): ?array
+    {
+        $merged = array_merge(
+            $data ?? [],
+            $this->stringifyData($meta ?? []) ?? []
+        );
+        if ($merged === []) {
+            return null;
+        }
+        return $this->stringifyData($merged);
     }
 
     private function createDispatchRecord(
@@ -174,9 +196,14 @@ class NotificationDispatchService
 
     /**
      * @param array{sent: int, failed: int, invalid_tokens: list<string>, summary_message: string} $result
+     * @param array<string, string>|null $fcmData
      */
-    private function updateDispatchFromResult(NotificationDispatch $dispatch, array $result): void
-    {
+    private function updateDispatchFromResult(
+        NotificationDispatch $dispatch,
+        array $result,
+        int $targetCount = 1,
+        ?array $fcmData = null
+    ): void {
         $status = NotificationDispatch::STATUS_SENT;
         if ($result['sent'] === 0 && $result['failed'] > 0) {
             $status = NotificationDispatch::STATUS_FAILED;
@@ -186,6 +213,19 @@ class NotificationDispatchService
         $dispatch->update([
             'send_status' => $status,
             'provider_response_summary' => $result['summary_message'],
+        ]);
+
+        // Delivery logging for debugging and audit
+        Log::channel('stack')->info('FCM notification dispatch', [
+            'dispatch_id' => $dispatch->id,
+            'type' => $dispatch->type,
+            'target_scope' => $dispatch->target_scope,
+            'target_users_count' => $targetCount,
+            'sent' => $result['sent'],
+            'failed' => $result['failed'],
+            'invalid_tokens' => count($result['invalid_tokens'] ?? []),
+            'summary' => $result['summary_message'],
+            'payload_keys' => $fcmData !== null ? array_keys($fcmData) : [],
         ]);
     }
 
