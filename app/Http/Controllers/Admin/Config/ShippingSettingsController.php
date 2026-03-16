@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\Config;
 
 use App\Http\Controllers\Controller;
 use App\Models\ShippingSetting;
+use App\Models\ShippingSettingAudit;
 use App\Services\Shipping\ShippingPricingConfigService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -36,10 +37,22 @@ class ShippingSettingsController extends Controller
         $keys = ShippingPricingConfigService::editableKeys();
         $rules = $this->validationRulesForKeys($keys);
         $validated = $request->validate($rules);
+        $existing = ShippingSetting::getAllAsMap();
+        $adminId = auth('admin')->id();
 
         foreach ($keys as $key) {
             $value = $validated[$key] ?? null;
-            ShippingSetting::setValue($key, $value !== '' ? $value : null);
+            $normalized = $value !== '' ? $value : null;
+            $old = $existing[$key] ?? null;
+            if ($old !== $normalized) {
+                ShippingSettingAudit::query()->create([
+                    'key' => $key,
+                    'old_value' => $old,
+                    'new_value' => $normalized,
+                    'admin_id' => $adminId,
+                ]);
+            }
+            ShippingSetting::setValue($key, $normalized);
         }
         ShippingSetting::clearCache();
 

@@ -5,6 +5,8 @@ use App\Http\Controllers\Admin\CartReviewController;
 use App\Http\Controllers\Admin\Config\AppConfigController;
 use App\Http\Controllers\Admin\Config\FeaturedStoresController;
 use App\Http\Controllers\Admin\Config\ShippingSettingsController;
+use App\Http\Controllers\Admin\Config\ShippingCarrierZonesController;
+use App\Http\Controllers\Admin\Config\ShippingCarrierRatesController;
 use App\Http\Controllers\Admin\Config\MarketCountriesController;
 use App\Http\Controllers\Admin\Config\OnboardingController;
 use App\Http\Controllers\Admin\Config\PromoBannersController;
@@ -53,6 +55,12 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
         Route::patch('app-config', [AppConfigController::class, 'update']);
         Route::get('shipping-settings', [ShippingSettingsController::class, 'edit'])->name('shipping-settings.edit');
         Route::patch('shipping-settings', [ShippingSettingsController::class, 'update'])->name('shipping-settings.update');
+        Route::resource('shipping-zones', ShippingCarrierZonesController::class)
+            ->except(['show'])
+            ->names('shipping-zones');
+        Route::resource('shipping-rates', ShippingCarrierRatesController::class)
+            ->except(['show'])
+            ->names('shipping-rates');
     });
 
     // Users

@@ -13,6 +13,8 @@ use App\Services\Shipping\Resolvers\DhlPricingResolver;
 use App\Services\Shipping\Resolvers\FedexPricingResolver;
 use App\Services\Shipping\Resolvers\UpsPricingResolver;
 use App\Services\Shipping\ShippingPricingConfigService;
+use App\Services\Shipping\ShippingZoneRepository;
+use App\Services\Shipping\Contracts\ShippingZoneRepositoryInterface;
 use App\Services\Shipping\ShippingQuoteService;
 use App\Services\Shipping\VolumetricWeightCalculator;
 use Illuminate\Support\ServiceProvider;
@@ -42,6 +44,7 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(ShippingPricingConfigService::class);
+        $this->app->singleton(ShippingZoneRepositoryInterface::class, ShippingZoneRepository::class);
         $this->app->singleton(PackageNormalizer::class);
         $this->app->singleton(VolumetricWeightCalculator::class, function ($app) {
             return new VolumetricWeightCalculator($app->make(ShippingPricingConfigService::class));
@@ -49,9 +52,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(CarrierPricingResolverRegistry::class, function ($app) {
             $registry = new CarrierPricingResolverRegistry();
             $config = $app->make(ShippingPricingConfigService::class);
-            $registry->register(new DhlPricingResolver($config));
-            $registry->register(new UpsPricingResolver($config));
-            $registry->register(new FedexPricingResolver($config));
+            $zones = $app->make(ShippingZoneRepositoryInterface::class);
+            $registry->register(new DhlPricingResolver($config, $zones));
+            $registry->register(new UpsPricingResolver($config, $zones));
+            $registry->register(new FedexPricingResolver($config, $zones));
 
             return $registry;
         });

@@ -5,6 +5,7 @@ namespace App\Services\Shipping\Resolvers;
 use App\Services\Shipping\CarrierPricingContext;
 use App\Services\Shipping\CarrierPricingResult;
 use App\Services\Shipping\Contracts\CarrierPricingResolverInterface;
+use App\Services\Shipping\Contracts\ShippingZoneRepositoryInterface;
 use App\Services\Shipping\ShippingPricingConfigService;
 
 /**
@@ -14,7 +15,8 @@ use App\Services\Shipping\ShippingPricingConfigService;
 abstract class AbstractCarrierPricingResolver implements CarrierPricingResolverInterface
 {
     public function __construct(
-        protected ShippingPricingConfigService $config
+        protected ShippingPricingConfigService $config,
+        protected ShippingZoneRepositoryInterface $zones
     ) {}
 
     abstract protected function carrierKey(): string;
@@ -87,12 +89,16 @@ abstract class AbstractCarrierPricingResolver implements CarrierPricingResolverI
         );
     }
 
-    /**
-     * Override in subclasses to use zone/rate tables. Default: no per-kg component.
-     */
     protected function getBaseRateForWeight(CarrierPricingContext $context, float $totalChargeableKg): float
     {
-        return 0.0;
+        $info = $this->zones->getZoneRateInfo(
+            $context->carrier,
+            $context->destinationCountry,
+            null,
+            $totalChargeableKg
+        );
+
+        return $info?->baseRate ?? 0.0;
     }
 
     protected function applyRounding(float $chargeableKg): float
