@@ -48,6 +48,7 @@ $allowedCommands = [
     ['name' => 'config:clear', 'params' => []],
     ['name' => 'cache:clear', 'params' => []],
     ['name' => 'migrate', 'params' => ['--force' => true]],
+    ['name' => 'storage:link', 'params' => []],
 ];
 
 $lines = [];
