@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderShipment;
+use App\Models\OrderShipmentEvent;
 use App\Services\Admin\AdminOrderOperationService;
 use App\Services\Admin\OrderStatusWorkflowService;
+use App\Services\Admin\ShipmentOperationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,7 +20,8 @@ class OrderController extends Controller
 {
     public function __construct(
         protected OrderStatusWorkflowService $workflow,
-        protected AdminOrderOperationService $operationService
+        protected AdminOrderOperationService $operationService,
+        protected ShipmentOperationService $shipmentService
     ) {}
 
     public function index(Request $request): View
@@ -77,7 +80,7 @@ class OrderController extends Controller
 
     public function show(Order $order): View
     {
-        $order->load(['shipments.lineItems', 'shipments.trackingEvents', 'user', 'payments', 'operationLogs.admin']);
+        $order->load(['shipments.lineItems', 'shipments.trackingEvents', 'shipments.events', 'user', 'payments', 'operationLogs.admin']);
         $priceLines = DB::table('order_price_lines')->where('order_id', $order->id)->get();
         $allowedStatuses = $this->workflow->allStatuses();
         $canTransitionTo = [];
@@ -87,8 +90,9 @@ class OrderController extends Controller
                 $canTransitionTo[] = $s;
             }
         }
+        $shipmentEventTypes = OrderShipmentEvent::eventTypes();
 
-        return view('admin.orders.show', compact('order', 'priceLines', 'allowedStatuses', 'canTransitionTo'));
+        return view('admin.orders.show', compact('order', 'priceLines', 'allowedStatuses', 'canTransitionTo', 'shipmentEventTypes'));
     }
 
     public function updateStatus(Request $request, Order $order): RedirectResponse|JsonResponse
@@ -149,6 +153,112 @@ class OrderController extends Controller
             $validated['shipping_override_carrier'] ?? null,
             $validated['shipping_override_notes'] ?? null
         );
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json(['success' => true, 'message' => __('admin.success')]);
+        }
+        return redirect()->route('admin.orders.show', $order)->with('success', __('admin.success'));
+    }
+
+    public function updateShipment(Request $request, Order $order, OrderShipment $shipment): RedirectResponse|JsonResponse
+    {
+        if ($shipment->order_id !== $order->id) {
+            abort(404);
+        }
+
+        $validated = $request->validate([
+            'carrier' => 'nullable|string|max:50',
+            'tracking_number' => 'nullable|string|max:191',
+            'shipment_status' => 'nullable|string|max:50',
+            'estimated_delivery_at' => 'nullable|date',
+            'notes' => 'nullable|string|max:2000',
+        ]);
+
+        try {
+            $admin = $request->user('admin');
+            $s = $shipment;
+            if (! empty($validated['carrier'])) {
+                $s = $this->shipmentService->assignCarrier($s, $admin, $validated['carrier']);
+            }
+            if (array_key_exists('tracking_number', $validated) && $validated['tracking_number'] !== null && $validated['tracking_number'] !== '') {
+                $s = $this->shipmentService->assignTrackingNumber($s, $admin, $validated['tracking_number']);
+            }
+            if (! empty($validated['shipment_status'])) {
+                $s = $this->shipmentService->updateShipmentStatus($s, $admin, $validated['shipment_status']);
+            }
+            if (array_key_exists('estimated_delivery_at', $validated)) {
+                $at = $validated['estimated_delivery_at'] ? new \DateTimeImmutable($validated['estimated_delivery_at']) : null;
+                $s = $this->shipmentService->setEstimatedDelivery($s, $admin, $at);
+            }
+            if (array_key_exists('notes', $validated)) {
+                $s->update(['notes' => $validated['notes']]);
+            }
+        } catch (\InvalidArgumentException $e) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            }
+            return redirect()->route('admin.orders.show', $order)->with('error', $e->getMessage());
+        }
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json(['success' => true, 'message' => __('admin.success')]);
+        }
+        return redirect()->route('admin.orders.show', $order)->with('success', __('admin.success'));
+    }
+
+    public function addShipmentEvent(Request $request, Order $order, OrderShipment $shipment): RedirectResponse|JsonResponse
+    {
+        if ($shipment->order_id !== $order->id) {
+            abort(404);
+        }
+
+        $validated = $request->validate([
+            'event_type' => 'required|string|in:' . implode(',', OrderShipmentEvent::eventTypes()),
+            'event_label' => 'nullable|string|max:191',
+            'event_time' => 'nullable|date',
+            'location' => 'nullable|string|max:191',
+            'notes' => 'nullable|string|max:500',
+        ]);
+
+        try {
+            $eventTime = ! empty($validated['event_time']) ? new \DateTimeImmutable($validated['event_time']) : null;
+            $this->shipmentService->appendEvent(
+                $shipment,
+                $request->user('admin'),
+                $validated['event_type'],
+                $validated['event_label'] ?? null,
+                $eventTime,
+                $validated['location'] ?? null,
+                null,
+                $validated['notes'] ?? null
+            );
+        } catch (\InvalidArgumentException $e) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            }
+            return redirect()->route('admin.orders.show', $order)->with('error', $e->getMessage());
+        }
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json(['success' => true, 'message' => __('admin.success')]);
+        }
+        return redirect()->route('admin.orders.show', $order)->with('success', __('admin.success'));
+    }
+
+    public function markShipmentDelivered(Request $request, Order $order, OrderShipment $shipment): RedirectResponse|JsonResponse
+    {
+        if ($shipment->order_id !== $order->id) {
+            abort(404);
+        }
+
+        try {
+            $this->shipmentService->markDelivered($shipment, $request->user('admin'));
+        } catch (\InvalidArgumentException $e) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            }
+            return redirect()->route('admin.orders.show', $order)->with('error', $e->getMessage());
+        }
 
         if ($request->ajax() || $request->wantsJson()) {
             return response()->json(['success' => true, 'message' => __('admin.success')]);

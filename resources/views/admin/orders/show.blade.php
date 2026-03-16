@@ -97,12 +97,80 @@
 <div class="card mt-4">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h5 class="mb-0">Shipment {{ $shipment->country_label ?? $shipment->country_code }}</h5>
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#override-{{ $shipment->id }}">Shipping override</button>
+        <div class="d-flex gap-1 flex-wrap">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#tracking-{{ $shipment->id }}">Tracking</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#override-{{ $shipment->id }}">Shipping override</button>
+        </div>
     </div>
     <div class="card-body">
+        <p><strong>Carrier:</strong> {{ $shipment->carrier ?? '-' }}</p>
+        <p><strong>Tracking number:</strong> {{ $shipment->tracking_number ?? '-' }}</p>
+        <p><strong>Shipment status:</strong> {{ $shipment->shipment_status ?? '-' }}</p>
+        <p><strong>Estimated delivery:</strong> {{ $shipment->estimated_delivery_at?->format('Y-m-d') ?? '-' }}</p>
+        <p><strong>Delivered at:</strong> {{ $shipment->delivered_at?->format('Y-m-d H:i') ?? '-' }}</p>
         <p><strong>Shipping method:</strong> {{ $shipment->shipping_method ?? '-' }}</p>
         <p><strong>Subtotal:</strong> {{ number_format($shipment->subtotal ?? 0, 2) }}</p>
         <p><strong>Shipping fee:</strong> {{ number_format($shipment->shipping_fee ?? 0, 2) }}</p>
+        @if($shipment->notes)
+            <p><strong>Notes:</strong> {{ $shipment->notes }}</p>
+        @endif
+        <div class="collapse mt-2" id="tracking-{{ $shipment->id }}">
+            <h6 class="mt-2">Update shipment</h6>
+            <form method="POST" action="{{ route('admin.orders.shipments.update', [$order, $shipment]) }}" class="ajax-submit-form mb-3">
+                @csrf
+                @method('PATCH')
+                <div class="row g-2">
+                    <div class="col-md-3"><input type="text" name="carrier" class="form-control form-control-sm" placeholder="Carrier" value="{{ $shipment->carrier }}" maxlength="50"></div>
+                    <div class="col-md-3"><input type="text" name="tracking_number" class="form-control form-control-sm" placeholder="Tracking number" value="{{ $shipment->tracking_number }}"></div>
+                    <div class="col-md-2"><input type="text" name="shipment_status" class="form-control form-control-sm" placeholder="Status" value="{{ $shipment->shipment_status }}" maxlength="50"></div>
+                    <div class="col-md-2"><input type="date" name="estimated_delivery_at" class="form-control form-control-sm" value="{{ $shipment->estimated_delivery_at?->format('Y-m-d') }}"></div>
+                    <div class="col-md-2"><button type="submit" class="btn btn-sm btn-primary">Update</button></div>
+                </div>
+                <div class="mt-1"><input type="text" name="notes" class="form-control form-control-sm" placeholder="Notes" value="{{ $shipment->notes }}" maxlength="2000"></div>
+            </form>
+            <h6 class="mt-2">Add timeline event</h6>
+            <form method="POST" action="{{ route('admin.orders.shipments.events.store', [$order, $shipment]) }}" class="ajax-submit-form mb-3">
+                @csrf
+                <div class="row g-2">
+                    <div class="col-md-3">
+                        <select name="event_type" class="form-select form-select-sm" required>
+                            @foreach($shipmentEventTypes as $et)
+                                <option value="{{ $et }}">{{ $et }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-2"><input type="text" name="event_label" class="form-control form-control-sm" placeholder="Label"></div>
+                    <div class="col-md-2"><input type="datetime-local" name="event_time" class="form-control form-control-sm"></div>
+                    <div class="col-md-2"><input type="text" name="location" class="form-control form-control-sm" placeholder="Location"></div>
+                    <div class="col-md-2"><input type="text" name="notes" class="form-control form-control-sm" placeholder="Notes"></div>
+                    <div class="col-md-1"><button type="submit" class="btn btn-sm btn-primary">Add</button></div>
+                </div>
+            </form>
+            @if(!$shipment->delivered_at)
+            <form method="POST" action="{{ route('admin.orders.shipments.delivered', [$order, $shipment]) }}" class="ajax-submit-form d-inline">
+                @csrf
+                @method('PATCH')
+                <button type="submit" class="btn btn-sm btn-success">Mark delivered</button>
+            </form>
+            @endif
+        </div>
+        @if($shipment->events->isNotEmpty())
+        <h6 class="mt-3">Timeline events</h6>
+        <table class="table table-sm">
+            <thead><tr><th>Time</th><th>Type</th><th>Label</th><th>Location</th><th>Notes</th></tr></thead>
+            <tbody>
+                @foreach($shipment->events->sortByDesc('event_time') as $ev)
+                <tr>
+                    <td>{{ $ev->event_time?->format('Y-m-d H:i') ?? $ev->created_at->format('Y-m-d H:i') }}</td>
+                    <td>{{ $ev->event_type }}</td>
+                    <td>{{ $ev->event_label ?? '-' }}</td>
+                    <td>{{ $ev->location ?? '-' }}</td>
+                    <td>{{ $ev->notes ?? '-' }}</td>
+                </tr>
+                @endforeach
+            </tbody>
+        </table>
+        @endif
         @if($shipment->shipping_override_amount !== null || $shipment->shipping_override_carrier)
             <p><strong>Override amount:</strong> {{ $shipment->shipping_override_amount !== null ? number_format($shipment->shipping_override_amount, 2) : '-' }}</p>
             <p><strong>Override carrier:</strong> {{ $shipment->shipping_override_carrier ?? '-' }}</p>
