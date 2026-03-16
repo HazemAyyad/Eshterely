@@ -61,6 +61,18 @@ echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Deploy output</tit
 foreach ($allowedCommands as $cmd) {
     $commandName = $cmd['name'] . (isset($cmd['params']['--force']) ? ' --force' : '');
 
+    // Skip storage:link if the link already exists (avoids "link already exists" message)
+    if ($cmd['name'] === 'storage:link') {
+        $storageLinkPath = $app->basePath('public/storage');
+        if (file_exists($storageLinkPath)) {
+            echo htmlspecialchars(">>> Running: php artisan {$commandName}\n", ENT_QUOTES, 'UTF-8');
+            echo "   INFO  Storage link already exists, skipping.\n";
+            echo "Exit code: 0\n";
+            echo "----------------------------------------\n";
+            continue;
+        }
+    }
+
     echo htmlspecialchars(">>> Running: php artisan {$commandName}\n", ENT_QUOTES, 'UTF-8');
 
     try {

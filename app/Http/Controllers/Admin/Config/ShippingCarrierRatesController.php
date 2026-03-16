@@ -8,6 +8,7 @@ use App\Models\ShippingCarrierRate;
 use App\Models\ShippingCarrierZone;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
 class ShippingCarrierRatesController extends Controller
@@ -48,7 +49,14 @@ class ShippingCarrierRatesController extends Controller
     public function store(ShippingCarrierRateRequest $request): RedirectResponse
     {
         $data = $this->validatedData($request);
-        ShippingCarrierRate::query()->create($data);
+        $rate = ShippingCarrierRate::query()->create($data);
+
+        Log::info('Admin shipping rate created', [
+            'rate_id' => $rate->id,
+            'carrier' => $rate->carrier,
+            'zone_code' => $rate->zone_code,
+            'admin_id' => $request->user('admin')?->id,
+        ]);
 
         return redirect()->route('admin.config.shipping-rates.index')
             ->with('success', __('admin.saved_successfully'));
@@ -71,13 +79,27 @@ class ShippingCarrierRatesController extends Controller
         $data = $this->validatedData($request);
         $shipping_rate->update($data);
 
+        Log::info('Admin shipping rate updated', [
+            'rate_id' => $shipping_rate->id,
+            'carrier' => $shipping_rate->carrier,
+            'admin_id' => $request->user('admin')?->id,
+        ]);
+
         return redirect()->route('admin.config.shipping-rates.index')
             ->with('success', __('admin.saved_successfully'));
     }
 
     public function destroy(Request $request, ShippingCarrierRate $shipping_rate): RedirectResponse
     {
+        $id = $shipping_rate->id;
+        $carrier = $shipping_rate->carrier;
         $shipping_rate->delete();
+
+        Log::info('Admin shipping rate deleted', [
+            'rate_id' => $id,
+            'carrier' => $carrier,
+            'admin_id' => $request->user('admin')?->id,
+        ]);
 
         return redirect()->route('admin.config.shipping-rates.index')
             ->with('success', __('admin.deleted_successfully'));

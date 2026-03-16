@@ -69,12 +69,22 @@
                 </li>
                 <li class="menu-item {{ request()->routeIs('admin.config.app-config') ? 'active' : '' }}">
                     <a href="{{ route('admin.config.app-config') }}" class="menu-link">
-                        <div>إعدادات التطبيق (API)</div>
+                        <div>{{ __('admin.app_config') }}</div>
                     </a>
                 </li>
                 <li class="menu-item {{ request()->routeIs('admin.config.shipping-settings*') ? 'active' : '' }}">
                     <a href="{{ route('admin.config.shipping-settings.edit') }}" class="menu-link">
                         <div>{{ __('admin.shipping_settings') }}</div>
+                    </a>
+                </li>
+                <li class="menu-item {{ request()->routeIs('admin.config.shipping-zones*') ? 'active' : '' }}">
+                    <a href="{{ route('admin.config.shipping-zones.index') }}" class="menu-link">
+                        <div>{{ __('admin.shipping_zones') }}</div>
+                    </a>
+                </li>
+                <li class="menu-item {{ request()->routeIs('admin.config.shipping-rates*') ? 'active' : '' }}">
+                    <a href="{{ route('admin.config.shipping-rates.index') }}" class="menu-link">
+                        <div>{{ __('admin.shipping_rates') }}</div>
                     </a>
                 </li>
             </ul>

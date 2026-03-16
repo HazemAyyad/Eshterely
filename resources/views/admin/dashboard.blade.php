@@ -1,9 +1,9 @@
 @extends('layouts.admin')
 
-@section('title', 'لوحة التحكم')
+@section('title', __('admin.dashboard'))
 
 @section('content')
-<h4 class="py-4 mb-4">لوحة التحكم التشغيلية</h4>
+<h4 class="py-4 mb-4">{{ __('admin.dashboard_title') }}</h4>
 
 <div class="row g-4 mb-4">
     <div class="col-sm-6 col-xl-3">
@@ -11,9 +11,9 @@
             <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between">
                     <div class="content-left">
-                        <span class="text-primary d-block mb-2">المنتجات المستوردة</span>
+                        <span class="text-primary d-block mb-2">{{ __('admin.imported_products_total') }}</span>
                         <h4 class="mb-2 text-primary">{{ number_format($summary['imported_products_total'] ?? 0) }}</h4>
-                        <small class="text-body">إجمالي المنتجات المستوردة</small>
+                        <small class="text-body">{{ __('admin.imported_products_total_help') }}</small>
                     </div>
                     <div class="avatar">
                         <span class="avatar-initial rounded bg-label-primary">
@@ -29,9 +29,9 @@
             <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between">
                     <div class="content-left">
-                        <span class="text-success d-block mb-2">منتجات مؤكدة</span>
+                        <span class="text-success d-block mb-2">{{ __('admin.imported_products_confirmed') }}</span>
                         <h4 class="mb-2 text-success">{{ number_format($summary['imported_products_confirmed'] ?? 0) }}</h4>
-                        <small class="text-body">مضافة للسلة أو تم طلبها</small>
+                        <small class="text-body">{{ __('admin.imported_products_confirmed_help') }}</small>
                     </div>
                     <div class="avatar">
                         <span class="avatar-initial rounded bg-label-success">
@@ -47,9 +47,9 @@
             <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between">
                     <div class="content-left">
-                        <span class="text-info d-block mb-2">سلات نشطة</span>
+                        <span class="text-info d-block mb-2">{{ __('admin.active_carts') }}</span>
                         <h4 class="mb-2 text-info">{{ number_format($summary['active_carts'] ?? 0) }}</h4>
-                        <small class="text-body">عناصر غير مرتبطة بمسودة طلب</small>
+                        <small class="text-body">{{ __('admin.active_carts_help') }}</small>
                     </div>
                     <div class="avatar">
                         <span class="avatar-initial rounded bg-label-info">
@@ -65,9 +65,9 @@
             <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between">
                     <div class="content-left">
-                        <span class="text-warning d-block mb-2">مسودات الطلبات</span>
+                        <span class="text-warning d-block mb-2">{{ __('admin.draft_orders') }}</span>
                         <h4 class="mb-2 text-warning">{{ number_format($summary['draft_orders'] ?? 0) }}</h4>
-                        <small class="text-body">مسودات بانتظار الإنهاء</small>
+                        <small class="text-body">{{ __('admin.draft_orders_help') }}</small>
                     </div>
                     <div class="avatar">
                         <span class="avatar-initial rounded bg-label-warning">
@@ -86,9 +86,9 @@
             <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between">
                     <div class="content-left">
-                        <span class="text-warning d-block mb-2">بانتظار الدفع</span>
+                        <span class="text-warning d-block mb-2">{{ __('admin.orders_pending_payment_label') }}</span>
                         <h4 class="mb-2 text-warning">{{ number_format($summary['orders_pending_payment'] ?? 0) }}</h4>
-                        <small class="text-body">طلبات حالة pending_payment</small>
+                        <small class="text-body">{{ __('admin.orders_pending_payment_help') }}</small>
                     </div>
                     <div class="avatar">
                         <span class="avatar-initial rounded bg-label-warning">
@@ -104,9 +104,9 @@
             <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between">
                     <div class="content-left">
-                        <span class="text-success d-block mb-2">طلبات مدفوعة</span>
+                        <span class="text-success d-block mb-2">{{ __('admin.orders_paid_label') }}</span>
                         <h4 class="mb-2 text-success">{{ number_format($summary['orders_paid'] ?? 0) }}</h4>
-                        <small class="text-body">طلبات جاهزة للتنفيذ</small>
+                        <small class="text-body">{{ __('admin.orders_paid_help') }}</small>
                     </div>
                     <div class="avatar">
                         <span class="avatar-initial rounded bg-label-success">
@@ -122,9 +122,9 @@
             <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between">
                     <div class="content-left">
-                        <span class="text-danger d-block mb-2">تحتاج مراجعة</span>
+                        <span class="text-danger d-block mb-2">{{ __('admin.orders_needing_review_label') }}</span>
                         <h4 class="mb-2 text-danger">{{ number_format($summary['orders_needing_review'] ?? 0) }}</h4>
-                        <small class="text-body">طلبات needs_review = true</small>
+                        <small class="text-body">{{ __('admin.orders_needing_review_help') }}</small>
                     </div>
                     <div class="avatar">
                         <span class="avatar-initial rounded bg-label-danger">
@@ -140,9 +140,9 @@
             <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between">
                     <div class="content-left">
-                        <span class="text-info d-block mb-2">قيد التنفيذ</span>
+                        <span class="text-info d-block mb-2">{{ __('admin.orders_in_fulfillment_label') }}</span>
                         <h4 class="mb-2 text-info">{{ number_format($summary['orders_in_fulfillment'] ?? 0) }}</h4>
-                        <small class="text-body">طلبات في حالات التنفيذ والشحن</small>
+                        <small class="text-body">{{ __('admin.orders_in_fulfillment_help') }}</small>
                     </div>
                     <div class="avatar">
                         <span class="avatar-initial rounded bg-label-info">
@@ -161,9 +161,9 @@
             <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between">
                     <div class="content-left">
-                        <span class="text-success d-block mb-2">طلبات تم تسليمها</span>
+                        <span class="text-success d-block mb-2">{{ __('admin.orders_delivered_label') }}</span>
                         <h4 class="mb-2 text-success">{{ number_format($summary['orders_delivered'] ?? 0) }}</h4>
-                        <small class="text-body">حالة delivered</small>
+                        <small class="text-body">{{ __('admin.orders_delivered_help') }}</small>
                     </div>
                     <div class="avatar">
                         <span class="avatar-initial rounded bg-label-success">
@@ -179,9 +179,9 @@
             <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between">
                     <div class="content-left">
-                        <span class="text-info d-block mb-2">شحنات في الطريق</span>
+                        <span class="text-info d-block mb-2">{{ __('admin.shipments_in_transit_label') }}</span>
                         <h4 class="mb-2 text-info">{{ number_format($summary['shipments_in_transit'] ?? 0) }}</h4>
-                        <small class="text-body">shipment_status = in_transit</small>
+                        <small class="text-body">{{ __('admin.shipments_in_transit_help') }}</small>
                     </div>
                     <div class="avatar">
                         <span class="avatar-initial rounded bg-label-info">
@@ -197,9 +197,9 @@
             <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between">
                     <div class="content-left">
-                        <span class="text-danger d-block mb-2">مدفوعات فاشلة</span>
+                        <span class="text-danger d-block mb-2">{{ __('admin.failed_payments_label') }}</span>
                         <h4 class="mb-2 text-danger">{{ number_format($summary['failed_payments'] ?? 0) }}</h4>
-                        <small class="text-body">Payment status = failed</small>
+                        <small class="text-body">{{ __('admin.failed_payments_help') }}</small>
                     </div>
                     <div class="avatar">
                         <span class="avatar-initial rounded bg-label-danger">
@@ -215,9 +215,9 @@
             <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between">
                     <div class="content-left">
-                        <span class="text-success d-block mb-2">إشعارات ناجحة</span>
+                        <span class="text-success d-block mb-2">{{ __('admin.successful_notifications_label') }}</span>
                         <h4 class="mb-2 text-success">{{ number_format($summary['successful_notifications'] ?? 0) }}</h4>
-                        <small class="text-body">عمليات إرسال مكتملة</small>
+                        <small class="text-body">{{ __('admin.successful_notifications_help') }}</small>
                     </div>
                     <div class="avatar">
                         <span class="avatar-initial rounded bg-label-success">
@@ -235,33 +235,33 @@
         <div class="card border-0 shadow-none bg-label-danger h-100">
             <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between mb-2">
-                    <h6 class="card-title mb-0">مؤشرات المراجعة</h6>
+                    <h6 class="card-title mb-0">{{ __('admin.review_indicators') }}</h6>
                     <span class="badge bg-label-danger text-danger">
                         {{ number_format($review['orders_needs_review'] ?? 0) }}
                     </span>
                 </div>
-                <p class="mb-2">طلبات تحتاج تدخل إداري صريح.</p>
+                <p class="mb-2">{{ __('admin.review_indicators_intro') }}</p>
                 <ul class="list-unstyled mb-0 small">
                     <li class="d-flex justify-content-between mb-1">
-                        <span>طلبات تقديرية</span>
+                        <span>{{ __('admin.estimated_orders') }}</span>
                         <span class="fw-semibold">{{ number_format($review['estimated_orders'] ?? 0) }}</span>
                     </li>
                     <li class="d-flex justify-content-between mb-1">
-                        <span>مسودات محجوبة عن الإنهاء</span>
+                        <span>{{ __('admin.orders_blocked_from_checkout') }}</span>
                         <span class="fw-semibold">{{ number_format($review['orders_blocked_from_checkout'] ?? 0) }}</span>
                     </li>
                     <li class="d-flex justify-content-between">
-                        <span>بانتظار إجراء إداري</span>
+                        <span>{{ __('admin.orders_awaiting_admin_action') }}</span>
                         <span class="fw-semibold">{{ number_format($review['orders_awaiting_admin_action'] ?? 0) }}</span>
                     </li>
                 </ul>
                 @if(!empty($review['review_state_distribution']))
                     <hr>
-                    <p class="mb-1 fw-semibold">توزيع حالات المراجعة</p>
+                    <p class="mb-1 fw-semibold">{{ __('admin.review_state_distribution') }}</p>
                     <ul class="list-unstyled mb-0 small">
                         @foreach($review['review_state_distribution'] as $state => $count)
                             <li class="d-flex justify-content-between">
-                                <span>{{ __('admin.review_state_'.$state) ?? $state }}</span>
+                                <span>{{ (\Illuminate\Support\Str::startsWith($label = __("admin.review_state_{$state}"), 'admin.') ? $state : $label) }}</span>
                                 <span class="fw-semibold">{{ number_format($count) }}</span>
                             </li>
                         @endforeach
@@ -274,7 +274,7 @@
     <div class="col-sm-6 col-xl-5">
         <div class="card h-100">
             <div class="card-header">
-                <h6 class="card-title mb-0">حالة المدفوعات</h6>
+                <h6 class="card-title mb-0">{{ __('admin.payment_status_card') }}</h6>
             </div>
             <div class="card-body">
                 <div class="row g-3 mb-3">

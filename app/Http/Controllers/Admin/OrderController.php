@@ -80,7 +80,7 @@ class OrderController extends Controller
 
     public function show(Order $order): View
     {
-        $order->load(['shipments.lineItems', 'shipments.trackingEvents', 'shipments.events', 'user', 'payments', 'operationLogs.admin']);
+        $order->load(['shipments.lineItems', 'shipments.trackingEvents', 'shipments.events', 'user', 'payments.attempts', 'payments.events', 'operationLogs.admin']);
         $priceLines = DB::table('order_price_lines')->where('order_id', $order->id)->get();
         $allowedStatuses = $this->workflow->allStatuses();
         $canTransitionTo = [];

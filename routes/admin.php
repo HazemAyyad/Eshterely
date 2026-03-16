@@ -25,14 +25,14 @@ Route::get('login', [AdminAuthController::class, 'showLogin'])->name('login');
 Route::post('login', [AdminAuthController::class, 'login']);
 Route::post('logout', [AdminAuthController::class, 'logout'])->name('logout')->middleware('auth:admin');
 
-Route::get('set-locale/{lang}', function ($lang) {
-    if (in_array($lang, ['ar', 'en'])) {
-        session(['admin_locale' => $lang]);
-    }
-    return redirect()->back();
-})->name('set-locale');
-
 Route::middleware('auth:admin')->group(function () {
+    Route::get('set-locale/{lang}', function ($lang) {
+        if (in_array($lang, ['ar', 'en'])) {
+            session(['admin_locale' => $lang]);
+        }
+        return redirect()->back();
+    })->name('set-locale');
+
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
     // Config
