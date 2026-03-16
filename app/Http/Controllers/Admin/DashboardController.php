@@ -3,19 +3,20 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\DB;
+use App\Services\Admin\AdminDashboardMetricsService;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
+    public function __construct(
+        protected AdminDashboardMetricsService $metricsService
+    ) {
+    }
+
     public function index(): View
     {
-        $stats = [
-            'users' => DB::table('users')->count(),
-            'orders' => DB::table('orders')->count(),
-            'support_open' => DB::table('support_tickets')->where('status', '!=', 'resolved')->count(),
-        ];
+        $data = $this->metricsService->getDashboardData();
 
-        return view('admin.dashboard', compact('stats'));
+        return view('admin.dashboard', $data);
     }
 }
