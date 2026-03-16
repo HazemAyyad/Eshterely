@@ -15,8 +15,10 @@ class CheckoutSessionResource extends JsonResource
         return [
             'payment_id' => $this->resource['payment_id'],
             'reference' => $this->resource['reference'],
+            'provider' => $this->resource['provider'] ?? 'square',
             'checkout_url' => $this->resource['checkout_url'],
             'status' => $this->resource['status'],
+            'order_id' => isset($this->resource['order_id']) ? (string) $this->resource['order_id'] : null,
         ];
     }
 }

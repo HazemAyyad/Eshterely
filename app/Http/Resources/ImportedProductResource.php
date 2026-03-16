@@ -15,7 +15,7 @@ class ImportedProductResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->id,
+            'id' => (string) $this->id,
             'title' => $this->title,
             'image_url' => $this->image_url,
             'source_url' => $this->source_url,

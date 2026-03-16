@@ -66,8 +66,10 @@ class PaymentCheckoutController extends Controller
         return new CheckoutSessionResource([
             'payment_id' => $payment->id,
             'reference' => $payment->reference,
+            'provider' => $payment->provider ?? 'square',
             'checkout_url' => $result['checkout_url'],
             'status' => $payment->status->value,
+            'order_id' => $order->id,
         ]);
     }
 }

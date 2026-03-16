@@ -90,7 +90,7 @@ class CartController extends Controller
 
         $item->update(['quantity' => $validated['quantity']]);
 
-        return response()->json($item);
+        return response()->json((new CartItemResource($item->fresh()))->toArray($request));
     }
 
     public function destroy(Request $request, int $id): JsonResponse

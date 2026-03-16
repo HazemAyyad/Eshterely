@@ -47,11 +47,16 @@ class OrderController extends Controller
             'order_number' => $o->order_number,
             'origin' => $o->origin,
             'status' => $o->status,
+            'status_key' => $this->orderStatusKey($o),
             'payment_status' => $this->orderPaymentStatus($o),
             'payment_reference' => $this->orderPaymentReference($o),
             'placed_date' => $o->placed_at?->format('M j, Y'),
             'delivered_on' => $o->delivered_at?->format('M j, Y'),
+            'total' => (float) $o->total_amount,
+            'currency' => $o->currency ?? 'USD',
             'total_amount' => '$' . number_format($o->total_amount, 2),
+            'estimated' => (bool) $o->estimated,
+            'needs_review' => (bool) $o->needs_review,
             'refund_status' => $o->refund_status,
             'estimated_delivery' => $o->estimated_delivery,
             'shipping_address' => $o->shipping_address_text,
@@ -85,6 +90,25 @@ class OrderController extends Controller
         }
 
         return $base;
+    }
+
+    /**
+     * Frontend-friendly status key; aligned with OrderResource::statusKey.
+     */
+    private function orderStatusKey(Order $o): string
+    {
+        if ($o->needs_review || $o->status === Order::STATUS_UNDER_REVIEW) {
+            return 'pending_review';
+        }
+        return match ($o->status) {
+            Order::STATUS_PENDING_PAYMENT => 'pending_payment',
+            Order::STATUS_PAID => 'paid',
+            Order::STATUS_APPROVED, Order::STATUS_PROCESSING, Order::STATUS_PURCHASED => 'processing',
+            Order::STATUS_SHIPPED_TO_WAREHOUSE, Order::STATUS_INTERNATIONAL_SHIPPING, Order::STATUS_IN_TRANSIT => 'shipped',
+            Order::STATUS_DELIVERED => 'delivered',
+            Order::STATUS_CANCELLED => 'cancelled',
+            default => $o->status,
+        };
     }
 
     private function orderPaymentStatus(Order $o): string
