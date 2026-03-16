@@ -94,6 +94,7 @@ class FcmNotificationService
         }
 
         if (! app()->bound(Messaging::class)) {
+            $resolvedPath = config('firebase.credentials_path', '');
             $this->logFcm('error', self::LOG_PREFIX . ' FCM not configured', [
                 'delivery_mode' => $logContext['delivery_mode'] ?? 'tokens',
                 'user_id' => $logContext['user_id'] ?? null,
@@ -105,6 +106,9 @@ class FcmNotificationService
                 'token_count' => count($tokens),
                 'fcm_tokens_masked' => $this->maskTokens($tokens),
                 'reason' => 'FCM not configured (missing credentials)',
+                'resolved_credentials_path' => $resolvedPath ?: '(empty)',
+                'credentials_file_exists' => $resolvedPath !== '' ? file_exists($resolvedPath) : false,
+                'credentials_readable' => $resolvedPath !== '' ? is_readable($resolvedPath) : false,
                 'timestamp' => now()->toIso8601String(),
             ]);
             return [

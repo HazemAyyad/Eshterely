@@ -18,6 +18,7 @@ use App\Services\Shipping\Contracts\ShippingZoneRepositoryInterface;
 use App\Services\Shipping\ShippingQuoteService;
 use App\Services\Shipping\VolumetricWeightCalculator;
 use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 use Kreait\Firebase\Contract\Messaging;
 use Kreait\Firebase\Factory;
@@ -29,11 +30,21 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $credentialsPath = config('firebase.credentials');
-        if ($credentialsPath !== null && $credentialsPath !== '' && is_file($credentialsPath)) {
+        $credentialsPath = config('firebase.credentials_path');
+        $fileExists = $credentialsPath !== '' && is_file($credentialsPath);
+        $readable = $fileExists && is_readable($credentialsPath);
+
+        if ($credentialsPath !== '' && $fileExists && $readable) {
             $this->app->singleton(Messaging::class, function () use ($credentialsPath) {
                 return (new Factory)->withServiceAccount($credentialsPath)->createMessaging();
             });
+        } else {
+            $fcmChannel = array_key_exists('fcm', config('logging.channels', [])) ? 'fcm' : 'stack';
+            Log::channel($fcmChannel)->debug('FCM credentials not used', [
+                'resolved_credentials_path' => $credentialsPath ?: '(empty)',
+                'file_exists' => $fileExists,
+                'readable' => $readable,
+            ]);
         }
 
         $this->app->singleton(SquareService::class, function () {
