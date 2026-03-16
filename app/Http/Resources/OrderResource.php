@@ -22,6 +22,7 @@ class OrderResource extends JsonResource
         return [
             'id' => (string) $order->id,
             'status' => $order->status,
+            'status_key' => $this->statusKey($order),
             'total' => (float) $order->total_amount,
             'currency' => $order->currency,
             'estimated' => (bool) $order->estimated,
@@ -35,6 +36,28 @@ class OrderResource extends JsonResource
             }),
             'created_at' => $order->created_at?->toIso8601String(),
         ];
+    }
+
+    private function statusKey(Order $order): string
+    {
+        // Frontend-friendly, stable status key. Does not change internal workflow.
+        if ($order->needs_review || $order->status === Order::STATUS_UNDER_REVIEW) {
+            return 'pending_review';
+        }
+
+        return match ($order->status) {
+            Order::STATUS_PENDING_PAYMENT => 'pending_payment',
+            Order::STATUS_PAID => 'paid',
+            Order::STATUS_APPROVED,
+            Order::STATUS_PROCESSING,
+            Order::STATUS_PURCHASED => 'processing',
+            Order::STATUS_SHIPPED_TO_WAREHOUSE,
+            Order::STATUS_INTERNATIONAL_SHIPPING,
+            Order::STATUS_IN_TRANSIT => 'shipped',
+            Order::STATUS_DELIVERED => 'delivered',
+            Order::STATUS_CANCELLED => 'cancelled',
+            default => $order->status,
+        };
     }
 
     private function paymentStatus(Order $order): string

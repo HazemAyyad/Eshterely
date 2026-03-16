@@ -5,38 +5,46 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class SessionsController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $sessions = DB::table('user_sessions')->where('user_id', $request->user()->id)->get();
+        $user = $request->user();
+        $current = $user->currentAccessToken();
 
-        if ($sessions->isEmpty()) {
-            return response()->json([[
-                'id' => '1',
-                'device_name' => 'Current Device',
-                'location' => 'Active now',
-                'last_active' => 'Active now',
-                'client_info' => 'Zayer App',
-                'is_current' => true,
-            ]]);
-        }
+        $tokens = PersonalAccessToken::query()
+            ->where('tokenable_type', $user::class)
+            ->where('tokenable_id', $user->id)
+            ->orderByDesc('last_used_at')
+            ->orderByDesc('created_at')
+            ->get();
 
-        return response()->json($sessions->map(fn ($s) => [
-            'id' => (string) $s->id,
-            'device_name' => $s->device_name ?? 'Unknown',
-            'location' => $s->location ?? '',
-            'last_active' => $s->last_active_at ?? '',
-            'client_info' => $s->client_info ?? '',
-            'is_current' => (bool) $s->is_current,
-        ]));
+        return response()->json($tokens->map(fn (PersonalAccessToken $t) => [
+            'id' => (string) $t->id,
+            'device_name' => $t->name ?: 'Session',
+            'location' => '',
+            'last_active' => ($t->last_used_at ?? $t->created_at)?->toIso8601String(),
+            'client_info' => $t->name ?: '',
+            'is_current' => $current ? ($t->id === $current->id) : false,
+            'created_at' => $t->created_at?->toIso8601String(),
+        ])->values());
     }
 
     public function destroy(Request $request, int $id): JsonResponse
     {
-        DB::table('user_sessions')->where('user_id', $request->user()->id)->where('id', $id)->delete();
+        $user = $request->user();
+        $current = $user->currentAccessToken();
+        if ($current && $current->id === $id) {
+            return response()->json(['message' => 'Cannot end current session'], 422);
+        }
+
+        PersonalAccessToken::query()
+            ->where('tokenable_type', $user::class)
+            ->where('tokenable_id', $user->id)
+            ->whereKey($id)
+            ->delete();
 
         return response()->json(['message' => 'Session ended']);
     }

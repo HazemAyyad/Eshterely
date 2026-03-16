@@ -78,10 +78,12 @@ class MeController extends Controller
 
     public function compliance(Request $request): JsonResponse
     {
+        // Hardening: avoid placeholder compliance requirements in production.
+        // If/when a real KYC/compliance module exists, this endpoint can be backed by real checks.
         return response()->json([
-            'action_required' => true,
-            'expiry_date' => 'Mar 1, 2026',
-            'description' => 'Your government-issued ID is required for international shipping compliance.',
+            'action_required' => false,
+            'expiry_date' => null,
+            'description' => null,
         ]);
     }
 
@@ -251,6 +253,14 @@ class MeController extends Controller
         }
 
         $user->update(['password' => $validated['password']]);
+
+        // Hardening: revoke other tokens after password change (keep current session).
+        $current = $user->currentAccessToken();
+        if ($current) {
+            $user->tokens()->whereKeyNot($current->id)->delete();
+        } else {
+            $user->tokens()->delete();
+        }
 
         return response()->json(['message' => 'Password updated']);
     }
