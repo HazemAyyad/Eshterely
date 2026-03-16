@@ -12,6 +12,7 @@ class OrderShipment extends Model
         'order_id', 'country_code', 'country_label', 'shipping_method', 'eta',
         'subtotal', 'shipping_fee', 'customs_duties', 'gross_weight_kg',
         'dimensions', 'insurance_confirmed', 'status_tags', 'shipping_snapshot',
+        'shipping_override_amount', 'shipping_override_carrier', 'shipping_override_notes', 'shipping_override_at',
     ];
 
     protected function casts(): array
@@ -23,6 +24,8 @@ class OrderShipment extends Model
             'gross_weight_kg' => 'decimal:4',
             'status_tags' => 'array',
             'shipping_snapshot' => 'array',
+            'shipping_override_amount' => 'decimal:2',
+            'shipping_override_at' => 'datetime',
         ];
     }
 

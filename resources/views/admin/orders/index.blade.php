@@ -10,6 +10,11 @@
         <form id="orders-filter" class="d-flex flex-wrap gap-2 align-items-center">
             <select name="status" id="orders-status" class="form-select" style="max-width: 150px;">
                 <option value="">{{ __('admin.all_statuses') }}</option>
+                <option value="pending_payment">Pending Payment</option>
+                <option value="paid">Paid</option>
+                <option value="under_review">Under Review</option>
+                <option value="approved">Approved</option>
+                <option value="processing">Processing</option>
                 <option value="in_transit">{{ __('admin.in_transit') }}</option>
                 <option value="delivered">{{ __('admin.delivered') }}</option>
                 <option value="cancelled">{{ __('admin.cancelled') }}</option>
@@ -30,9 +35,14 @@
                     <th>#</th>
                     <th>{{ __('admin.order_number') }}</th>
                     <th>User</th>
-                    <th>origin</th>
+                    <th>Origin</th>
+                    <th>Payment</th>
                     <th>{{ __('admin.status') }}</th>
-                    <th>{{ __('admin.total') }}</th>
+                    <th>Est.</th>
+                    <th>Review</th>
+                    <th>Total (snapshot)</th>
+                    <th>Payment Ref.</th>
+                    <th>Carrier</th>
                     <th>{{ __('admin.date') }}</th>
                     <th>{{ __('admin.actions') }}</th>
                 </tr>
@@ -67,8 +77,13 @@ document.addEventListener('DOMContentLoaded', function() {
             { data: 'order_number', name: 'order_number' },
             { data: 'user_contact', name: 'user_contact' },
             { data: 'origin', name: 'origin' },
+            { data: 'payment_status', name: 'payment_status', orderable: false, searchable: false },
             { data: 'status', name: 'status' },
-            { data: 'total_amount', name: 'total_amount' },
+            { data: 'estimated', name: 'estimated', orderable: false, searchable: false },
+            { data: 'needs_review', name: 'needs_review', orderable: false, searchable: false },
+            { data: 'order_total_snapshot', name: 'order_total_snapshot', orderable: false, searchable: false },
+            { data: 'payment_reference', name: 'payment_reference', orderable: false, searchable: false },
+            { data: 'source_carrier', name: 'source_carrier', orderable: false, searchable: false },
             { data: 'placed_at', name: 'placed_at' },
             { data: 'actions', name: 'actions', orderable: false, searchable: false }
         ],

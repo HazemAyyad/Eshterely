@@ -64,6 +64,8 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
     Route::get('orders', [OrderController::class, 'index'])->name('orders.index');
     Route::get('orders/{order}', [OrderController::class, 'show'])->name('orders.show');
     Route::patch('orders/{order}/status', [OrderController::class, 'updateStatus'])->name('orders.update-status');
+    Route::patch('orders/{order}/review', [OrderController::class, 'review'])->name('orders.review');
+    Route::patch('orders/{order}/shipping-override', [OrderController::class, 'shippingOverride'])->name('orders.shipping-override');
 
     // Cart Review
     Route::get('cart-review/data', [CartReviewController::class, 'data'])->name('cart-review.data');

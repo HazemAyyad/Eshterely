@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Models\OrderShipment;
+use App\Services\Admin\AdminOrderOperationService;
+use App\Services\Admin\OrderStatusWorkflowService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,6 +16,11 @@ use Yajra\DataTables\Facades\DataTables;
 
 class OrderController extends Controller
 {
+    public function __construct(
+        protected OrderStatusWorkflowService $workflow,
+        protected AdminOrderOperationService $operationService
+    ) {}
+
     public function index(Request $request): View
     {
         return view('admin.orders.index');
@@ -20,7 +28,8 @@ class OrderController extends Controller
 
     public function data(Request $request): JsonResponse
     {
-        $query = Order::with('user')->orderBy('placed_at', 'desc');
+        $query = Order::with('user', 'payments', 'shipments.lineItems')
+            ->orderByDesc('updated_at');
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
@@ -31,11 +40,33 @@ class OrderController extends Controller
 
         return DataTables::eloquent($query)
             ->addColumn('user_contact', fn (Order $o) => $o->user?->phone ?? $o->user?->email ?? '-')
-            ->editColumn('status', fn (Order $o) => '<span class="badge bg-' . ($o->status === 'delivered' ? 'success' : ($o->status === 'cancelled' ? 'danger' : 'warning')) . '">' . $o->status . '</span>')
+            ->addColumn('payment_status', function (Order $o) {
+                if ($o->status === Order::STATUS_PAID) {
+                    return '<span class="badge bg-success">paid</span>';
+                }
+                $paid = $o->payments->contains(fn ($p) => $p->status->value === 'paid');
+                return $paid ? '<span class="badge bg-success">paid</span>' : '<span class="badge bg-secondary">pending</span>';
+            })
+            ->editColumn('status', fn (Order $o) => '<span class="badge bg-' . $this->statusBadgeClass($o->status) . '">' . e($o->status) . '</span>')
+            ->addColumn('estimated', fn (Order $o) => $o->estimated ? '<span class="badge bg-info">estimated</span>' : '-')
+            ->addColumn('needs_review', fn (Order $o) => $o->needs_review ? '<span class="badge bg-warning">review</span>' : '-')
+            ->addColumn('order_total_snapshot', fn (Order $o) => $o->order_total_snapshot !== null ? number_format((float) $o->order_total_snapshot, 2) . ' ' . $o->currency : number_format((float) $o->total_amount, 2) . ' ' . $o->currency)
+            ->addColumn('payment_reference', function (Order $o) {
+                $paid = $o->payments->first(fn ($p) => $p->paid_at);
+                return $paid !== null ? $paid->reference : '-';
+            })
+            ->addColumn('source_carrier', function (Order $o) {
+                $first = $o->shipments->flatMap(fn ($s) => $s->lineItems)->first();
+                if (! $first) {
+                    return '-';
+                }
+                $carrier = $first->review_metadata['carrier'] ?? $first->pricing_snapshot['carrier'] ?? null;
+                return $carrier ? e($carrier) : '-';
+            })
             ->editColumn('total_amount', fn (Order $o) => number_format((float) $o->total_amount, 2) . ' ' . $o->currency)
             ->editColumn('placed_at', fn (Order $o) => $o->placed_at?->format('Y-m-d') ?? '-')
             ->addColumn('actions', fn (Order $o) => '<a href="' . route('admin.orders.show', $o) . '" class="btn btn-text-secondary rounded-pill waves-effect btn-icon" title="' . __('admin.show') . '"><i class="icon-base ti tabler-eye icon-22px"></i></a>')
-            ->rawColumns(['status', 'actions'])
+            ->rawColumns(['status', 'payment_status', 'estimated', 'needs_review', 'actions'])
             ->filterColumn('order_number', fn ($q, $keyword) => $q)
             ->filterColumn('user_contact', fn ($q, $keyword) => $q->where(function ($q2) use ($keyword) {
                 $q2->where('order_number', 'like', "%{$keyword}%")
@@ -46,28 +77,93 @@ class OrderController extends Controller
 
     public function show(Order $order): View
     {
-        $order->load(['shipments.lineItems', 'shipments.trackingEvents', 'user', 'payments']);
+        $order->load(['shipments.lineItems', 'shipments.trackingEvents', 'user', 'payments', 'operationLogs.admin']);
         $priceLines = DB::table('order_price_lines')->where('order_id', $order->id)->get();
+        $allowedStatuses = $this->workflow->allStatuses();
+        $canTransitionTo = [];
+        foreach ($allowedStatuses as $s) {
+            $check = $this->workflow->canTransitionTo($order, $s);
+            if ($check['allowed']) {
+                $canTransitionTo[] = $s;
+            }
+        }
 
-        return view('admin.orders.show', compact('order', 'priceLines'));
+        return view('admin.orders.show', compact('order', 'priceLines', 'allowedStatuses', 'canTransitionTo'));
     }
 
-    public function updateStatus(Request $request, Order $order): RedirectResponse
+    public function updateStatus(Request $request, Order $order): RedirectResponse|JsonResponse
     {
+        $allowed = $this->workflow->allStatuses();
         $validated = $request->validate([
-            'status' => 'required|in:in_transit,delivered,cancelled',
+            'status' => 'required|string|in:' . implode(',', $allowed),
         ]);
 
-        $order->update($validated);
-
-        if ($validated['status'] === 'delivered') {
-            $order->update(['delivered_at' => now()]);
+        try {
+            $this->operationService->updateStatus($order, $request->user('admin'), $validated['status']);
+        } catch (\InvalidArgumentException $e) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            }
+            return redirect()->route('admin.orders.show', $order)->with('error', $e->getMessage());
         }
 
         if ($request->ajax() || $request->wantsJson()) {
             return response()->json(['success' => true, 'message' => __('admin.success')]);
         }
-
         return redirect()->route('admin.orders.show', $order)->with('success', __('admin.success'));
+    }
+
+    public function review(Request $request, Order $order): RedirectResponse|JsonResponse
+    {
+        $validated = $request->validate([
+            'admin_notes' => 'nullable|string|max:5000',
+        ]);
+
+        $this->operationService->markAsReviewed(
+            $order,
+            $request->user('admin'),
+            $validated['admin_notes'] ?? null
+        );
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json(['success' => true, 'message' => __('admin.success')]);
+        }
+        return redirect()->route('admin.orders.show', $order)->with('success', __('admin.success'));
+    }
+
+    public function shippingOverride(Request $request, Order $order): RedirectResponse|JsonResponse
+    {
+        $shipmentIds = $order->shipments->pluck('id')->toArray();
+        $validated = $request->validate([
+            'order_shipment_id' => 'required|exists:order_shipments,id|in:' . implode(',', $shipmentIds),
+            'shipping_override_amount' => 'nullable|numeric|min:0',
+            'shipping_override_carrier' => 'nullable|string|max:50',
+            'shipping_override_notes' => 'nullable|string|max:1000',
+        ]);
+
+        $shipment = OrderShipment::findOrFail($validated['order_shipment_id']);
+        $this->operationService->applyShippingOverride(
+            $shipment,
+            $request->user('admin'),
+            isset($validated['shipping_override_amount']) ? (float) $validated['shipping_override_amount'] : null,
+            $validated['shipping_override_carrier'] ?? null,
+            $validated['shipping_override_notes'] ?? null
+        );
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json(['success' => true, 'message' => __('admin.success')]);
+        }
+        return redirect()->route('admin.orders.show', $order)->with('success', __('admin.success'));
+    }
+
+    private function statusBadgeClass(string $status): string
+    {
+        return match ($status) {
+            Order::STATUS_DELIVERED => 'success',
+            Order::STATUS_CANCELLED => 'danger',
+            Order::STATUS_PAID, Order::STATUS_APPROVED => 'primary',
+            Order::STATUS_PENDING_PAYMENT => 'secondary',
+            default => 'warning',
+        };
     }
 }
