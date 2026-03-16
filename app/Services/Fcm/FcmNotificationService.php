@@ -4,8 +4,10 @@ namespace App\Services\Fcm;
 
 use App\Models\User;
 use App\Models\UserDeviceToken;
+use Illuminate\Support\Facades\Log;
 use Kreait\Firebase\Contract\Messaging;
 use Kreait\Firebase\Messaging\CloudMessage;
+use Kreait\Firebase\Messaging\MulticastSendReport;
 use Kreait\Firebase\Messaging\Notification;
 
 /**
@@ -13,6 +15,8 @@ use Kreait\Firebase\Messaging\Notification;
  */
 class FcmNotificationService
 {
+    private const LOG_PREFIX = 'FCM_SEND';
+
     public function __construct(
         protected DeviceTokenService $tokenService
     ) {}
@@ -31,6 +35,17 @@ class FcmNotificationService
     ): array {
         $tokens = $this->tokenService->getActiveTokensForUser($user);
         if ($tokens === []) {
+            $this->logFcm('warning', self::LOG_PREFIX . ' no tokens for user', [
+                'delivery_mode' => 'single',
+                'user_id' => $user->id,
+                'notification_title' => $title,
+                'notification_body' => $body,
+                'has_notification' => true,
+                'has_data' => $data !== null && $data !== [],
+                'token_count' => 0,
+                'reason' => 'No active FCM tokens for user',
+                'timestamp' => now()->toIso8601String(),
+            ]);
             return [
                 'sent' => 0,
                 'failed' => 0,
@@ -38,13 +53,15 @@ class FcmNotificationService
                 'summary_message' => 'No active tokens for user',
             ];
         }
-        return $this->sendToTokens($tokens, $title, $body, $imageUrl, $data);
+        $logContext = ['delivery_mode' => 'single', 'user_id' => $user->id];
+        return $this->sendToTokens($tokens, $title, $body, $imageUrl, $data, $logContext);
     }
 
     /**
      * Send to specific tokens. Invalid/unknown tokens are deactivated. Returns summary.
      *
      * @param list<string> $tokens
+     * @param array{delivery_mode?: string, user_id?: int, user_count?: int} $logContext
      * @return array{sent: int, failed: int, invalid_tokens: list<string>, summary_message: string}
      */
     public function sendToTokens(
@@ -52,10 +69,22 @@ class FcmNotificationService
         string $title,
         string $body,
         ?string $imageUrl = null,
-        ?array $data = null
+        ?array $data = null,
+        array $logContext = []
     ): array {
         $tokens = array_values(array_unique(array_filter($tokens)));
         if ($tokens === []) {
+            $this->logFcm('warning', self::LOG_PREFIX . ' no tokens provided', [
+                'delivery_mode' => $logContext['delivery_mode'] ?? 'tokens',
+                'user_id' => $logContext['user_id'] ?? null,
+                'notification_title' => $title,
+                'notification_body' => $body,
+                'has_notification' => true,
+                'has_data' => false,
+                'token_count' => 0,
+                'reason' => 'No tokens provided',
+                'timestamp' => now()->toIso8601String(),
+            ]);
             return [
                 'sent' => 0,
                 'failed' => 0,
@@ -65,6 +94,19 @@ class FcmNotificationService
         }
 
         if (! app()->bound(Messaging::class)) {
+            $this->logFcm('error', self::LOG_PREFIX . ' FCM not configured', [
+                'delivery_mode' => $logContext['delivery_mode'] ?? 'tokens',
+                'user_id' => $logContext['user_id'] ?? null,
+                'notification_title' => $title,
+                'notification_body' => $body,
+                'has_notification' => true,
+                'has_data' => $data !== null && $data !== [],
+                'data_keys' => $data !== null ? array_keys($data) : [],
+                'token_count' => count($tokens),
+                'fcm_tokens_masked' => $this->maskTokens($tokens),
+                'reason' => 'FCM not configured (missing credentials)',
+                'timestamp' => now()->toIso8601String(),
+            ]);
             return [
                 'sent' => 0,
                 'failed' => count($tokens),
@@ -72,6 +114,21 @@ class FcmNotificationService
                 'summary_message' => 'FCM not configured (missing credentials)',
             ];
         }
+
+        $payloadInfo = [
+            'delivery_mode' => $logContext['delivery_mode'] ?? 'tokens',
+            'user_id' => $logContext['user_id'] ?? null,
+            'notification_title' => $title,
+            'notification_body' => $body,
+            'notification_image' => $imageUrl !== null,
+            'has_notification' => true,
+            'has_data' => $data !== null && $data !== [],
+            'data_keys' => $data !== null ? array_keys($data) : [],
+            'token_count' => count($tokens),
+            'fcm_tokens_masked' => $this->maskTokens($tokens),
+            'timestamp' => now()->toIso8601String(),
+        ];
+        $this->logFcm('info', self::LOG_PREFIX . ' attempt', $payloadInfo);
 
         $messaging = app(Messaging::class);
         $notification = Notification::create($title, $body, $imageUrl);
@@ -85,6 +142,20 @@ class FcmNotificationService
         try {
             $report = $messaging->sendMulticast($message, $tokens);
         } catch (\Throwable $e) {
+            $this->logFcm('error', self::LOG_PREFIX . ' exception', [
+                'delivery_mode' => $logContext['delivery_mode'] ?? 'tokens',
+                'user_id' => $logContext['user_id'] ?? null,
+                'notification_title' => $title,
+                'notification_body' => $body,
+                'has_notification' => true,
+                'has_data' => $data !== null && $data !== [],
+                'data_keys' => $data !== null ? array_keys($data) : [],
+                'token_count' => count($tokens),
+                'fcm_tokens_masked' => $this->maskTokens($tokens),
+                'exception_class' => $e::class,
+                'exception_message' => $e->getMessage(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
             return [
                 'sent' => 0,
                 'failed' => count($tokens),
@@ -104,6 +175,23 @@ class FcmNotificationService
         if ($invalid !== []) {
             $summary .= ', invalid_tokens=' . count($invalid);
         }
+
+        $perTokenResults = $this->buildPerTokenResults($report, $tokens);
+        $logLevel = $failed > 0 ? 'warning' : 'info';
+        $logMessage = $failed > 0 ? self::LOG_PREFIX . ' partial_or_failed' : self::LOG_PREFIX . ' success';
+        $this->logFcm($logLevel, $logMessage, [
+            'delivery_mode' => $logContext['delivery_mode'] ?? 'tokens',
+            'user_id' => $logContext['user_id'] ?? null,
+            'notification_title' => $title,
+            'notification_body' => $body,
+            'sent' => $sent,
+            'failed' => $failed,
+            'invalid_count' => count($invalid),
+            'invalid_tokens_masked' => $this->maskTokens($invalid),
+            'firebase_response_summary' => $summary,
+            'per_token_results' => $perTokenResults,
+            'timestamp' => now()->toIso8601String(),
+        ]);
 
         return [
             'sent' => $sent,
@@ -127,13 +215,15 @@ class FcmNotificationService
         ?array $data = null
     ): array {
         $allTokens = [];
-        foreach ($users as $user) {
+        $userList = $users instanceof \Traversable ? iterator_to_array($users) : $users;
+        foreach ($userList as $user) {
             if ($user instanceof User) {
                 $allTokens = array_merge($allTokens, $this->tokenService->getActiveTokensForUser($user));
             }
         }
         $allTokens = array_values(array_unique($allTokens));
-        return $this->sendToTokens($allTokens, $title, $body, $imageUrl, $data);
+        $logContext = ['delivery_mode' => 'bulk', 'user_count' => count($userList)];
+        return $this->sendToTokens($allTokens, $title, $body, $imageUrl, $data, $logContext);
     }
 
     /**
@@ -183,5 +273,79 @@ class FcmNotificationService
         ];
         $base = self::dataPayload($targetType, $targetId, $routeKey, $meta);
         return array_merge($data, $base);
+    }
+
+    /**
+     * Write to FCM log channel (or stack with prefix). Production-safe.
+     */
+    private function logFcm(string $level, string $message, array $context = []): void
+    {
+        $channel = $this->getFcmLogChannel();
+        Log::channel($channel)->log($level, $message, $context);
+    }
+
+    private function getFcmLogChannel(): string
+    {
+        $channels = config('logging.channels', []);
+
+        return array_key_exists('fcm', $channels) ? 'fcm' : 'stack';
+    }
+
+    /**
+     * Mask FCM token for logging (production-safe: no full tokens in logs).
+     *
+     * @param list<string> $tokens
+     * @return list<string>
+     */
+    private function maskTokens(array $tokens): array
+    {
+        $out = [];
+        foreach ($tokens as $t) {
+            $out[] = self::maskToken($t);
+        }
+        return $out;
+    }
+
+    private static function maskToken(string $token): string
+    {
+        $len = strlen($token);
+        if ($len <= 12) {
+            return '***';
+        }
+        return substr($token, 0, 6) . '...' . substr($token, -4);
+    }
+
+    /**
+     * Build per-token result list for logging (masked tokens, message IDs, errors).
+     *
+     * @param list<string> $originalTokens
+     * @return list<array{token_masked: string, result: string, message_id?: string, error?: string}>
+     */
+    private function buildPerTokenResults(MulticastSendReport $report, array $originalTokens): array
+    {
+        $items = $report->getItems();
+        $results = [];
+        foreach ($items as $item) {
+            $target = $item->target();
+            $token = $target->value();
+            $masked = self::maskToken($token);
+            if ($item->isSuccess()) {
+                $result = $item->result();
+                $messageId = isset($result['name']) ? (string) $result['name'] : null;
+                $results[] = array_filter([
+                    'token_masked' => $masked,
+                    'result' => 'success',
+                    'message_id' => $messageId,
+                ]);
+            } else {
+                $err = $item->error();
+                $results[] = [
+                    'token_masked' => $masked,
+                    'result' => 'failure',
+                    'error' => $err ? $err->getMessage() : 'unknown',
+                ];
+            }
+        }
+        return $results;
     }
 }

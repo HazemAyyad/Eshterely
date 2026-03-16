@@ -215,17 +215,19 @@ class NotificationDispatchService
             'provider_response_summary' => $result['summary_message'],
         ]);
 
-        // Delivery logging for debugging and audit
-        Log::channel('stack')->info('FCM notification dispatch', [
+        // Delivery logging for debugging and audit (aligned with FcmNotificationService logs)
+        $fcmChannel = array_key_exists('fcm', config('logging.channels', [])) ? 'fcm' : 'stack';
+        Log::channel($fcmChannel)->info('FCM_SEND dispatch recorded', [
             'dispatch_id' => $dispatch->id,
             'type' => $dispatch->type,
             'target_scope' => $dispatch->target_scope,
             'target_users_count' => $targetCount,
             'sent' => $result['sent'],
             'failed' => $result['failed'],
-            'invalid_tokens' => count($result['invalid_tokens'] ?? []),
+            'invalid_tokens_count' => count($result['invalid_tokens'] ?? []),
             'summary' => $result['summary_message'],
             'payload_keys' => $fcmData !== null ? array_keys($fcmData) : [],
+            'timestamp' => now()->toIso8601String(),
         ]);
     }
 

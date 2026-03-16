@@ -127,6 +127,14 @@ return [
             'path' => storage_path('logs/laravel.log'),
         ],
 
+        'fcm' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/fcm.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_FCM_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
     ],
 
 ];
