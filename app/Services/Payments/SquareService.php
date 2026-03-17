@@ -49,7 +49,6 @@ class SquareService
         $lineItem = new OrderLineItem('1');
         $lineItem->setName('Order ' . ($order->order_number ?? $order->id));
         $lineItem->setBasePriceMoney($money);
-        $lineItem->setTotalMoney($money);
 
         $squareOrder = new SquareOrder($this->locationId);
         $squareOrder->setLineItems([$lineItem]);
@@ -116,7 +115,6 @@ class SquareService
         $lineItem = new OrderLineItem('1');
         $lineItem->setName('Wallet Top-up');
         $lineItem->setBasePriceMoney($money);
-        $lineItem->setTotalMoney($money);
 
         $squareOrder = new SquareOrder($this->locationId);
         $squareOrder->setLineItems([$lineItem]);
