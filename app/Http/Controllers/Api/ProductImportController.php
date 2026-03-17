@@ -93,6 +93,47 @@ class ProductImportController extends Controller
                 }
             }
 
+            // Single trustworthy pricing structure for the app (keeps legacy keys too)
+            $currency = strtoupper(trim((string) ($product['currency'] ?? 'USD')));
+            if ($currency === '') {
+                $currency = 'USD';
+            }
+            $quantity = (int) ($validated['quantity'] ?? $product['quantity'] ?? 1);
+            $quantity = $quantity < 1 ? 1 : $quantity;
+
+            $unitPrice = is_numeric($product['price'] ?? null) ? (float) $product['price'] : 0.0;
+            $lineSubtotal = round($unitPrice * $quantity, 2);
+            $shippingAmount = is_array($product['shipping_quote'] ?? null) && isset($product['shipping_quote']['amount'])
+                ? (float) $product['shipping_quote']['amount']
+                : 0.0;
+            $shippingEstimated = (bool) ($product['shipping_quote']['estimated'] ?? false);
+            $needsReview = (bool) ($product['shipping_quote']['missing_fields'] ?? false) || $shippingEstimated;
+
+            $finalTotal = is_array($product['final_pricing'] ?? null) && isset($product['final_pricing']['final_total'])
+                ? (float) $product['final_pricing']['final_total']
+                : round($lineSubtotal + $shippingAmount, 2);
+
+            $product['pricing'] = [
+                'currency' => $currency,
+                'unit_price' => $unitPrice,
+                'quantity' => $quantity,
+                'subtotal' => $lineSubtotal,
+                'shipping_amount' => round($shippingAmount, 2),
+                'shipping_estimated' => $shippingEstimated,
+                'needs_review' => $needsReview,
+                'total' => round($finalTotal, 2),
+                'breakdown' => array_values(array_filter([
+                    ['key' => 'product', 'label' => 'Product', 'amount' => $lineSubtotal],
+                    ['key' => 'shipping', 'label' => 'Shipping', 'amount' => round($shippingAmount, 2), 'estimated' => $shippingEstimated],
+                    is_array($product['final_pricing'] ?? null) && isset($product['final_pricing']['service_fee'])
+                        ? ['key' => 'service_fee', 'label' => 'Service fee', 'amount' => (float) $product['final_pricing']['service_fee']]
+                        : null,
+                    is_array($product['final_pricing'] ?? null) && isset($product['final_pricing']['markup_amount'])
+                        ? ['key' => 'markup', 'label' => 'Markup', 'amount' => (float) $product['final_pricing']['markup_amount']]
+                        : null,
+                ])),
+            ];
+
             return response()->json($product);
         } catch (\Exception $e) {
             return response()->json([

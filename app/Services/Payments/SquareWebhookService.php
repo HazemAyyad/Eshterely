@@ -7,6 +7,8 @@ use App\Enums\Payment\PaymentStatus;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentEvent;
+use App\Models\Wallet;
+use App\Models\WalletTopUpPayment;
 use App\Services\Fcm\OrderShipmentNotificationTrigger;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -68,6 +70,12 @@ class SquareWebhookService
 
         $payment = $this->resolvePayment($data, $paymentObject, $payload);
         if ($payment === null) {
+            // Wallet top-up payments use the same Square event stream but do not map to orders/payments table.
+            $topUp = $this->resolveWalletTopUpPayment($data, $paymentObject);
+            if ($topUp !== null) {
+                $this->handleWalletTopUpStatus($topUp, $eventType, $payload, $paymentObject);
+                return;
+            }
             Log::info('Square webhook payment not found', [
                 'event_type' => $eventType,
                 'event_id' => $payload['event_id'] ?? null,
@@ -146,6 +154,117 @@ class SquareWebhookService
         }
 
         return null;
+    }
+
+    /**
+     * Resolve wallet top-up payment from Square payment event payload.
+     * Prefers provider_order_id, then reference_id.
+     */
+    protected function resolveWalletTopUpPayment(array $data, array $paymentObject): ?WalletTopUpPayment
+    {
+        $orderId = $paymentObject['order_id'] ?? null;
+        if (is_string($orderId) && $orderId !== '') {
+            $p = WalletTopUpPayment::where('provider', 'square')->where('provider_order_id', $orderId)->first();
+            if ($p !== null) {
+                return $p;
+            }
+        }
+
+        $reference = $paymentObject['reference_id'] ?? null;
+        if (is_string($reference) && $reference !== '') {
+            $p = WalletTopUpPayment::where('reference', $reference)->first();
+            if ($p !== null) {
+                return $p;
+            }
+        }
+
+        $squarePaymentId = $paymentObject['id'] ?? $data['id'] ?? null;
+        if (is_string($squarePaymentId) && $squarePaymentId !== '') {
+            $p = WalletTopUpPayment::where('provider', 'square')->where('provider_payment_id', $squarePaymentId)->first();
+            if ($p !== null) {
+                return $p;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Apply Square status changes to wallet top-up payment and credit wallet when paid.
+     * Idempotent: credits wallet once using metadata marker.
+     */
+    protected function handleWalletTopUpStatus(WalletTopUpPayment $topUp, string $eventType, array $payload, array $paymentObject): void
+    {
+        $squareStatus = $paymentObject['status'] ?? null;
+        $normalized = is_string($squareStatus) ? strtoupper($squareStatus) : null;
+
+        $newStatus = match ($normalized) {
+            'COMPLETED' => 'paid',
+            'APPROVED', 'PENDING' => 'processing',
+            'CANCELED', 'CANCELLED' => 'cancelled',
+            'FAILED' => 'failed',
+            default => null,
+        };
+
+        Log::info('Square webhook wallet top-up resolved', [
+            'top_up_id' => $topUp->id,
+            'event_type' => $eventType,
+            'square_status' => $squareStatus,
+        ]);
+
+        DB::transaction(function () use ($topUp, $newStatus, $paymentObject): void {
+            $topUp->refresh();
+
+            $updates = [];
+            $squarePaymentId = $paymentObject['id'] ?? null;
+            if (is_string($squarePaymentId) && $squarePaymentId !== '' && ($topUp->provider_payment_id === null || $topUp->provider_payment_id === '')) {
+                $updates['provider_payment_id'] = $squarePaymentId;
+            }
+            $squareOrderId = $paymentObject['order_id'] ?? null;
+            if (is_string($squareOrderId) && $squareOrderId !== '' && ($topUp->provider_order_id === null || $topUp->provider_order_id === '')) {
+                $updates['provider_order_id'] = $squareOrderId;
+            }
+
+            if ($newStatus !== null && $topUp->status !== $newStatus) {
+                $updates['status'] = $newStatus;
+                if ($newStatus === 'paid') {
+                    $updates['paid_at'] = $topUp->paid_at ?? now();
+                    $updates['failure_code'] = null;
+                    $updates['failure_message'] = null;
+                }
+                if ($newStatus === 'failed') {
+                    $updates['failure_code'] = is_string($paymentObject['failure_code'] ?? null) ? $paymentObject['failure_code'] : null;
+                    $updates['failure_message'] = is_string($paymentObject['failure_message'] ?? null) ? $paymentObject['failure_message'] : null;
+                }
+            }
+
+            if ($updates !== []) {
+                $topUp->update($updates);
+            }
+
+            if ($newStatus === 'paid') {
+                $meta = $topUp->metadata ?? [];
+                if (! isset($meta['wallet_credited_at'])) {
+                    $wallet = Wallet::lockForUpdate()->find($topUp->wallet_id);
+                    if ($wallet) {
+                        $wallet->available_balance = (float) $wallet->available_balance + (float) $topUp->amount;
+                        $wallet->save();
+
+                        $wallet->transactions()->create([
+                            'type' => 'top_up',
+                            'title' => 'Top-up',
+                            'amount' => (float) $topUp->amount,
+                            'subtitle' => 'COMPLETED',
+                            'reference_type' => 'wallet_top_up_payment',
+                            'reference_id' => $topUp->id,
+                        ]);
+                    }
+
+                    $meta['wallet_credited_at'] = now()->toIso8601String();
+                    $topUp->update(['metadata' => $meta]);
+                }
+            }
+        });
     }
 
     protected function resolvePaymentFromRefundOrOrderPayload(array $payload): ?Payment
@@ -309,6 +428,9 @@ class SquareWebhookService
      */
     protected function syncOrderToPaid(Payment $payment): void
     {
+        if ($payment->order_id === null) {
+            return;
+        }
         $updated = Order::where('id', $payment->order_id)
             ->where('status', Order::STATUS_PENDING_PAYMENT)
             ->update([

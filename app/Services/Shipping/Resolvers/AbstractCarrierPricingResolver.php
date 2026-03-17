@@ -16,8 +16,10 @@ abstract class AbstractCarrierPricingResolver implements CarrierPricingResolverI
 {
     public function __construct(
         protected ShippingPricingConfigService $config,
-        protected ShippingZoneRepositoryInterface $zones
-    ) {}
+        protected ?ShippingZoneRepositoryInterface $zones = null
+    ) {
+        $this->zones = $this->zones ?? app(ShippingZoneRepositoryInterface::class);
+    }
 
     abstract protected function carrierKey(): string;
 
@@ -91,7 +93,7 @@ abstract class AbstractCarrierPricingResolver implements CarrierPricingResolverI
 
     protected function getBaseRateForWeight(CarrierPricingContext $context, float $totalChargeableKg): float
     {
-        $info = $this->zones->getZoneRateInfo(
+        $info = $this->zones?->getZoneRateInfo(
             $context->carrier,
             $context->destinationCountry,
             null,

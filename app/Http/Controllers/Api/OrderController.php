@@ -13,7 +13,7 @@ class OrderController extends Controller
     public function index(Request $request): JsonResponse
     {
         $orders = Order::where('user_id', $request->user()->id)
-            ->with('shipments.lineItems', 'shipments.trackingEvents', 'payments')
+            ->with('shipments.lineItems', 'shipments.trackingEvents', 'shipments.events', 'payments')
             ->orderByDesc('placed_at')
             ->get();
 
@@ -22,7 +22,9 @@ class OrderController extends Controller
 
     public function show(Request $request, int $id): JsonResponse
     {
-        $order = Order::where('user_id', $request->user()->id)->with('shipments.lineItems', 'shipments.trackingEvents', 'payments')->findOrFail($id);
+        $order = Order::where('user_id', $request->user()->id)
+            ->with('shipments.lineItems', 'shipments.trackingEvents', 'shipments.events', 'payments')
+            ->findOrFail($id);
 
         return response()->json($this->formatOrder($order, true));
     }
@@ -69,20 +71,51 @@ class OrderController extends Controller
                 'country_label' => $s->country_label,
                 'shipping_method' => $s->shipping_method,
                 'eta' => $s->eta,
+                'carrier' => $s->carrier,
+                'tracking_number' => $s->tracking_number,
+                'shipment_status' => $s->shipment_status,
+                'estimated_delivery_at' => $s->estimated_delivery_at?->toIso8601String(),
+                'shipped_at' => $s->shipped_at?->toIso8601String(),
+                'delivered_at' => $s->delivered_at?->toIso8601String(),
+                'gross_weight_kg' => $s->gross_weight_kg !== null ? (float) $s->gross_weight_kg : null,
+                'dimensions' => $s->dimensions,
+                'origin' => $s->shipping_snapshot['origin'] ?? null,
+                'destination' => $s->shipping_snapshot['destination'] ?? null,
                 'items' => $s->lineItems->map(fn ($i) => [
                     'id' => (string) $i->id,
                     'name' => $i->name,
                     'store_name' => $i->store_name,
                     'sku' => $i->sku,
-                    'price' => '$' . number_format($i->price, 2),
+                    // Keep both numeric and formatted price for compatibility
+                    'unit_price' => (float) $i->price,
+                    'price' => '$' . number_format((float) $i->price, 2),
                     'quantity' => $i->quantity,
-                    'image_url' => $i->image_url,
+                    'image_url' => $i->image_url ?? ($i->product_snapshot['image_url'] ?? null),
+                    'product_snapshot' => $i->product_snapshot,
+                    'pricing_snapshot' => $i->pricing_snapshot,
                 ])->toArray(),
                 'tracking_events' => $s->trackingEvents->map(fn ($e) => [
                     'title' => $e->title,
                     'subtitle' => $e->subtitle,
                     'is_highlighted' => $e->is_highlighted,
                 ])->toArray(),
+                // Shipment events timeline (preferred for tracking screen)
+                'events' => $s->events
+                    ->sortBy(fn ($e) => $e->event_time ?? $e->created_at)
+                    ->values()
+                    ->map(fn ($e) => [
+                        'type' => $e->event_type,
+                        'label' => $e->event_label,
+                        'time' => $e->event_time?->toIso8601String(),
+                        'location' => $e->location,
+                        'notes' => $e->notes,
+                        'payload' => $e->payload,
+                    ])->toArray(),
+                'has_events' => $s->events->isNotEmpty() || $s->trackingEvents->isNotEmpty(),
+                'latest_update' => optional(
+                    $s->events->sortByDesc(fn ($e) => $e->event_time ?? $e->created_at)->first()
+                    ?? $s->trackingEvents->sortByDesc('created_at')->first()
+                )->created_at?->toIso8601String(),
                 'subtotal' => $s->subtotal ? '$' . number_format($s->subtotal, 2) : null,
                 'shipping_fee' => $s->shipping_fee ? '$' . number_format($s->shipping_fee, 2) : null,
                 'customs_duties' => $s->customs_duties ? '$' . number_format($s->customs_duties, 2) : null,

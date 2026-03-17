@@ -39,6 +39,8 @@ class OrderPaymentController extends Controller
             return response()->json([
                 'message' => $result['message'],
                 'error_key' => $result['error_key'],
+                'errors' => [],
+                'status' => 422,
             ], 422);
         }
 

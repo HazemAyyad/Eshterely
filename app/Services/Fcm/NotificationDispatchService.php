@@ -205,7 +205,9 @@ class NotificationDispatchService
         ?array $fcmData = null
     ): void {
         $status = NotificationDispatch::STATUS_SENT;
-        if ($result['sent'] === 0 && $result['failed'] > 0) {
+        if ($result['sent'] === 0 && $result['failed'] === 0) {
+            $status = NotificationDispatch::STATUS_PENDING;
+        } elseif ($result['sent'] === 0 && $result['failed'] > 0) {
             $status = NotificationDispatch::STATUS_FAILED;
         } elseif ($result['failed'] > 0 && $result['sent'] > 0) {
             $status = NotificationDispatch::STATUS_PARTIAL;

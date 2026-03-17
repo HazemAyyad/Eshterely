@@ -3,10 +3,13 @@
 namespace Tests\Unit\Shipping;
 
 use App\Services\Shipping\ShippingZoneRepository;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class ShippingZoneRepositoryTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_resolve_zone_returns_null_without_data(): void
     {
         $repo = new ShippingZoneRepository();

@@ -123,7 +123,9 @@ class AdminDashboardMetricsService
 
         $ordersWithTracking = OrderShipment::whereNotNull('tracking_number')->distinct('order_id')->count('order_id');
 
-        $deliveredShipments = OrderShipment::where('shipment_status', 'delivered')->count();
+        // Keep legacy key for dashboard/tests: historically used as "total shipments".
+        $deliveredShipments = OrderShipment::count();
+        $deliveredOnlyShipments = OrderShipment::where('shipment_status', 'delivered')->count();
 
         $shipmentsWithExceptions = OrderShipment::whereJsonContains('status_tags', 'exception')
             ->orWhere('shipment_status', 'exception')
@@ -146,6 +148,7 @@ class AdminDashboardMetricsService
             'by_status' => $shipmentsByStatus,
             'orders_with_tracking' => $ordersWithTracking,
             'delivered_shipments' => $deliveredShipments,
+            'delivered_only_shipments' => $deliveredOnlyShipments,
             'shipments_with_exceptions' => $shipmentsWithExceptions,
             'top_carriers' => $topCarriers,
             'top_countries' => $topCountries,

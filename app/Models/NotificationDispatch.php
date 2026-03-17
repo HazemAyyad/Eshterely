@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class NotificationDispatch extends Model
 {
+    use HasFactory;
+
     public const TYPE_BULK = 'bulk';
     public const TYPE_INDIVIDUAL = 'individual';
     public const TYPE_SYSTEM_EVENT = 'system_event';

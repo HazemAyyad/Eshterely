@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\AddressResource;
 use App\Models\Address;
 use App\Models\City;
 use App\Models\Country;
@@ -91,27 +92,7 @@ class MeController extends Controller
     {
         $addresses = $request->user()->addresses()->with(['country', 'city'])->orderByRaw('is_default DESC')->get();
 
-        return response()->json($addresses->map(fn (Address $a) => [
-            'id' => (string) $a->id,
-            'address_line' => $a->address_line ?? trim(implode(', ', array_filter([$a->street_address, $a->area_district, $a->city?->name, $a->country?->name]))),
-            'country_id' => $a->country?->code ?? $a->country_id,
-            'country_name' => $a->country?->name ?? '',
-            'city_id' => $a->city?->code ?? $a->city_id,
-            'city_name' => $a->city?->name ?? '',
-            'phone' => $a->phone,
-            'is_default' => $a->is_default,
-            'nickname' => $a->nickname,
-            'address_type' => $a->address_type,
-            'area_district' => $a->area_district,
-            'street_address' => $a->street_address,
-            'building_villa_suite' => $a->building_villa_suite,
-            'is_verified' => $a->is_verified,
-            'is_residential' => $a->is_residential,
-            'linked_to_active_order' => $a->linked_to_active_order,
-            'is_locked' => $a->is_locked,
-            'lat' => $a->lat ? (float) $a->lat : null,
-            'lng' => $a->lng ? (float) $a->lng : null,
-        ]));
+        return response()->json(AddressResource::collection($addresses)->resolve());
     }
 
     public function storeAddress(Request $request): JsonResponse
@@ -174,7 +155,9 @@ class MeController extends Controller
             'lng' => $validated['lng'] ?? null,
         ]);
 
-        return response()->json($address, 201);
+        return (new AddressResource($address->load(['country', 'city'])))
+            ->response()
+            ->setStatusCode(201);
     }
 
     public function updateAddress(Request $request, int $id): JsonResponse
@@ -205,7 +188,7 @@ class MeController extends Controller
         $address->fill(array_filter($validated));
         $address->save();
 
-        return response()->json($address);
+        return response()->json(new AddressResource($address->fresh()->load(['country', 'city'])));
     }
 
     public function setDefaultAddress(Request $request, int $id): JsonResponse
