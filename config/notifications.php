@@ -12,6 +12,7 @@ return [
         'notifications' => 'الإشعارات',
         'order_details' => 'تفاصيل الطلب',
         'shipment_details' => 'تفاصيل الشحنة',
+        'cart' => 'السلة',
         'wallet' => 'المحفظة',
         'profile' => 'الملف الشخصي',
         'offers' => 'العروض',
@@ -44,6 +45,7 @@ return [
         'view_details' => 'عرض التفاصيل',
         'track_shipment' => 'تتبع الشحنة',
         'open_wallet' => 'فتح المحفظة',
+        'open_cart' => 'فتح السلة',
         'see_offers' => 'عرض العروض',
         'view_notification' => 'عرض الإشعار',
     ],
@@ -63,6 +65,7 @@ return [
         'offers' => '/offers',
         'home' => '/',
         'notifications' => '/notifications',
+        'cart' => '/cart',
     ],
 
     /*

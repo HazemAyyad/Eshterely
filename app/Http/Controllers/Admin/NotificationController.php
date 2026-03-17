@@ -10,6 +10,7 @@ use App\Services\Fcm\NotificationDispatchService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
@@ -82,17 +83,31 @@ class NotificationController extends Controller
 
         $imageUrl = $this->resolveImageUrl($request, $validated);
 
-        foreach ($userIds as $userId) {
-            Notification::create([
-                'user_id' => $userId,
-                'type' => $validated['type'] ?? 'all',
-                'title' => $validated['title'],
-                'subtitle' => $validated['subtitle'] ?? null,
-                'read' => false,
-                'important' => $request->boolean('important'),
-                'action_label' => $actionLabel,
-                'action_route' => $actionRoute,
-            ]);
+        // Persist in-app notifications (shows in mobile app list).
+        // Use bulk insert for performance when send_to_all (can be many users).
+        $type = trim((string) ($validated['type'] ?? 'all'));
+        if ($type === '') {
+            $type = 'all';
+        }
+        $now = now();
+        $important = $request->boolean('important');
+        foreach (array_chunk($userIds, 500) as $chunk) {
+            $rows = [];
+            foreach ($chunk as $userId) {
+                $rows[] = [
+                    'user_id' => $userId,
+                    'type' => $type,
+                    'title' => $validated['title'],
+                    'subtitle' => $validated['subtitle'] ?? null,
+                    'read' => false,
+                    'important' => $important,
+                    'action_label' => $actionLabel,
+                    'action_route' => $actionRoute,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+            DB::table('notifications')->insert($rows);
         }
 
         if ($request->boolean('send_fcm')) {

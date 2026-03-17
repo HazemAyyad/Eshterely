@@ -4,14 +4,22 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\CartItem;
+use App\Models\Notification;
+use App\Services\Fcm\NotificationDispatchService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
 
 class CartReviewController extends Controller
 {
+    public function __construct(
+        protected NotificationDispatchService $dispatchService
+    ) {}
+
     public function index(): View
     {
         return view('admin.cart-review.index');
@@ -93,8 +101,15 @@ class CartReviewController extends Controller
             'shipping_cost' => 'required|numeric|min:0',
         ]);
 
-        $item = CartItem::findOrFail($id);
+        $item = CartItem::with('user')->findOrFail($id);
         $item->update(['shipping_cost' => $validated['shipping_cost']]);
+
+        $this->notifyCartReviewUser(
+            $item,
+            title: $this->appNotificationTitle(),
+            body: __('admin.shipping_cost_updated') . ' • ' . __('admin.view_cart'),
+            important: true
+        );
 
         return response()->json(['success' => true, 'message' => __('admin.shipping_cost_updated'), 'shipping_cost' => (float) $item->shipping_cost]);
     }
@@ -105,15 +120,96 @@ class CartReviewController extends Controller
             'review_status' => 'required|in:reviewed,rejected',
         ]);
 
-        $item = CartItem::where('review_status', 'pending_review')->findOrFail($id);
+        $item = CartItem::with('user')->where('review_status', 'pending_review')->findOrFail($id);
         $item->update($validated);
 
         $msg = $validated['review_status'] === 'reviewed' ? __('admin.item_approved') : __('admin.item_rejected');
+
+        $this->notifyCartReviewUser(
+            $item,
+            title: $this->appNotificationTitle(),
+            body: $msg . ' • ' . __('admin.view_cart'),
+            important: $validated['review_status'] !== 'reviewed' // rejected is more urgent
+        );
 
         if ($request->ajax() || $request->wantsJson()) {
             return response()->json(['success' => true, 'message' => $msg]);
         }
 
         return redirect()->route('admin.cart-review.index')->with('success', $msg);
+    }
+
+    private function notifyCartReviewUser(CartItem $item, string $title, string $body, bool $important = false): void
+    {
+        $user = $item->user;
+        if (! $user) {
+            return;
+        }
+
+        // 1) Persist in-app notification so it يظهر في التطبيق
+        Notification::create([
+            'user_id' => $user->id,
+            'type' => 'orders',
+            'title' => $title,
+            'subtitle' => $body,
+            'read' => false,
+            'important' => $important,
+            'action_label' => 'open_cart',
+            'action_route' => '/cart',
+        ]);
+
+        // 2) Send FCM push (best-effort). Include deep-link data for the app.
+        $imageUrl = $this->appIconUrl();
+        $meta = [
+            'route_key' => 'cart',
+            'target_type' => 'cart',
+            'action_label' => 'open_cart',
+            'action_route' => '/cart',
+        ];
+        $this->dispatchService->sendToUser(
+            $user,
+            $title,
+            $body,
+            $imageUrl,
+            null,
+            $meta,
+            null
+        );
+    }
+
+    private function appNotificationTitle(): string
+    {
+        // Use dynamic app_name from admin/config/app-config, fallback "Eshterely"
+        try {
+            if (Schema::hasTable('app_config') && Schema::hasColumn('app_config', 'app_name')) {
+                $row = DB::table('app_config')->first();
+                $name = $row?->app_name ?? null;
+                if (is_string($name) && trim($name) !== '') {
+                    return trim($name);
+                }
+            }
+        } catch (\Throwable $e) {
+            // ignore
+        }
+        return 'Eshterely';
+    }
+
+    private function appIconUrl(): ?string
+    {
+        // FCM supports image URL (shows as large image on Android / iOS as supported).
+        try {
+            if (Schema::hasTable('app_config') && Schema::hasColumn('app_config', 'app_icon_url')) {
+                $row = DB::table('app_config')->first();
+                $path = $row?->app_icon_url ?? null;
+                if (! is_string($path) || trim($path) === '') {
+                    return null;
+                }
+                $path = trim($path);
+                return str_starts_with($path, 'http') ? $path : asset('storage/' . $path);
+            }
+        } catch (\Throwable $e) {
+            // ignore
+        }
+        return null;
     }
 }

@@ -200,6 +200,7 @@ return [
     'item_approved' => 'Item approved.',
     'item_rejected' => 'Item rejected.',
     'shipping_cost_updated' => 'Shipping cost updated.',
+    'view_cart' => 'Open cart',
     'shipping_cost' => 'Shipping cost',
     'user_name' => 'User name',
 

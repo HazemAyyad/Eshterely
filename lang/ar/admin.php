@@ -200,6 +200,7 @@ return [
     'item_approved' => 'تمت الموافقة على العنصر.',
     'item_rejected' => 'تم رفض العنصر.',
     'shipping_cost_updated' => 'تم تحديث تكلفة الشحن.',
+    'view_cart' => 'فتح السلة',
     'shipping_cost' => 'تكلفة الشحن',
     'user_name' => 'اسم المستخدم',
 
