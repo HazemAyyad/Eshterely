@@ -31,6 +31,7 @@ class CartReviewController extends Controller
             ->orderBy('created_at', 'desc');
 
         return DataTables::eloquent($query)
+            ->addColumn('image', fn (CartItem $item) => $this->renderImageThumb($item))
             ->editColumn('name', fn (CartItem $item) => \Str::limit($item->name, 40))
             ->editColumn('store_name', fn (CartItem $item) => $item->store_name ?? '-')
             ->addColumn('user_name', fn (CartItem $item) => $item->user?->full_name ?? $item->user?->name ?? '-')
@@ -38,6 +39,7 @@ class CartReviewController extends Controller
             ->editColumn('unit_price', fn (CartItem $item) => number_format((float) $item->unit_price, 2) . ' ' . $item->currency)
             ->addColumn('variation_text', fn (CartItem $item) => $item->variation_text ? \Str::limit($item->variation_text, 30) : '-')
             ->addColumn('weight_dims', fn (CartItem $item) => $this->formatWeightDims($item))
+            ->addColumn('shipping_basis', fn (CartItem $item) => $this->formatShippingBasis($item))
             ->addColumn('shipping_cost_edit', function (CartItem $item) {
                 $url = route('admin.cart-review.shipping', $item->id);
                 $val = $item->shipping_cost !== null ? number_format((float) $item->shipping_cost, 2) : '';
@@ -52,7 +54,7 @@ class CartReviewController extends Controller
                     : '<span class="badge bg-' . ($item->review_status === 'reviewed' ? 'success' : 'secondary') . '">' . e($item->review_status) . '</span>';
                 return '<button type="button" class="btn btn-sm btn-info btn-details me-1" data-details="' . e(json_encode($this->itemDetailsForModal($item))) . '">' . __('admin.details') . '</button> ' . $reviewBtns;
             })
-            ->rawColumns(['actions', 'shipping_cost_edit'])
+            ->rawColumns(['image', 'shipping_basis', 'actions', 'shipping_cost_edit'])
             ->toJson();
     }
 
@@ -73,6 +75,7 @@ class CartReviewController extends Controller
         return [
             'id' => $item->id,
             'name' => $item->name,
+            'image_url' => $item->image_url,
             'product_url' => $item->product_url,
             'unit_price' => $item->unit_price,
             'quantity' => $item->quantity,
@@ -91,8 +94,49 @@ class CartReviewController extends Controller
             'source' => $item->source,
             'review_status' => $item->review_status,
             'shipping_cost' => $item->shipping_cost,
+            'shipping_basis' => strip_tags($this->formatShippingBasis($item)),
             'created_at' => $item->created_at?->format('Y-m-d H:i'),
         ];
+    }
+
+    private function renderImageThumb(CartItem $item): string
+    {
+        $url = $item->image_url;
+        if (! is_string($url) || trim($url) === '') {
+            return '<div class="avatar avatar-sm bg-label-secondary"><i class="icon-base ti tabler-photo"></i></div>';
+        }
+        $src = str_starts_with($url, 'http') ? $url : asset($url);
+        return '<img src="' . e($src) . '" alt="Product" class="rounded" style="width:48px;height:48px;object-fit:cover;">';
+    }
+
+    private function formatShippingBasis(CartItem $item): string
+    {
+        if ($item->shipping_snapshot === null) {
+            return '<span class="badge bg-label-secondary text-muted"><i class="icon-base ti tabler-question-mark"></i> N/A</span>';
+        }
+
+        $snapshot = is_array($item->shipping_snapshot) ? $item->shipping_snapshot : [];
+        $estimated = (bool) $item->estimated;
+        $missing = $item->missing_fields ?? [];
+        $carrier = $item->carrier ?: ($snapshot['carrier'] ?? 'auto');
+        $mode = $item->pricing_mode ?: ($snapshot['pricing_mode'] ?? 'default');
+
+        $parts = [];
+        $parts[] = 'Carrier: ' . $carrier;
+        $parts[] = 'Mode: ' . $mode;
+        if ($estimated) {
+            $parts[] = 'Estimated based on fallback data';
+        }
+        if (is_array($missing) && $missing !== []) {
+            $parts[] = 'Missing: ' . implode(', ', $missing);
+        }
+        $tooltip = e(implode(' • ', $parts));
+
+        if ($estimated || (is_array($missing) && $missing !== [])) {
+            return '<span class="badge bg-label-warning text-warning" title="' . $tooltip . '"><i class="icon-base ti tabler-alert-circle"></i> Estimated</span>';
+        }
+
+        return '<span class="badge bg-label-success text-success" title="' . $tooltip . '"><i class="icon-base ti tabler-check"></i> Exact</span>';
     }
 
     public function updateShipping(Request $request, int $id): JsonResponse

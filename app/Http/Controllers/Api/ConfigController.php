@@ -24,6 +24,11 @@ class ConfigController extends Controller
         $onboarding = DB::table('onboarding_pages')->orderBy('sort_order')->get();
         $countries = DB::table('market_countries')->get();
         $stores = DB::table('featured_stores')->where('is_featured', true)->get();
+
+        // Only expose markets (countries) that actually have at least one featured store.
+        $countriesWithStores = $countries->filter(function ($c) use ($stores) {
+            return $stores->contains(fn ($s) => $s->country_code === $c->code);
+        })->values();
         $promoBanners = DB::table('promo_banners')->where('is_active', true)->orderBy('sort_order')->get();
         $warehouses = DB::table('warehouses')->where('is_active', true)->orderBy('label')->get();
 
@@ -75,21 +80,33 @@ class ConfigController extends Controller
             'markets' => [
                 'title' => 'Explore Markets',
                 'subtitle' => 'Shop directly from official stores worldwide',
-                'countries' => $countries->map(fn ($c) => [
+                'countries' => $countriesWithStores->map(fn ($c) => [
                     'code' => $c->code,
                     'name' => $c->name,
                     'flag_emoji' => $c->flag_emoji ?? '',
                     'is_featured' => (bool) ($c->is_featured ?? false),
                 ])->toArray(),
-                'featured_stores' => $stores->map(fn ($s) => [
-                    'id' => $s->store_slug,
-                    'name' => $s->name,
-                    'description' => $s->description ?? '',
-                    'logo_url' => $this->imageUrl($s->logo_url ?? null),
-                    'country_code' => $s->country_code ?? '',
-                    'store_url' => $s->store_url ?? '',
-                    'is_featured' => (bool) $s->is_featured,
-                ])->toArray(),
+                'featured_stores' => $stores->map(function ($s) {
+                    $categories = [];
+                    if (isset($s->categories) && $s->categories !== null && $s->categories !== '') {
+                        // Stored as comma-separated string in DB; normalize to trimmed array.
+                        $categories = array_values(array_filter(array_map(
+                            static fn ($c) => trim($c),
+                            explode(',', (string) $s->categories)
+                        )));
+                    }
+
+                    return [
+                        'id' => $s->store_slug,
+                        'name' => $s->name,
+                        'description' => $s->description ?? '',
+                        'logo_url' => $this->imageUrl($s->logo_url ?? null),
+                        'country_code' => $s->country_code ?? '',
+                        'store_url' => $s->store_url ?? '',
+                        'is_featured' => (bool) $s->is_featured,
+                        'categories' => $categories,
+                    ];
+                })->toArray(),
             ],
             'promo_banners' => $promoBanners->map(fn ($b) => [
                 'id' => $b->id,

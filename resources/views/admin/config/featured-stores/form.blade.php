@@ -37,6 +37,11 @@
                     <textarea name="description" class="form-control" rows="2">{{ old('description', $store->description) }}</textarea>
                     @error('description')<div class="text-danger small">{{ $message }}</div>@enderror
                 </div>
+                <div class="col-12">
+                    <label class="form-label">categories (comma separated)</label>
+                    <input type="text" name="categories" class="form-control" value="{{ old('categories', $store->categories) }}" placeholder="Electronics,Fashion,Home,Beauty">
+                    @error('categories')<div class="text-danger small">{{ $message }}</div>@enderror
+                </div>
                 <div class="col-md-6">
                     <label class="form-label">{{ __('admin.logo') ?? 'رفع الشعار' }}</label>
                     @if(!empty($store->logo_url))

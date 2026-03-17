@@ -20,6 +20,7 @@
             <thead>
                 <tr>
                     <th>#</th>
+                    <th>Image</th>
                     <th>Product</th>
                     <th>Store</th>
                     <th>{{ __('admin.user_name') }}</th>
@@ -28,6 +29,7 @@
                     <th>Qty</th>
                     <th>Variation</th>
                     <th>Weight / Dims</th>
+                    <th>Shipping basis</th>
                     <th>{{ __('admin.shipping_cost') }}</th>
                     <th>{{ __('admin.date') }}</th>
                     <th>{{ __('admin.actions') }}</th>
@@ -69,6 +71,7 @@ document.addEventListener('DOMContentLoaded', function() {
         ajax: "{{ route('admin.cart-review.data') }}",
         columns: [
             { data: 'id', name: 'id' },
+            { data: 'image', name: 'image', orderable: false, searchable: false },
             { data: 'name', name: 'name' },
             { data: 'store_name', name: 'store_name' },
             { data: 'user_name', name: 'user_id' },
@@ -77,6 +80,7 @@ document.addEventListener('DOMContentLoaded', function() {
             { data: 'quantity', name: 'quantity' },
             { data: 'variation_text', name: 'variation_text', orderable: false, searchable: false },
             { data: 'weight_dims', name: 'weight_dims', orderable: false, searchable: false },
+            { data: 'shipping_basis', name: 'shipping_basis', orderable: false, searchable: false },
             { data: 'shipping_cost_edit', name: 'shipping_cost', orderable: false, searchable: false },
             { data: 'created_at', name: 'created_at' },
             { data: 'actions', name: 'actions', orderable: false, searchable: false }

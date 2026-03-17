@@ -10,6 +10,7 @@ class FeaturedStore extends Model
         'store_slug',
         'name',
         'description',
+        'categories',
         'logo_url',
         'country_code',
         'store_url',
