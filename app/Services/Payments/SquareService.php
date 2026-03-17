@@ -64,7 +64,13 @@ class SquareService
         $apiResponse = $client->getCheckoutApi()->createPaymentLink($request);
 
         if (! $apiResponse->isSuccess()) {
-            $errors = $apiResponse->getResult()->getErrors();
+            $result = $apiResponse->getResult();
+            $errors = null;
+            if (is_object($result) && method_exists($result, 'getErrors')) {
+                $errors = $result->getErrors();
+            } elseif (is_array($result)) {
+                $errors = $result['errors'] ?? $result['error'] ?? null;
+            }
             $message = $errors ? json_encode($errors) : 'Square API error';
             Log::warning('Square createPaymentLink failed', ['payment_id' => $payment->id, 'errors' => $errors]);
             throw new \RuntimeException('Square checkout failed: ' . $message);
@@ -126,7 +132,13 @@ class SquareService
         $apiResponse = $client->getCheckoutApi()->createPaymentLink($request);
 
         if (! $apiResponse->isSuccess()) {
-            $errors = $apiResponse->getResult()->getErrors();
+            $result = $apiResponse->getResult();
+            $errors = null;
+            if (is_object($result) && method_exists($result, 'getErrors')) {
+                $errors = $result->getErrors();
+            } elseif (is_array($result)) {
+                $errors = $result['errors'] ?? $result['error'] ?? null;
+            }
             $message = $errors ? json_encode($errors) : 'Square API error';
             Log::warning('Square createPaymentLink failed (wallet top-up)', ['top_up_id' => $topUp->id, 'errors' => $errors]);
             throw new \RuntimeException('Square checkout failed: ' . $message);
