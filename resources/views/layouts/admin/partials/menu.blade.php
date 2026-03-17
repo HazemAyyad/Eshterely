@@ -62,6 +62,11 @@
                         <div>{{ __('admin.promo_banners') }}</div>
                     </a>
                 </li>
+                <li class="menu-item {{ request()->routeIs('admin.config.promo-codes*') ? 'active' : '' }}">
+                    <a href="{{ route('admin.config.promo-codes.index') }}" class="menu-link">
+                        <div>{{ __('admin.promo_codes') }}</div>
+                    </a>
+                </li>
                 <li class="menu-item {{ request()->routeIs('admin.config.warehouses*') ? 'active' : '' }}">
                     <a href="{{ route('admin.config.warehouses.index') }}" class="menu-link">
                         <div>{{ __('admin.warehouses') }}</div>

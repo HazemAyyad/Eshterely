@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Models\Order;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\DB;
 
 class OrderResource extends JsonResource
 {
@@ -30,9 +31,25 @@ class OrderResource extends JsonResource
             'order_number' => $order->order_number,
             'payment_status' => $paymentStatus,
             'payment_reference' => $paymentReference,
+            'promo_code' => $order->promo_code,
+            'promo_discount_amount' => $order->promo_discount_amount !== null ? (float) $order->promo_discount_amount : null,
+            'wallet_applied_amount' => $order->wallet_applied_amount !== null ? (float) $order->wallet_applied_amount : null,
+            'amount_due_now' => $order->amount_due_now !== null ? (float) $order->amount_due_now : null,
             'items' => $this->whenLoaded('shipments', function () use ($order) {
                 $lineItems = $order->shipments->flatMap(fn ($s) => $s->lineItems);
                 return OrderItemResource::collection($lineItems);
+            }),
+            'price_lines' => $this->when($order->exists, function () use ($order) {
+                return DB::table('order_price_lines')
+                    ->where('order_id', $order->id)
+                    ->orderBy('id')
+                    ->get()
+                    ->map(fn ($line) => [
+                        'label' => $line->label,
+                        'amount' => $line->amount,
+                        'is_discount' => (bool) $line->is_discount,
+                    ])
+                    ->toArray();
             }),
             'created_at' => $order->created_at?->toIso8601String(),
         ];

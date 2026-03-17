@@ -86,6 +86,77 @@
             <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between">
                     <div class="content-left">
+                        <span class="text-primary d-block mb-2">Promo codes</span>
+                        <h4 class="mb-2 text-primary">{{ number_format($summary['promo_codes_total'] ?? 0) }}</h4>
+                    </div>
+                    <div class="avatar">
+                        <span class="avatar-initial rounded bg-label-primary">
+                            <i class="icon-base ti tabler-ticket icon-lg"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-start justify-content-between">
+                    <div class="content-left">
+                        <span class="text-success d-block mb-2">Active promo codes</span>
+                        <h4 class="mb-2 text-success">{{ number_format($summary['promo_codes_active'] ?? 0) }}</h4>
+                    </div>
+                    <div class="avatar">
+                        <span class="avatar-initial rounded bg-label-success">
+                            <i class="icon-base ti tabler-badge icon-lg"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-start justify-content-between">
+                    <div class="content-left">
+                        <span class="text-info d-block mb-2">Promo redemptions</span>
+                        <h4 class="mb-2 text-info">{{ number_format($summary['promo_redemptions'] ?? 0) }}</h4>
+                    </div>
+                    <div class="avatar">
+                        <span class="avatar-initial rounded bg-label-info">
+                            <i class="icon-base ti tabler-history icon-lg"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-start justify-content-between">
+                    <div class="content-left">
+                        <span class="text-warning d-block mb-2">Promo discount total</span>
+                        <h4 class="mb-2 text-warning">${{ number_format((float) ($summary['promo_discount_total'] ?? 0), 2) }}</h4>
+                    </div>
+                    <div class="avatar">
+                        <span class="avatar-initial rounded bg-label-warning">
+                            <i class="icon-base ti tabler-discount icon-lg"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex align-items-start justify-content-between">
+                    <div class="content-left">
                         <span class="text-warning d-block mb-2">{{ __('admin.orders_pending_payment_label') }}</span>
                         <h4 class="mb-2 text-warning">{{ number_format($summary['orders_pending_payment'] ?? 0) }}</h4>
                         <small class="text-body">{{ __('admin.orders_pending_payment_help') }}</small>

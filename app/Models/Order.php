@@ -31,6 +31,7 @@ class Order extends Model
     protected $fillable = [
         'user_id', 'draft_order_id', 'order_number', 'origin', 'status', 'placed_at', 'delivered_at',
         'total_amount', 'currency', 'order_total_snapshot', 'shipping_total_snapshot', 'service_fee_snapshot',
+        'promo_code_id', 'promo_code', 'promo_discount_amount', 'wallet_applied_amount', 'amount_due_now',
         'estimated', 'needs_review', 'review_state', 'admin_notes', 'reviewed_at',
         'refund_status', 'estimated_delivery', 'shipping_address_id', 'consolidation_savings',
         'payment_method_label', 'payment_method_last_four', 'invoice_issue_date', 'transaction_id',
@@ -47,6 +48,9 @@ class Order extends Model
             'order_total_snapshot' => 'decimal:2',
             'shipping_total_snapshot' => 'decimal:2',
             'service_fee_snapshot' => 'decimal:2',
+            'promo_discount_amount' => 'decimal:2',
+            'wallet_applied_amount' => 'decimal:2',
+            'amount_due_now' => 'decimal:2',
             'estimated' => 'boolean',
             'needs_review' => 'boolean',
             'review_state' => 'array',
@@ -68,6 +72,11 @@ class Order extends Model
     public function draftOrder(): BelongsTo
     {
         return $this->belongsTo(DraftOrder::class);
+    }
+
+    public function promoCode(): BelongsTo
+    {
+        return $this->belongsTo(PromoCode::class);
     }
 
     public function shipments(): HasMany

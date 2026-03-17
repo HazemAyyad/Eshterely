@@ -37,7 +37,7 @@ class PaymentCheckoutController extends Controller
             'order_id' => $order->id,
             'payment_id' => $payment->id,
             'reference' => $payment->reference,
-            'amount' => (float) $order->total_amount,
+            'amount' => (float) (((float) ($order->amount_due_now ?? 0) > 0) ? $order->amount_due_now : ($order->order_total_snapshot ?? $order->total_amount)),
             'currency' => $order->currency ?? 'USD',
         ];
 

@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\Config\ShippingCarrierZonesController;
 use App\Http\Controllers\Admin\Config\ShippingCarrierRatesController;
 use App\Http\Controllers\Admin\Config\MarketCountriesController;
 use App\Http\Controllers\Admin\Config\OnboardingController;
+use App\Http\Controllers\Admin\Config\PromoCodesController;
 use App\Http\Controllers\Admin\Config\PromoBannersController;
 use App\Http\Controllers\Admin\Config\SplashConfigController;
 use App\Http\Controllers\Admin\Config\ThemeConfigController;
@@ -49,6 +50,8 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
         Route::resource('featured-stores', FeaturedStoresController::class)->except(['show'])->names('featured-stores');
         Route::get('promo-banners/data', [PromoBannersController::class, 'data'])->name('promo-banners.data');
         Route::resource('promo-banners', PromoBannersController::class)->except(['show'])->names('promo-banners');
+        Route::get('promo-codes/data', [PromoCodesController::class, 'data'])->name('promo-codes.data');
+        Route::resource('promo-codes', PromoCodesController::class)->except(['show'])->names('promo-codes');
         Route::get('warehouses/data', [WarehousesController::class, 'data'])->name('warehouses.data');
         Route::resource('warehouses', WarehousesController::class)->except(['show'])->names('warehouses');
         Route::get('app-config', [AppConfigController::class, 'edit'])->name('app-config');

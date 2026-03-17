@@ -10,6 +10,8 @@ use App\Models\ImportedProduct;
 use App\Models\NotificationDispatch;
 use App\Models\Order;
 use App\Models\OrderShipment;
+use App\Models\PromoCode;
+use App\Models\PromoRedemption;
 use App\Models\Payment;
 use Illuminate\Support\Carbon;
 
@@ -54,6 +56,10 @@ class AdminDashboardMetricsService
             'failed_payments' => Payment::where('status', PaymentStatus::Failed)->count(),
             'successful_notifications' => NotificationDispatch::where('send_status', NotificationDispatch::STATUS_SENT)->count(),
             'failed_notifications' => NotificationDispatch::where('send_status', NotificationDispatch::STATUS_FAILED)->count(),
+            'promo_codes_total' => PromoCode::count(),
+            'promo_codes_active' => PromoCode::where('is_active', true)->count(),
+            'promo_redemptions' => PromoRedemption::where('status', 'applied')->count(),
+            'promo_discount_total' => PromoRedemption::where('status', 'applied')->sum('discount_amount'),
         ];
     }
 

@@ -37,7 +37,9 @@ class SquareService
         }
 
         $currency = $order->currency ?? 'USD';
-        $amount = $order->order_total_snapshot ?? $order->total_amount;
+        $amount = ((float) ($order->amount_due_now ?? 0) > 0)
+            ? $order->amount_due_now
+            : ($order->order_total_snapshot ?? $order->total_amount);
         $amountMinor = (int) round((float) $amount * 100);
 
         $money = new Money();

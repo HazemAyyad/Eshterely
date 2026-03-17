@@ -57,6 +57,10 @@ class OrderController extends Controller
             'total' => (float) $o->total_amount,
             'currency' => $o->currency ?? 'USD',
             'total_amount' => '$' . number_format($o->total_amount, 2),
+            'promo_code' => $o->promo_code,
+            'promo_discount_amount' => $o->promo_discount_amount !== null ? (float) $o->promo_discount_amount : null,
+            'wallet_applied_amount' => $o->wallet_applied_amount !== null ? (float) $o->wallet_applied_amount : null,
+            'amount_due_now' => $o->amount_due_now !== null ? (float) $o->amount_due_now : null,
             'estimated' => (bool) $o->estimated,
             'needs_review' => (bool) $o->needs_review,
             'refund_status' => $o->refund_status,
@@ -65,6 +69,17 @@ class OrderController extends Controller
         ];
 
         if ($detailed) {
+            $priceLines = DB::table('order_price_lines')
+                ->where('order_id', $o->id)
+                ->orderBy('id')
+                ->get()
+                ->map(fn ($line) => [
+                    'label' => $line->label,
+                    'amount' => $line->amount,
+                    'is_discount' => (bool) $line->is_discount,
+                ])
+                ->toArray();
+
             $base['shipments'] = $o->shipments->map(fn ($s) => [
                 'id' => (string) $s->id,
                 'country_code' => $s->country_code,
@@ -120,6 +135,7 @@ class OrderController extends Controller
                 'shipping_fee' => $s->shipping_fee ? '$' . number_format($s->shipping_fee, 2) : null,
                 'customs_duties' => $s->customs_duties ? '$' . number_format($s->customs_duties, 2) : null,
             ])->toArray();
+            $base['price_lines'] = $priceLines;
         }
 
         return $base;

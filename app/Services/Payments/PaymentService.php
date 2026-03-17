@@ -26,7 +26,9 @@ class PaymentService
     {
         $reference = $this->referenceGenerator->generate();
         $currency = $order->currency ?? 'USD';
-        $amount = $order->order_total_snapshot ?? $order->total_amount;
+        $amount = ((float) ($order->amount_due_now ?? 0) > 0)
+            ? $order->amount_due_now
+            : ($order->order_total_snapshot ?? $order->total_amount);
 
         $idempotencyKey = $context['idempotency_key'] ?? $reference;
 

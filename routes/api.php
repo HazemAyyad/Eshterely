@@ -98,6 +98,7 @@ Route::middleware('auth:sanctum')->get('payments/{payment}', [PaymentController:
 Route::middleware('auth:sanctum')->prefix('checkout')->group(function () {
     Route::get('review', [CheckoutController::class, 'review']);
     Route::post('confirm', [CheckoutController::class, 'confirm']);
+    Route::post('promo/validate', [CheckoutController::class, 'validatePromo']);
 });
 
 // Wallet (auth required)
