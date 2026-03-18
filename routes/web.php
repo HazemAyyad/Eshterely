@@ -28,3 +28,17 @@ Route::get('/storage-link', function () {
         'output' => trim($output),
     ], 200, [], JSON_UNESCAPED_UNICODE);
 })->name('storage.link');
+
+// Stripe hosted checkout redirect pages (used by Stripe Checkout).
+// Mobile mainly relies on webhooks + refresh, but Stripe requires valid URLs.
+Route::get('/payment/stripe/success', function () {
+    return response()->json([
+        'message' => 'Stripe payment success',
+    ]);
+});
+
+Route::get('/payment/stripe/cancel', function () {
+    return response()->json([
+        'message' => 'Stripe payment cancelled',
+    ]);
+});

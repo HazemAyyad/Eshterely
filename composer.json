@@ -13,6 +13,7 @@
         "laravel/tinker": "^2.10.1",
         "openai-php/laravel": "^0.19.0",
         "square/square": "^45.0",
+        "stripe/stripe-php": "^19.4",
         "symfony/css-selector": "^7.4",
         "symfony/dom-crawler": "^7.4",
         "yajra/laravel-datatables-oracle": "^12.7"

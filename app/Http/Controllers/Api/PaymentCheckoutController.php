@@ -6,8 +6,8 @@ use App\Enums\Payment\PaymentStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CheckoutSessionResource;
 use App\Models\Order;
+use App\Services\Payments\PaymentGatewayManager;
 use App\Services\Payments\PaymentService;
-use App\Services\Payments\SquareService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -15,7 +15,7 @@ class PaymentCheckoutController extends Controller
 {
     /**
      * POST /api/orders/{order}/pay
-     * Create a pending payment and Square checkout session; return checkout URL for the app.
+     * Create a pending payment and hosted checkout session; return checkout URL for the app.
      */
     public function __invoke(Request $request, Order $order): CheckoutSessionResource|JsonResponse
     {
@@ -31,7 +31,23 @@ class PaymentCheckoutController extends Controller
         }
 
         $paymentService = app(PaymentService::class);
-        $payment = $paymentService->createPendingPaymentForOrder($order, ['provider' => 'square']);
+
+        $requestedGateway = $request->input('gateway');
+        $gatewayManager = app(PaymentGatewayManager::class);
+        try {
+            $gateway = is_string($requestedGateway) && trim($requestedGateway) !== ''
+                ? $gatewayManager->resolve($requestedGateway)
+                : $gatewayManager->resolveDefault();
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'message' => 'Payment gateway unavailable.',
+                'error_key' => 'gateway_unavailable',
+                'errors' => [],
+                'status' => 422,
+            ], 422);
+        }
+
+        $payment = $paymentService->createPendingPaymentForOrder($order, ['provider' => $gateway->gatewayCode()]);
 
         $requestPayload = [
             'order_id' => $order->id,
@@ -44,8 +60,7 @@ class PaymentCheckoutController extends Controller
         $attempt = $paymentService->createAttempt($payment, $requestPayload);
 
         try {
-            $squareService = app(SquareService::class);
-            $result = $squareService->createCheckoutSession($payment, $order);
+            $result = $gateway->createOrderCheckoutSession($payment, $order);
         } catch (\Throwable $e) {
             $paymentService->updateAttemptWithResponse($attempt, [
                 'error' => $e->getMessage(),
@@ -55,12 +70,16 @@ class PaymentCheckoutController extends Controller
 
         $paymentService->updateAttemptWithResponse($attempt, [
             'checkout_url' => $result['checkout_url'],
-            'square_order_id' => $result['square_order_id'],
-            'square_payment_id' => $result['square_payment_id'],
+            'provider' => $result['provider'],
+            'provider_order_id' => $result['provider_order_id'],
+            'provider_payment_id' => $result['provider_payment_id'],
         ], 'success');
 
-        if ($result['square_order_id']) {
-            $payment->update(['provider_order_id' => $result['square_order_id']]);
+        if (! empty($result['provider_order_id'])) {
+            $payment->update(['provider_order_id' => $result['provider_order_id']]);
+        }
+        if (! empty($result['provider_payment_id'])) {
+            $payment->update(['provider_payment_id' => $result['provider_payment_id']]);
         }
 
         return new CheckoutSessionResource([

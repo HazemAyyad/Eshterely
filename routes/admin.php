@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\Config\MarketCountriesController;
 use App\Http\Controllers\Admin\Config\OnboardingController;
 use App\Http\Controllers\Admin\Config\PromoCodesController;
 use App\Http\Controllers\Admin\Config\PromoBannersController;
+use App\Http\Controllers\Admin\Config\PaymentGatewaysController;
 use App\Http\Controllers\Admin\Config\SplashConfigController;
 use App\Http\Controllers\Admin\Config\ThemeConfigController;
 use App\Http\Controllers\Admin\Config\WarehousesController;
@@ -56,6 +57,10 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
         Route::resource('warehouses', WarehousesController::class)->except(['show'])->names('warehouses');
         Route::get('app-config', [AppConfigController::class, 'edit'])->name('app-config');
         Route::patch('app-config', [AppConfigController::class, 'update']);
+
+        Route::get('payment-gateways', [PaymentGatewaysController::class, 'edit'])->name('payment-gateways.edit');
+        Route::patch('payment-gateways', [PaymentGatewaysController::class, 'update'])->name('payment-gateways.update');
+
         Route::get('shipping-settings', [ShippingSettingsController::class, 'edit'])->name('shipping-settings.edit');
         Route::patch('shipping-settings', [ShippingSettingsController::class, 'update'])->name('shipping-settings.update');
         Route::resource('shipping-zones', ShippingCarrierZonesController::class)

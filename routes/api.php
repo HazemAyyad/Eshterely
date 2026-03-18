@@ -23,6 +23,8 @@ use App\Http\Controllers\Api\SessionsController;
 use App\Http\Controllers\Api\SupportController;
 use App\Http\Controllers\Api\WalletController;
 use App\Http\Controllers\Api\WarehousesController;
+use App\Http\Controllers\Webhooks\SquareWebhookController;
+use App\Http\Controllers\Webhooks\StripeWebhookController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -32,6 +34,10 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 
 // Config (public)
 Route::get('config/bootstrap', [ConfigController::class, 'bootstrap']);
+
+// Webhooks (public)
+Route::post('webhooks/square', SquareWebhookController::class)->name('api.webhooks.square');
+Route::post('webhooks/stripe', StripeWebhookController::class)->name('api.webhooks.stripe');
 
 // Countries & Cities (public for address forms)
 Route::get('countries', CountriesController::class);

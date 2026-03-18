@@ -54,6 +54,64 @@ class ConfigController extends Controller
             }
         }
 
+        $paymentGateways = [
+            'default' => 'square',
+            'enabled' => ['square'],
+            'providers' => [
+                'square' => [
+                    'enabled' => true,
+                    'environment' => 'sandbox',
+                    'supports_web_checkout' => true,
+                ],
+                'stripe' => [
+                    'enabled' => false,
+                    'environment' => 'test',
+                    'supports_web_checkout' => true,
+                ],
+            ],
+        ];
+
+        if (Schema::hasTable('payment_gateway_settings')) {
+            $pg = DB::table('payment_gateway_settings')->first();
+            if ($pg) {
+                $enabled = [];
+                if ((bool) ($pg->square_enabled ?? true)) {
+                    $enabled[] = 'square';
+                }
+                if ((bool) ($pg->stripe_enabled ?? false)) {
+                    $enabled[] = 'stripe';
+                }
+                if ($enabled === []) {
+                    $enabled = ['square'];
+                }
+
+                $default = is_string($pg->default_gateway ?? null) ? (string) $pg->default_gateway : 'square';
+                if (! in_array($default, $enabled, true)) {
+                    $default = $enabled[0];
+                }
+
+                $paymentGateways = [
+                    'default' => $default,
+                    'enabled' => $enabled,
+                    'providers' => [
+                        'square' => [
+                            'enabled' => in_array('square', $enabled, true),
+                            'environment' => (string) ($pg->square_environment ?? 'sandbox'),
+                            'supports_web_checkout' => true,
+                        ],
+                        'stripe' => [
+                            'enabled' => in_array('stripe', $enabled, true),
+                            'environment' => (string) ($pg->stripe_environment ?? 'test'),
+                            'publishable_key' => !empty($pg->stripe_publishable_key)
+                                ? (string) $pg->stripe_publishable_key
+                                : (config('stripe.publishable_key') ?: ''),
+                            'supports_web_checkout' => true,
+                        ],
+                    ],
+                ];
+            }
+        }
+
         return response()->json([
             'theme' => [
                 'primary_color' => $theme->primary_color ?? '1E66F5',
@@ -126,6 +184,7 @@ class ConfigController extends Controller
             'development_mode' => $developmentMode,
             'app_name' => $appName,
             'app_icon_url' => $appIconUrl,
+            'payment_gateways' => $paymentGateways,
         ]);
     }
 }

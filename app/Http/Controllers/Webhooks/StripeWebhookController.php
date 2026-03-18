@@ -7,18 +7,19 @@ use App\Services\Payments\PaymentGatewayManager;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
-class SquareWebhookController extends Controller
+class StripeWebhookController extends Controller
 {
     public function __construct(
         protected PaymentGatewayManager $gatewayManager
     ) {}
 
     /**
-     * POST /webhooks/square — handle Square event notifications.
+     * POST /api/webhooks/stripe — handle Stripe event notifications.
      */
     public function __invoke(Request $request): Response
     {
-        $gateway = $this->gatewayManager->resolve('square');
+        $gateway = $this->gatewayManager->resolve('stripe');
         return $gateway->handleWebhook($request);
     }
 }
+

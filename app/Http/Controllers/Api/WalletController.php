@@ -5,8 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Wallet;
 use App\Models\WalletTopUpPayment;
-use App\Services\Payments\SquareService;
 use App\Services\Payments\PaymentReferenceGenerator;
+use App\Services\Payments\PaymentGatewayManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -69,14 +69,17 @@ class WalletController extends Controller
         $amount = round((float) $validated['amount'], 2);
         $currency = 'USD';
 
-        $topUp = DB::transaction(function () use ($request, $wallet, $amount, $currency, $validated) {
+        $gatewayManager = app(PaymentGatewayManager::class);
+        $gateway = $gatewayManager->resolveDefault();
+
+        $topUp = DB::transaction(function () use ($request, $wallet, $amount, $currency, $validated, $gateway): WalletTopUpPayment {
             $reference = app(PaymentReferenceGenerator::class)->generate();
             $idempotencyKey = $reference;
 
             return WalletTopUpPayment::create([
                 'user_id' => $request->user()->id,
                 'wallet_id' => $wallet->id,
-                'provider' => 'square',
+                'provider' => $gateway->gatewayCode(),
                 'currency' => $currency,
                 'amount' => $amount,
                 'status' => 'pending',
@@ -88,11 +91,13 @@ class WalletController extends Controller
             ]);
         });
 
-        $square = app(SquareService::class);
-        $session = $square->createWalletTopUpCheckoutSession($topUp);
+        $session = $gateway->createWalletTopUpCheckoutSession($topUp);
 
-        if (! empty($session['square_order_id'])) {
-            $topUp->update(['provider_order_id' => $session['square_order_id']]);
+        if (! empty($session['provider_order_id'])) {
+            $topUp->update(['provider_order_id' => $session['provider_order_id']]);
+        }
+        if (! empty($session['provider_payment_id'])) {
+            $topUp->update(['provider_payment_id' => $session['provider_payment_id']]);
         }
 
         return response()->json([

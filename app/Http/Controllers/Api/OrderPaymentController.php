@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\PaymentLaunchResource;
 use App\Models\Order;
 use App\Services\Payments\PaymentEligibilityService;
+use App\Services\Payments\PaymentGatewayManager;
 use App\Services\Payments\PaymentService;
-use App\Services\Payments\SquareService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -20,7 +20,7 @@ class OrderPaymentController extends Controller
     public function __construct(
         protected PaymentEligibilityService $eligibilityService,
         protected PaymentService $paymentService,
-        protected SquareService $squareService
+        protected PaymentGatewayManager $gatewayManager
     ) {}
 
     /**
@@ -44,7 +44,21 @@ class OrderPaymentController extends Controller
             ], 422);
         }
 
-        $payment = $this->paymentService->createPendingPaymentForOrder($order, ['provider' => 'square']);
+        $requestedGateway = $request->input('gateway');
+        try {
+            $gateway = is_string($requestedGateway) && trim($requestedGateway) !== ''
+                ? $this->gatewayManager->resolve($requestedGateway)
+                : $this->gatewayManager->resolveDefault();
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'message' => 'Payment gateway unavailable.',
+                'error_key' => 'gateway_unavailable',
+                'errors' => [],
+                'status' => 422,
+            ], 422);
+        }
+
+        $payment = $this->paymentService->createPendingPaymentForOrder($order, ['provider' => $gateway->gatewayCode()]);
 
         $attempt = $this->paymentService->createAttempt($payment, [
             'order_id' => $order->id,
@@ -55,7 +69,7 @@ class OrderPaymentController extends Controller
         ]);
 
         try {
-            $sessionResult = $this->squareService->createCheckoutSession($payment, $order);
+            $sessionResult = $gateway->createOrderCheckoutSession($payment, $order);
         } catch (\Throwable $e) {
             $this->paymentService->updateAttemptWithResponse($attempt, [
                 'error' => $e->getMessage(),
@@ -65,12 +79,16 @@ class OrderPaymentController extends Controller
 
         $this->paymentService->updateAttemptWithResponse($attempt, [
             'checkout_url' => $sessionResult['checkout_url'],
-            'square_order_id' => $sessionResult['square_order_id'],
-            'square_payment_id' => $sessionResult['square_payment_id'],
+            'provider' => $sessionResult['provider'],
+            'provider_order_id' => $sessionResult['provider_order_id'],
+            'provider_payment_id' => $sessionResult['provider_payment_id'],
         ], 'success');
 
-        if (! empty($sessionResult['square_order_id'])) {
-            $payment->update(['provider_order_id' => $sessionResult['square_order_id']]);
+        if (! empty($sessionResult['provider_order_id'])) {
+            $payment->update(['provider_order_id' => $sessionResult['provider_order_id']]);
+        }
+        if (! empty($sessionResult['provider_payment_id'])) {
+            $payment->update(['provider_payment_id' => $sessionResult['provider_payment_id']]);
         }
 
         return new PaymentLaunchResource([
