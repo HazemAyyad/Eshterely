@@ -58,6 +58,9 @@ class OrderController extends Controller
             'total' => (float) $o->total_amount,
             'currency' => $o->currency ?? 'USD',
             'total_amount' => '$' . number_format($o->total_amount, 2),
+            'consolidation_savings' => $o->consolidation_savings !== null
+                ? '$' . number_format((float) $o->consolidation_savings, 2)
+                : null,
             'promo_code' => $o->promo_code,
             'promo_discount_amount' => $o->promo_discount_amount !== null ? (float) $o->promo_discount_amount : null,
             'wallet_applied_amount' => $o->wallet_applied_amount !== null ? (float) $o->wallet_applied_amount : null,
@@ -163,12 +166,22 @@ class OrderController extends Controller
 
     private function orderPaymentStatus(Order $o): string
     {
+        // Payment is the source of truth: if we have a paid payment record,
+        // treat payment as paid even if the order status has moved on (e.g. shipped/in-transit).
+        if ($o->relationLoaded('payments')) {
+            if ($o->payments->contains(fn ($p) => $p->status->value === 'paid')) {
+                return 'paid';
+            }
+        }
+
         if ($o->status === Order::STATUS_PAID) {
             return 'paid';
         }
-        if ($o->status === Order::STATUS_PENDING_PAYMENT && $o->relationLoaded('payments')) {
-            return $o->payments->contains(fn ($p) => $p->status->value === 'paid') ? 'paid' : 'pending_payment';
+
+        if ($o->status === Order::STATUS_PENDING_PAYMENT) {
+            return 'pending_payment';
         }
+
         return $o->status;
     }
 

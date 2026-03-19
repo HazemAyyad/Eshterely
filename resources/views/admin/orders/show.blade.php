@@ -133,7 +133,7 @@
                     <textarea name="body" class="form-control form-control-sm mb-2" rows="2" placeholder="{{ __('admin.body') }}" maxlength="1000"></textarea>
                     <input type="hidden" name="target_type" value="order">
                     <input type="hidden" name="target_id" value="{{ $order->id }}">
-                    <input type="hidden" name="route_key" value="order_detail">
+                    <input type="hidden" name="route_key" value="order_details">
                     <button type="submit" class="btn btn-sm btn-primary">{{ __('admin.send') }}</button>
                 </form>
             </div>

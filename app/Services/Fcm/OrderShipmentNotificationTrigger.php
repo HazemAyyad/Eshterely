@@ -5,6 +5,7 @@ namespace App\Services\Fcm;
 use App\Models\Order;
 use App\Models\OrderShipment;
 use App\Models\Payment;
+use App\Models\Notification;
 use App\Services\Fcm\FcmNotificationService;
 
 /**
@@ -72,6 +73,19 @@ class OrderShipmentNotificationTrigger
         }
         $title = __('notifications.payment_success_title', [], 'en');
         $body = __('notifications.payment_success_body', ['order_number' => $order->order_number ?? $order->id], 'en');
+
+        // B: persist in-app notification (so /notifications shows it).
+        Notification::create([
+            'user_id' => $user->id,
+            'type' => 'payments',
+            'title' => $title,
+            'subtitle' => $body,
+            'read' => false,
+            'important' => true,
+            'action_label' => 'View Details',
+            'action_route' => '/order-detail/' . (string) $order->id,
+        ]);
+
         $this->dispatchService->sendSystemEvent(
             $title,
             $body,
@@ -107,6 +121,19 @@ class OrderShipmentNotificationTrigger
         }
         $title = __('notifications.payment_failed_title', [], 'en');
         $body = __('notifications.payment_failed_body', ['order_number' => $order->order_number ?? $order->id], 'en');
+
+        // B: persist in-app notification (so /notifications shows it).
+        Notification::create([
+            'user_id' => $user->id,
+            'type' => 'payments',
+            'title' => $title,
+            'subtitle' => $body,
+            'read' => false,
+            'important' => true,
+            'action_label' => 'View Details',
+            'action_route' => '/order-detail/' . (string) $order->id,
+        ]);
+
         $this->dispatchService->sendSystemEvent(
             $title,
             $body,
@@ -188,6 +215,19 @@ class OrderShipmentNotificationTrigger
         if ($user === null) {
             return;
         }
+
+        // B: persist in-app notification (so /notifications shows it).
+        Notification::create([
+            'user_id' => $user->id,
+            'type' => 'orders',
+            'title' => $title,
+            'subtitle' => $body,
+            'read' => false,
+            'important' => in_array($status, [Order::STATUS_DELIVERED, Order::STATUS_CANCELLED], true),
+            'action_label' => 'View Details',
+            'action_route' => '/order-detail/' . (string) $order->id,
+        ]);
+
         $this->dispatchService->sendSystemEvent(
             $title,
             $body,
@@ -226,6 +266,19 @@ class OrderShipmentNotificationTrigger
             'order_number' => $order->order_number ?? $order->id,
             'tracking' => $shipment->tracking_number ?? '',
         ], 'en');
+
+        // B: persist in-app notification (so /notifications shows it).
+        Notification::create([
+            'user_id' => $user->id,
+            'type' => 'shipments',
+            'title' => $title,
+            'subtitle' => $body,
+            'read' => false,
+            'important' => false,
+            'action_label' => 'Track Order',
+            'action_route' => '/order-tracking/' . (string) $order->id,
+        ]);
+
         $this->dispatchService->sendSystemEvent(
             $title,
             $body,
@@ -261,6 +314,19 @@ class OrderShipmentNotificationTrigger
         }
         $title = __('notifications.shipment_delivered_title', [], 'en');
         $body = __('notifications.shipment_delivered_body', ['order_number' => $order->order_number ?? $order->id], 'en');
+
+        // B: persist in-app notification (so /notifications shows it).
+        Notification::create([
+            'user_id' => $user->id,
+            'type' => 'shipments',
+            'title' => $title,
+            'subtitle' => $body,
+            'read' => false,
+            'important' => true,
+            'action_label' => 'Track Order',
+            'action_route' => '/order-tracking/' . (string) $order->id,
+        ]);
+
         $this->dispatchService->sendSystemEvent(
             $title,
             $body,

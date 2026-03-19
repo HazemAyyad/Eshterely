@@ -139,6 +139,12 @@ class FcmNotificationService
         $message = CloudMessage::new()
             ->withNotification($notification);
 
+        // Make the image URL available in foreground handlers (message.data),
+        // not only in the notification payload.
+        if ($imageUrl !== null && trim($imageUrl) !== '') {
+            $data = array_merge($data ?? [], ['image_url' => $imageUrl]);
+        }
+
         if ($data !== null && $data !== []) {
             $message = $message->withData($data);
         }

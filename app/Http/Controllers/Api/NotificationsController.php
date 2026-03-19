@@ -25,6 +25,7 @@ class NotificationsController extends Controller
             'type' => $n->type,
             'title' => $n->title,
             'subtitle' => $n->subtitle,
+            'image_url' => $n->image_url,
             'time_ago' => $n->created_at->diffForHumans(),
             'read' => $n->read,
             'important' => $n->important,

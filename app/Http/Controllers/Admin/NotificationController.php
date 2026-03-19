@@ -99,6 +99,7 @@ class NotificationController extends Controller
                     'type' => $type,
                     'title' => $validated['title'],
                     'subtitle' => $validated['subtitle'] ?? null,
+                    'image_url' => $imageUrl,
                     'read' => false,
                     'important' => $important,
                     'action_label' => $actionLabel,
