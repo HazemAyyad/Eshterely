@@ -47,6 +47,7 @@ class UserController extends Controller
                     ->orderByDesc('id');
             },
         ])->findOrFail($user);
+        $resolvedAvatarUrl = $this->resolveAvatarUrl($userModel->avatar_url);
 
         $settings = DB::table('user_settings')->where('user_id', $userModel->id)->first();
         $notificationPrefs = DB::table('notification_prefs')->where('user_id', $userModel->id)->first();
@@ -177,6 +178,7 @@ class UserController extends Controller
 
         return view('admin.users.show', [
             'user' => $userModel,
+            'resolvedAvatarUrl' => $resolvedAvatarUrl,
             'settings' => $settings,
             'notificationPrefs' => $notificationPrefs,
             'sessions' => $sessions,
@@ -260,5 +262,24 @@ class UserController extends Controller
         $w = trim((string) $warehouseId);
 
         return $w === '' ? null : $w;
+    }
+
+    private function resolveAvatarUrl(?string $path): ?string
+    {
+        $value = trim((string) $path);
+        if ($value === '') {
+            return null;
+        }
+        if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
+            return $value;
+        }
+        if (str_starts_with($value, '/storage/')) {
+            return url($value);
+        }
+        if (str_starts_with($value, 'storage/')) {
+            return url('/' . $value);
+        }
+
+        return asset('storage/' . ltrim($value, '/'));
     }
 }

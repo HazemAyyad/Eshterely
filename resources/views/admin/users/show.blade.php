@@ -15,8 +15,8 @@
             <div class="card-body pt-4">
                 <div class="user-avatar-section">
                     <div class="d-flex align-items-center flex-column">
-                        @if($user->avatar_url ?? null)
-                            <img class="img-fluid rounded mb-3" src="{{ $user->avatar_url }}" height="120" width="120" alt="User avatar" />
+                        @if($resolvedAvatarUrl)
+                            <img class="img-fluid rounded mb-3" src="{{ $resolvedAvatarUrl }}" height="120" width="120" alt="User avatar" />
                         @else
                             <div class="avatar avatar-xl mb-3">
                                 <span class="avatar-initial rounded-circle bg-label-primary">
