@@ -226,6 +226,49 @@ class UserController extends Controller
             ->with('success', __('admin.user_password_updated'));
     }
 
+    public function addWalletCredit(Request $request, int $user): JsonResponse|RedirectResponse
+    {
+        $userModel = User::query()->findOrFail($user);
+        $validated = $request->validate([
+            'amount' => 'required|numeric|min:0.01',
+            'note' => 'nullable|string|max:255',
+        ]);
+
+        $amount = round((float) $validated['amount'], 2);
+        $note = trim((string) ($validated['note'] ?? ''));
+        $adminId = auth('admin')->id();
+
+        DB::transaction(function () use ($userModel, $amount, $note, $adminId): void {
+            $wallet = Wallet::firstOrCreate(
+                ['user_id' => $userModel->id],
+                ['available_balance' => 0, 'pending_balance' => 0, 'promo_balance' => 0]
+            );
+
+            $wallet->available_balance = round((float) $wallet->available_balance + $amount, 2);
+            $wallet->save();
+
+            $wallet->transactions()->create([
+                'type' => 'admin_credit',
+                'title' => __('admin.admin_wallet_credit_title'),
+                'amount' => $amount,
+                'subtitle' => $note !== '' ? $note : __('admin.admin_wallet_credit_subtitle'),
+                'reference_type' => 'admin_adjustment',
+                'reference_id' => $adminId,
+            ]);
+        });
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => __('admin.admin_wallet_credit_success'),
+            ]);
+        }
+
+        return redirect()
+            ->route('admin.users.show', $userModel)
+            ->with('success', __('admin.admin_wallet_credit_success'));
+    }
+
     private function normalizeLanguageCode(?string $code): string
     {
         $c = strtolower(trim((string) $code));

@@ -462,6 +462,22 @@
                 <div class="card border-0 shadow-sm mb-4">
                     <h5 class="card-header">{{ __('admin.wallet_summary') }}</h5>
                     <div class="card-body">
+                        <form method="POST" action="{{ route('admin.users.wallet-credit', $user) }}" class="ajax-submit-form mb-4">
+                            @csrf
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <input type="number" name="amount" step="0.01" min="0.01" class="form-control" placeholder="{{ __('admin.amount') }}" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <input type="text" name="note" class="form-control" maxlength="255" placeholder="{{ __('admin.admin_wallet_credit_note_placeholder') }}">
+                                </div>
+                                <div class="col-md-2">
+                                    <button type="submit" class="btn btn-primary w-100">{{ __('admin.admin_wallet_credit_cta') }}</button>
+                                </div>
+                            </div>
+                            <div class="form-text mt-1">{{ __('admin.admin_wallet_credit_help') }}</div>
+                        </form>
+
                         @if($wallet)
                             <div class="row g-3">
                                 <div class="col-md-4">

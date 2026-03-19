@@ -74,6 +74,7 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
     // Users
     Route::get('users/data', [UserController::class, 'data'])->name('users.data');
     Route::patch('users/{user}/password', [UserController::class, 'updatePassword'])->name('users.update-password');
+    Route::post('users/{user}/wallet-credit', [UserController::class, 'addWalletCredit'])->name('users.wallet-credit');
     Route::resource('users', UserController::class)->only(['index', 'show'])->names('users');
 
     // Orders
