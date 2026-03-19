@@ -131,6 +131,8 @@ Route::middleware('auth:sanctum')->prefix('support')->group(function () {
 Route::middleware('auth:sanctum')->prefix('notifications')->group(function () {
     Route::get('/', [NotificationsController::class, 'index']);
     Route::patch('{id}/read', [NotificationsController::class, 'markRead']);
+    Route::patch('mark-all-read', [NotificationsController::class, 'markAllRead']);
+    Route::delete('{id}', [NotificationsController::class, 'destroy']);
 });
 
 // Warehouses (public)

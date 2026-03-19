@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\UserDeviceToken;
 use Illuminate\Support\Facades\Log;
 use Kreait\Firebase\Contract\Messaging;
+use Kreait\Firebase\Messaging\AndroidConfig;
 use Kreait\Firebase\Messaging\CloudMessage;
 use Kreait\Firebase\Messaging\MulticastSendReport;
 use Kreait\Firebase\Messaging\Notification;
@@ -136,8 +137,20 @@ class FcmNotificationService
 
         $messaging = app(Messaging::class);
         $notification = Notification::create($title, $body, $imageUrl);
+        $androidConfig = AndroidConfig::fromArray([
+            'priority' => 'high',
+            'notification' => [
+                'channel_id' => 'fcm_high_importance_v2',
+                'sound' => 'default',
+                'default_sound' => true,
+                'default_vibrate_timings' => true,
+                'visibility' => 'PUBLIC',
+                'notification_priority' => 'PRIORITY_MAX',
+            ],
+        ]);
         $message = CloudMessage::new()
-            ->withNotification($notification);
+            ->withNotification($notification)
+            ->withAndroidConfig($androidConfig);
 
         // Make the image URL available in foreground handlers (message.data),
         // not only in the notification payload.
