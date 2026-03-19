@@ -20,7 +20,7 @@
                         @else
                             <div class="avatar avatar-xl mb-3">
                                 <span class="avatar-initial rounded-circle bg-label-primary">
-                                    {{ strtoupper(mb_substr($user->display_name ?? $user->full_name ?? $user->name ?? 'U', 1)) }}
+                                    {{ strtoupper(mb_substr($user->display_name ?? $user->full_name ?? $user->name ?? 'U', 0, 1)) }}
                                 </span>
                             </div>
                         @endif
@@ -97,6 +97,16 @@
                     <input type="hidden" name="target_id" value="{{ $user->id }}">
                     <button type="submit" class="btn btn-sm btn-primary">Send</button>
                 </form>
+
+                <hr class="my-4">
+                <h6 class="mb-2">{{ __('admin.change_password') }}</h6>
+                <form method="POST" action="{{ route('admin.users.update-password', $user) }}" class="ajax-submit-form">
+                    @method('PATCH')
+                    @csrf
+                    <input type="password" name="password" class="form-control form-control-sm mb-2" placeholder="{{ __('admin.new_password') }}" minlength="8" required>
+                    <input type="password" name="password_confirmation" class="form-control form-control-sm mb-2" placeholder="{{ __('admin.confirm_password') }}" minlength="8" required>
+                    <button type="submit" class="btn btn-sm btn-warning">{{ __('admin.update_password') }}</button>
+                </form>
             </div>
         </div>
         <!-- /User Card -->
@@ -109,23 +119,27 @@
                 <ul class="list-unstyled mb-0">
                     <li class="mb-2">
                         <span class="h6">{{ __('admin.language') }}:</span>
-                        <span>{{ $settings->language_code ?? '-' }}</span>
+                        <span>{{ $displaySettings['language_code'] ?? '-' }} ({{ $displaySettings['language_label'] ?? '-' }})</span>
                     </li>
                     <li class="mb-2">
                         <span class="h6">{{ __('admin.currency') }}:</span>
-                        <span>{{ $settings->currency_code ?? '-' }}</span>
+                        <span>{{ $displaySettings['currency_code'] ?? '-' }}{{ !empty($displaySettings['currency_symbol']) ? " ({$displaySettings['currency_symbol']})" : '' }}</span>
                     </li>
                     <li class="mb-2">
                         <span class="h6">{{ __('admin.default_warehouse') }}:</span>
-                        <span>{{ $settings->default_warehouse_label ?? '-' }}</span>
+                        <span>{{ $displaySettings['default_warehouse_label'] ?? '-' }}</span>
+                    </li>
+                    <li class="mb-2">
+                        <span class="h6">{{ __('admin.server_region') }}:</span>
+                        <span>{{ $displaySettings['server_region'] ?? '-' }}</span>
                     </li>
                     <li class="mb-2">
                         <span class="h6">{{ __('admin.smart_consolidation') }}:</span>
-                        <span>{{ ($settings->smart_consolidation_enabled ?? false) ? __('admin.yes') : __('admin.no') }}</span>
+                        <span>{{ ($displaySettings['smart_consolidation_enabled'] ?? false) ? __('admin.yes') : __('admin.no') }}</span>
                     </li>
                     <li class="mb-2">
                         <span class="h6">{{ __('admin.auto_insurance') }}:</span>
-                        <span>{{ ($settings->auto_insurance_enabled ?? false) ? __('admin.yes') : __('admin.no') }}</span>
+                        <span>{{ ($displaySettings['auto_insurance_enabled'] ?? false) ? __('admin.yes') : __('admin.no') }}</span>
                     </li>
                 </ul>
             </div>
@@ -148,6 +162,16 @@
                 <li class="nav-item">
                     <button type="button" class="nav-link" role="tab" data-bs-toggle="tab" data-bs-target="#tab-sessions" aria-controls="tab-sessions" aria-selected="false">
                         <i class="icon-base ti tabler-device-desktop icon-sm me-1_5"></i>{{ __('admin.sessions') }}
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button type="button" class="nav-link" role="tab" data-bs-toggle="tab" data-bs-target="#tab-notifications" aria-controls="tab-notifications" aria-selected="false">
+                        <i class="icon-base ti tabler-bell icon-sm me-1_5"></i>{{ __('admin.notifications') }}
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button type="button" class="nav-link" role="tab" data-bs-toggle="tab" data-bs-target="#tab-cart" aria-controls="tab-cart" aria-selected="false">
+                        <i class="icon-base ti tabler-shopping-cart-plus icon-sm me-1_5"></i>{{ __('admin.cart_review') }}
                     </button>
                 </li>
                     <li class="nav-item">
@@ -238,9 +262,19 @@
                                 @if($sessions && $sessions->isNotEmpty())
                                     @foreach($sessions as $s)
                                     <tr>
-                                        <td>{{ $s->device_name ?? '-' }}</td>
+                                        <td>
+                                            <div class="fw-medium">{{ $s->device_name ?? '-' }}</div>
+                                            <div class="text-body-secondary small">{{ $s->client_info ?? '-' }}</div>
+                                        </td>
                                         <td>{{ $s->location ?? '-' }}</td>
-                                        <td>{{ $s->last_active_at ? \Carbon\Carbon::parse($s->last_active_at)->diffForHumans() : '-' }}</td>
+                                        <td>
+                                            <div>{{ $s->last_active_at ? \Carbon\Carbon::parse($s->last_active_at)->diffForHumans() : '-' }}</div>
+                                            <div class="text-body-secondary small">
+                                                @if($s->is_current ?? false)
+                                                    <span class="badge bg-label-success">{{ __('admin.current') }}</span>
+                                                @endif
+                                            </div>
+                                        </td>
                                     </tr>
                                     @endforeach
                                 @else
@@ -248,6 +282,131 @@
                                     <td colspan="3" class="text-center py-4 text-body-secondary">{{ __('admin.no_sessions') }}</td>
                                 </tr>
                                 @endif
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notifications -->
+            <div class="tab-pane fade" id="tab-notifications" role="tabpanel">
+                <div class="card border-0 shadow-sm mb-4">
+                    <h5 class="card-header d-flex align-items-center justify-content-between">
+                        <span>{{ __('admin.notifications') }}</span>
+                        <div class="d-flex gap-2">
+                            <span class="badge bg-label-danger">Unread: {{ $notificationsUnreadCount ?? 0 }}</span>
+                            <span class="badge bg-label-warning">Important: {{ $notificationsImportantCount ?? 0 }}</span>
+                        </div>
+                    </h5>
+                </div>
+                <div class="card border-0 shadow-sm">
+                    <h5 class="card-header">{{ __('admin.notifications') }}</h5>
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="border-top">
+                                <tr>
+                                    <th>{{ __('admin.type') }}</th>
+                                    <th>{{ __('admin.title') }}</th>
+                                    <th>{{ __('admin.status') }}</th>
+                                    <th>{{ __('admin.date') }}</th>
+                                    <th>{{ __('admin.actions') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse($recentNotifications as $n)
+                                <tr>
+                                    <td><span class="badge bg-label-secondary">{{ $n->type ?? 'all' }}</span></td>
+                                    <td>
+                                        <div class="fw-medium">{{ $n->title }}</div>
+                                        @if($n->subtitle)<div class="text-body-secondary small">{{ $n->subtitle }}</div>@endif
+                                    </td>
+                                    <td>
+                                        <span class="badge {{ $n->read ? 'bg-label-success' : 'bg-label-danger' }}">
+                                            {{ $n->read ? __('admin.read') : __('admin.unread') }}
+                                        </span>
+                                        @if($n->important)
+                                            <span class="badge bg-label-warning">{{ __('admin.notification_important') }}</span>
+                                        @endif
+                                    </td>
+                                    <td>{{ $n->created_at?->format('Y-m-d H:i') ?? '-' }}</td>
+                                    <td>
+                                        @if($n->action_route)
+                                            <span class="text-body-secondary small">{{ $n->action_route }}</span>
+                                        @else
+                                            <span class="text-body-secondary">—</span>
+                                        @endif
+                                    </td>
+                                </tr>
+                                @empty
+                                <tr>
+                                    <td colspan="5" class="text-center py-4 text-body-secondary">{{ __('admin.no_notifications') }}</td>
+                                </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cart -->
+            <div class="tab-pane fade" id="tab-cart" role="tabpanel">
+                <div class="card border-0 shadow-sm mb-4">
+                    <h5 class="card-header">{{ __('admin.cart_review') }}</h5>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <div class="text-body-secondary small mb-1">{{ __('admin.total') }}</div>
+                                <div class="h5 mb-0">{{ $cartSummary['total'] ?? 0 }}</div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="text-body-secondary small mb-1">{{ __('admin.pending') }}</div>
+                                <div class="h5 mb-0">{{ $cartSummary['pending_review'] ?? 0 }}</div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="text-body-secondary small mb-1">{{ __('admin.approved') }}</div>
+                                <div class="h5 mb-0">{{ $cartSummary['reviewed'] ?? 0 }}</div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="text-body-secondary small mb-1">{{ __('admin.rejected') }}</div>
+                                <div class="h5 mb-0">{{ $cartSummary['rejected'] ?? 0 }}</div>
+                            </div>
+                            <div class="col-12">
+                                <div class="text-body-secondary small mb-1">{{ __('admin.subtotal') }}</div>
+                                <div class="h5 mb-0">{{ number_format((float) ($cartSummary['subtotal'] ?? 0), 2) }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card border-0 shadow-sm">
+                    <h5 class="card-header">{{ __('admin.cart_review_pending') }}</h5>
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="border-top">
+                                <tr>
+                                    <th>{{ __('admin.title') }}</th>
+                                    <th>{{ __('admin.price') }}</th>
+                                    <th>Qty</th>
+                                    <th>{{ __('admin.status') }}</th>
+                                    <th>{{ __('admin.date') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse($activeCartItems as $c)
+                                <tr>
+                                    <td>
+                                        <div class="fw-medium">{{ $c->name }}</div>
+                                        <div class="text-body-secondary small">{{ $c->store_name ?? '-' }}</div>
+                                    </td>
+                                    <td>{{ number_format((float) $c->unit_price, 2) }} {{ $c->currency }}</td>
+                                    <td>{{ (int) $c->quantity }}</td>
+                                    <td><span class="badge bg-label-secondary">{{ $c->review_status }}</span></td>
+                                    <td>{{ $c->updated_at?->format('Y-m-d H:i') ?? '-' }}</td>
+                                </tr>
+                                @empty
+                                <tr>
+                                    <td colspan="5" class="text-center py-4 text-body-secondary">{{ __('admin.no_data') }}</td>
+                                </tr>
+                                @endforelse
                             </tbody>
                         </table>
                     </div>
@@ -262,31 +421,31 @@
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <div class="text-body-secondary small mb-1">{{ __('admin.language') }}</div>
-                                <div class="fw-medium">{{ $settings?->language_code ?? '-' }}{{ $languageLabel ? " ({$languageLabel})" : '' }}</div>
+                                <div class="fw-medium">{{ $displaySettings['language_code'] ?? '-' }} ({{ $displaySettings['language_label'] ?? '-' }})</div>
                             </div>
                             <div class="col-md-6">
                                 <div class="text-body-secondary small mb-1">{{ __('admin.currency') }}</div>
-                                <div class="fw-medium">{{ $settings?->currency_code ?? '-' }}{{ $currencySymbol ? " ({$currencySymbol})" : '' }}</div>
+                                <div class="fw-medium">{{ $displaySettings['currency_code'] ?? '-' }}{{ !empty($displaySettings['currency_symbol']) ? " ({$displaySettings['currency_symbol']})" : '' }}</div>
                             </div>
                             <div class="col-md-6">
                                 <div class="text-body-secondary small mb-1">{{ __('admin.default_warehouse') }}</div>
-                                <div class="fw-medium">{{ $settings?->default_warehouse_label ?? '-' }}</div>
-                                <div class="text-body-secondary small">{{ $settings?->default_warehouse_id ?? '' }}</div>
+                                <div class="fw-medium">{{ $displaySettings['default_warehouse_label'] ?? '-' }}</div>
+                                <div class="text-body-secondary small">{{ $displaySettings['default_warehouse_id'] ?? '' }}</div>
                             </div>
                             <div class="col-md-6">
                                 <div class="text-body-secondary small mb-1">{{ __('admin.server_region') }}</div>
-                                <div class="fw-medium">{{ $settings?->server_region ?? '-' }}</div>
+                                <div class="fw-medium">{{ $displaySettings['server_region'] ?? '-' }}</div>
                             </div>
                             <div class="col-md-6">
                                 <div class="text-body-secondary small mb-1">{{ __('admin.smart_consolidation') }}</div>
-                                <span class="badge {{ ($settings?->smart_consolidation_enabled ?? false) ? 'bg-label-success' : 'bg-label-secondary' }}">
-                                    {{ ($settings?->smart_consolidation_enabled ?? false) ? __('admin.yes') : __('admin.no') }}
+                                <span class="badge {{ ($displaySettings['smart_consolidation_enabled'] ?? false) ? 'bg-label-success' : 'bg-label-secondary' }}">
+                                    {{ ($displaySettings['smart_consolidation_enabled'] ?? false) ? __('admin.yes') : __('admin.no') }}
                                 </span>
                             </div>
                             <div class="col-md-6">
                                 <div class="text-body-secondary small mb-1">{{ __('admin.auto_insurance') }}</div>
-                                <span class="badge {{ ($settings?->auto_insurance_enabled ?? false) ? 'bg-label-success' : 'bg-label-secondary' }}">
-                                    {{ ($settings?->auto_insurance_enabled ?? false) ? __('admin.yes') : __('admin.no') }}
+                                <span class="badge {{ ($displaySettings['auto_insurance_enabled'] ?? false) ? 'bg-label-success' : 'bg-label-secondary' }}">
+                                    {{ ($displaySettings['auto_insurance_enabled'] ?? false) ? __('admin.yes') : __('admin.no') }}
                                 </span>
                             </div>
                             <div class="col-12">

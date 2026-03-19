@@ -34,6 +34,7 @@ class ShippingPricingConfigService
     public const KEY_SHIPPING_DEFAULT_WIDTH = 'shipping_default_width';
     public const KEY_SHIPPING_DEFAULT_HEIGHT = 'shipping_default_height';
     public const KEY_SHIPPING_DEFAULT_DIMENSION_UNIT = 'shipping_default_dimension_unit';
+    public const KEY_ORDER_NUMBER_PREFIX = 'order_number_prefix';
 
     public const ROUNDING_UP_500G = 'up_to_500g';
     public const ROUNDING_NEAREST_KG = 'nearest_kg';
@@ -60,6 +61,7 @@ class ShippingPricingConfigService
     private const DEFAULT_MINIMUM_ORDER_THRESHOLD = 0.0;
     private const DEFAULT_FALLBACK_WEIGHT = 0.5;
     private const DEFAULT_FALLBACK_DIMENSION = 10.0;
+    private const DEFAULT_ORDER_NUMBER_PREFIX = 'ZY';
 
     public function volumetricDivisor(): float
     {
@@ -249,6 +251,16 @@ class ShippingPricingConfigService
         return $u === 'in' || $u === 'inch' || $u === 'inches' ? 'in' : 'cm';
     }
 
+    public function orderNumberPrefix(): string
+    {
+        $v = ShippingSetting::getValue(self::KEY_ORDER_NUMBER_PREFIX);
+        if ($v === null || trim($v) === '') {
+            return self::DEFAULT_ORDER_NUMBER_PREFIX;
+        }
+
+        return strtoupper(trim($v));
+    }
+
     /**
      * Snapshot of config values used for a quote (for transparency; avoid exposing sensitive data).
      */
@@ -305,6 +317,7 @@ class ShippingPricingConfigService
             self::KEY_SHIPPING_DEFAULT_WIDTH,
             self::KEY_SHIPPING_DEFAULT_HEIGHT,
             self::KEY_SHIPPING_DEFAULT_DIMENSION_UNIT,
+            self::KEY_ORDER_NUMBER_PREFIX,
         ];
     }
 }

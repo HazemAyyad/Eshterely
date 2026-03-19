@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Favorite;
+use App\Models\Notification;
 use App\Models\Order;
 use App\Models\SupportTicket;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Models\WalletTransaction;
+use App\Models\CartItem;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
@@ -80,28 +83,26 @@ class UserController extends Controller
         }
         $primaryAddressText = implode("\n", $primaryAddressLines);
 
-        $languageLabel = null;
-        if ($settings?->language_code) {
-            $languageLabel = match ($settings->language_code) {
-                'ar' => __('admin.arabic'),
-                'en' => __('admin.english'),
-                default => strtoupper((string) $settings->language_code),
-            };
+        // Keep admin display aligned with what mobile app receives from /api/me/settings.
+        $languageCode = $this->normalizeLanguageCode($settings?->language_code ?? null);
+        $currencyCode = $this->normalizeCurrencyCode($settings?->currency_code ?? null);
+        $warehouseId = $this->normalizeWarehouseId($settings?->default_warehouse_id ?? null);
+        $warehouseLabel = $settings?->default_warehouse_label ?? null;
+        if (($warehouseLabel === null || trim((string) $warehouseLabel) === '') && $warehouseId !== null) {
+            $warehouseLabel = DB::table('warehouses')->where('slug', $warehouseId)->value('label');
         }
-
-        $currencySymbol = null;
-        if ($settings?->currency_code) {
-            $currencySymbol = match (strtoupper((string) $settings->currency_code)) {
-                'USD' => '$',
-                'EUR' => '€',
-                'GBP' => '£',
-                'TRY' => '₺',
-                'AED' => 'د.إ',
-                'SAR' => 'ر.س',
-                'JOD' => 'د.ا',
-                default => null,
-            };
-        }
+        $displaySettings = [
+            'language_code' => $languageCode,
+            'language_label' => $this->languageLabel($languageCode),
+            'currency_code' => $currencyCode,
+            'currency_symbol' => $this->currencySymbol($currencyCode),
+            // Same fallback used by Flutter settings model/provider.
+            'default_warehouse_id' => $warehouseId ?? 'delaware_us',
+            'default_warehouse_label' => ($warehouseLabel !== null && trim((string) $warehouseLabel) !== '') ? $warehouseLabel : 'Delaware, US',
+            'server_region' => $settings?->server_region ?? null,
+            'smart_consolidation_enabled' => (bool) ($settings?->smart_consolidation_enabled ?? true),
+            'auto_insurance_enabled' => (bool) ($settings?->auto_insurance_enabled ?? false),
+        ];
 
         $notificationCenterSummary = '—';
         if ($notificationPrefs) {
@@ -147,6 +148,33 @@ class UserController extends Controller
             ->limit(10)
             ->get();
 
+        $recentNotifications = Notification::where('user_id', $userModel->id)
+            ->orderByDesc('created_at')
+            ->limit(15)
+            ->get();
+        $notificationsUnreadCount = Notification::where('user_id', $userModel->id)
+            ->where('read', false)
+            ->count();
+        $notificationsImportantCount = Notification::where('user_id', $userModel->id)
+            ->where('important', true)
+            ->count();
+
+        $activeCartItems = CartItem::where('user_id', $userModel->id)
+            ->whereNull('draft_order_id')
+            ->orderByDesc('updated_at')
+            ->limit(20)
+            ->get();
+        $cartSummary = [
+            'total' => CartItem::where('user_id', $userModel->id)->whereNull('draft_order_id')->count(),
+            'pending_review' => CartItem::where('user_id', $userModel->id)->whereNull('draft_order_id')->where('review_status', CartItem::REVIEW_STATUS_PENDING)->count(),
+            'reviewed' => CartItem::where('user_id', $userModel->id)->whereNull('draft_order_id')->where('review_status', CartItem::REVIEW_STATUS_REVIEWED)->count(),
+            'rejected' => CartItem::where('user_id', $userModel->id)->whereNull('draft_order_id')->where('review_status', CartItem::REVIEW_STATUS_REJECTED)->count(),
+            'subtotal' => (float) CartItem::where('user_id', $userModel->id)
+                ->whereNull('draft_order_id')
+                ->selectRaw('COALESCE(SUM(unit_price * quantity), 0) as subtotal')
+                ->value('subtotal'),
+        ];
+
         return view('admin.users.show', [
             'user' => $userModel,
             'settings' => $settings,
@@ -156,8 +184,7 @@ class UserController extends Controller
             'primaryAddressCountry' => $primaryAddressCountry,
             'primaryAddressIsDefault' => $primaryAddressIsDefault,
             'primaryAddressIsLocked' => $primaryAddressIsLocked,
-            'languageLabel' => $languageLabel,
-            'currencySymbol' => $currencySymbol,
+            'displaySettings' => $displaySettings,
             'notificationCenterSummary' => $notificationCenterSummary,
             'wallet' => $wallet,
             'walletTransactions' => $walletTransactions,
@@ -165,6 +192,73 @@ class UserController extends Controller
             'recentTickets' => $recentTickets,
             'favoritesCount' => $favoritesCount,
             'recentFavorites' => $recentFavorites,
+            'recentNotifications' => $recentNotifications,
+            'notificationsUnreadCount' => $notificationsUnreadCount,
+            'notificationsImportantCount' => $notificationsImportantCount,
+            'activeCartItems' => $activeCartItems,
+            'cartSummary' => $cartSummary,
         ]);
+    }
+
+    public function updatePassword(Request $request, int $user): JsonResponse|RedirectResponse
+    {
+        $userModel = User::query()->findOrFail($user);
+
+        $validated = $request->validate([
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $userModel->update([
+            'password' => $validated['password'],
+        ]);
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => __('admin.user_password_updated'),
+            ]);
+        }
+
+        return redirect()
+            ->route('admin.users.show', $userModel)
+            ->with('success', __('admin.user_password_updated'));
+    }
+
+    private function normalizeLanguageCode(?string $code): string
+    {
+        $c = strtolower(trim((string) $code));
+
+        return in_array($c, ['en', 'ar'], true) ? $c : 'en';
+    }
+
+    private function languageLabel(string $code): string
+    {
+        return $code === 'ar' ? __('admin.arabic') : __('admin.english');
+    }
+
+    private function normalizeCurrencyCode(?string $code): string
+    {
+        $c = strtoupper(trim((string) $code));
+
+        return $c === '' ? 'USD' : $c;
+    }
+
+    private function currencySymbol(string $currencyCode): string
+    {
+        return match ($currencyCode) {
+            'USD' => '$',
+            'AED' => 'د.إ',
+            'SAR' => '﷼',
+            'EUR' => '€',
+            'GBP' => '£',
+            default => '',
+        };
+    }
+
+    private function normalizeWarehouseId(?string $warehouseId): ?string
+    {
+        $w = trim((string) $warehouseId);
+
+        return $w === '' ? null : $w;
     }
 }

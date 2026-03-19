@@ -152,7 +152,7 @@ class CartReviewController extends Controller
             $item,
             title: $this->appNotificationTitle(),
             body: __('admin.shipping_cost_updated') . ' • ' . __('admin.view_cart'),
-            important: true
+            important: false
         );
 
         return response()->json(['success' => true, 'message' => __('admin.shipping_cost_updated'), 'shipping_cost' => (float) $item->shipping_cost]);

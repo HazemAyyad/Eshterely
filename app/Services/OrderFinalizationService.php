@@ -6,6 +6,7 @@ use App\Models\DraftOrder;
 use App\Models\Order;
 use App\Models\OrderLineItem;
 use App\Models\OrderShipment;
+use App\Services\Shipping\ShippingPricingConfigService;
 use Illuminate\Support\Str;
 
 /**
@@ -16,6 +17,10 @@ class OrderFinalizationService
 {
     public const ORDER_STATUS_PENDING_PAYMENT = 'pending_payment';
 
+    public function __construct(
+        private ShippingPricingConfigService $shippingConfig
+    ) {}
+
     /**
      * Create a real order from a draft order. Copies all snapshots and metadata; no recalculation.
      */
@@ -23,7 +28,7 @@ class OrderFinalizationService
     {
         $draftOrder->loadMissing('items');
 
-        $orderNumber = 'ZY-' . strtoupper(Str::random(6));
+        $orderNumber = $this->buildOrderNumber();
         $currency = $draftOrder->currency ?? 'USD';
 
         $order = Order::create([
@@ -129,5 +134,12 @@ class OrderFinalizationService
             'estimated' => (bool) $draftItem->estimated,
             'missing_fields' => $draftItem->missing_fields ?? [],
         ]);
+    }
+
+    private function buildOrderNumber(): string
+    {
+        $prefix = $this->shippingConfig->orderNumberPrefix();
+
+        return $prefix . '-' . strtoupper(Str::random(6));
     }
 }

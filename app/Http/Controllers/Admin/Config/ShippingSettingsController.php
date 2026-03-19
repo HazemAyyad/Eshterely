@@ -133,6 +133,7 @@ class ShippingSettingsController extends Controller
             ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_WIDTH => '10',
             ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_HEIGHT => '10',
             ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_DIMENSION_UNIT => 'cm',
+            ShippingPricingConfigService::KEY_ORDER_NUMBER_PREFIX => 'ZY',
             default => '',
         };
     }

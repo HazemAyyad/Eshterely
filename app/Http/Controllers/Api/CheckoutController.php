@@ -10,6 +10,7 @@ use App\Models\OrderLineItem;
 use App\Models\OrderShipment;
 use App\Models\Wallet;
 use App\Services\PromoCodeService;
+use App\Services\Shipping\ShippingPricingConfigService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +19,8 @@ use Illuminate\Support\Str;
 class CheckoutController extends Controller
 {
     public function __construct(
-        private PromoCodeService $promoService
+        private PromoCodeService $promoService,
+        private ShippingPricingConfigService $shippingConfig
     ) {}
 
     public function validatePromo(Request $request): JsonResponse
@@ -96,7 +98,7 @@ class CheckoutController extends Controller
                 $estimated = $summary['estimated'];
                 $status = ($needsReview || $estimated) ? Order::STATUS_UNDER_REVIEW : ($amountDueNow > 0 ? Order::STATUS_PENDING_PAYMENT : Order::STATUS_PAID);
 
-                $orderNumber = 'ZY-' . strtoupper(Str::random(6));
+                $orderNumber = $this->buildOrderNumber();
                 $originCountries = $summary['checkout_items']->pluck('country')->filter()->unique()->values();
                 $origin = $originCountries->count() > 1
                     ? 'multi_origin'
@@ -569,5 +571,12 @@ class CheckoutController extends Controller
     private function normalizePromoCode(?string $code): string
     {
         return strtoupper(trim((string) $code));
+    }
+
+    private function buildOrderNumber(): string
+    {
+        $prefix = $this->shippingConfig->orderNumberPrefix();
+
+        return $prefix . '-' . strtoupper(Str::random(6));
     }
 }

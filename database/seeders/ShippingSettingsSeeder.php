@@ -42,6 +42,7 @@ class ShippingSettingsSeeder extends Seeder
             ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_WIDTH => '15',
             ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_HEIGHT => '8',
             ShippingPricingConfigService::KEY_SHIPPING_DEFAULT_DIMENSION_UNIT => 'cm',
+            ShippingPricingConfigService::KEY_ORDER_NUMBER_PREFIX => 'ZY',
         ];
 
         foreach ($defaults as $key => $value) {

@@ -141,6 +141,7 @@ class FcmNotificationService
             'priority' => 'high',
             'notification' => [
                 'channel_id' => 'fcm_high_importance_v2',
+                'icon' => 'notification_icon',
                 'sound' => 'default',
                 'default_sound' => true,
                 'default_vibrate_timings' => true,

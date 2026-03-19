@@ -110,6 +110,11 @@
                         <option value="in" {{ old('shipping_default_dimension_unit', $values['shipping_default_dimension_unit'] ?? 'cm') === 'in' ? 'selected' : '' }}>in</option>
                     </select>
                 </div>
+                <div class="col-md-6">
+                    <label class="form-label">{{ __('admin.order_number_prefix') }}</label>
+                    <input type="text" name="order_number_prefix" class="form-control" value="{{ old('order_number_prefix', $values['order_number_prefix'] ?? 'ZY') }}" placeholder="ZY" maxlength="20">
+                    <small class="text-muted">{{ __('admin.order_number_prefix_help') }}</small>
+                </div>
             </div>
             <div class="mt-4">
                 <button type="submit" class="btn btn-primary">{{ __('admin.save') }}</button>
