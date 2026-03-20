@@ -55,23 +55,24 @@
 </div>
 
 {{-- Modal: edit weight & dimensions (then admin can run system recalc) --}}
-<div class="modal fade" id="editPackageModal" tabindex="-1">
-    <div class="modal-dialog">
+<div class="modal fade" id="editPackageModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">{{ __('admin.package_modal_title') }}</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="editPackageForm">
+            <form id="editPackageForm" action="#" method="post">
                 @csrf
                 <input type="hidden" name="_method" value="PATCH">
-                    <div class="row g-2">
+                <div class="modal-body">
+                    <div class="row g-3">
                         <div class="col-md-8">
-                            <label class="form-label">Weight</label>
-                            <input type="number" step="any" min="0" class="form-control" name="weight" id="pkg-weight" placeholder="e.g. 10">
+                            <label class="form-label" for="pkg-weight">Weight</label>
+                            <input type="number" step="any" min="0" class="form-control" name="weight" id="pkg-weight" placeholder="e.g. 10" autocomplete="off">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Unit</label>
+                            <label class="form-label" for="pkg-weight-unit">Unit</label>
                             <select class="form-select" name="weight_unit" id="pkg-weight-unit">
                                 <option value="lb">lb</option>
                                 <option value="g">g</option>
@@ -79,26 +80,26 @@
                             </select>
                         </div>
                         <div class="col-4">
-                            <label class="form-label">L</label>
-                            <input type="number" step="any" min="0" class="form-control" name="length" id="pkg-length">
+                            <label class="form-label" for="pkg-length">L</label>
+                            <input type="number" step="any" min="0" class="form-control" name="length" id="pkg-length" autocomplete="off">
                         </div>
                         <div class="col-4">
-                            <label class="form-label">W</label>
-                            <input type="number" step="any" min="0" class="form-control" name="width" id="pkg-width">
+                            <label class="form-label" for="pkg-width">W</label>
+                            <input type="number" step="any" min="0" class="form-control" name="width" id="pkg-width" autocomplete="off">
                         </div>
                         <div class="col-4">
-                            <label class="form-label">H</label>
-                            <input type="number" step="any" min="0" class="form-control" name="height" id="pkg-height">
+                            <label class="form-label" for="pkg-height">H</label>
+                            <input type="number" step="any" min="0" class="form-control" name="height" id="pkg-height" autocomplete="off">
                         </div>
                         <div class="col-12">
-                            <label class="form-label">Dimension unit</label>
+                            <label class="form-label" for="pkg-dim-unit">Dimension unit</label>
                             <select class="form-select" name="dimension_unit" id="pkg-dim-unit">
                                 <option value="in">in</option>
                                 <option value="cm">cm</option>
                             </select>
                         </div>
                     </div>
-                    <p class="small text-muted mt-2 mb-0">{{ __('admin.package_save_hint') }}</p>
+                    <p class="small text-muted mt-3 mb-0">{{ __('admin.package_save_hint') }}</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-label-secondary" data-bs-dismiss="modal">{{ __('admin.cancel') }}</button>
@@ -166,8 +167,9 @@ document.addEventListener('DOMContentLoaded', function() {
             try { p = JSON.parse(p); } catch (e) { return; }
         }
         if (!p || !p.id) return;
-        const saveUrl = $btn.data('save-url');
-        $('#editPackageForm').data('save-url', saveUrl);
+        // Use attr: jQuery .data('save-url') is unreliable (camelCase cache vs data-save-url)
+        const saveUrl = $btn.attr('data-save-url');
+        $('#editPackageForm').attr('data-save-url', saveUrl || '');
         $('#pkg-weight').val(p.weight != null && p.weight !== '' ? p.weight : '');
         $('#pkg-weight-unit').val(p.weight_unit && ['lb','g','kg'].includes(p.weight_unit) ? p.weight_unit : 'lb');
         $('#pkg-length').val(p.length != null && p.length !== '' ? p.length : '');
@@ -182,25 +184,46 @@ document.addEventListener('DOMContentLoaded', function() {
 
     $('#editPackageForm').on('submit', function(e) {
         e.preventDefault();
-        const saveUrl = $(this).data('save-url');
-        if (!saveUrl) return;
+        const saveUrl = $(this).attr('data-save-url');
+        if (!saveUrl) {
+            Swal.fire({ icon: 'warning', title: @json(__('admin.error')), text: 'Missing save URL' });
+            return;
+        }
+        const token = document.querySelector('meta[name="csrf-token"]');
         const fd = new FormData(this);
         Swal.fire({ title: @json(__('admin.loading')), allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         fetch(saveUrl, {
             method: 'POST',
-            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': token ? token.content : ''
+            },
             body: fd
         })
-            .then(r => r.json()).then(d => {
+            .then(async function(r) {
+                const text = await r.text();
+                let d = {};
+                try { d = text ? JSON.parse(text) : {}; } catch (err) { d = { message: text || r.statusText }; }
+                return { ok: r.ok, status: r.status, data: d };
+            })
+            .then(function(res) {
                 Swal.close();
-                if (d.success) {
-                    Swal.fire({ icon: 'success', title: d.message });
-                    editPackageModal.hide();
-                    table.ajax.reload();
+                if (res.ok && res.data.success) {
+                    Swal.fire({ icon: 'success', title: res.data.message || @json(__('admin.package_updated')) });
+                    if (editPackageModal) {
+                        editPackageModal.hide();
+                    }
+                    table.ajax.reload(null, false);
                 } else {
-                    Swal.fire({ icon: 'error', title: d.message || @json(__('admin.error')) });
+                    const msg = (res.data && res.data.message) ? res.data.message : (@json(__('admin.error')) + ' (' + res.status + ')');
+                    Swal.fire({ icon: 'error', title: msg });
                 }
-            }).catch(() => Swal.fire({ icon: 'error', title: @json(__('admin.error')) }));
+            })
+            .catch(function() {
+                Swal.close();
+                Swal.fire({ icon: 'error', title: @json(__('admin.error')) });
+            });
     });
 
     $(document).on('click', '#cart-review-table .btn-recalc-shipping', function() {
