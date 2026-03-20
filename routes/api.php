@@ -76,6 +76,7 @@ Route::middleware('auth:sanctum')->prefix('me')->group(function () {
 Route::middleware('auth:sanctum')->prefix('cart')->group(function () {
     Route::get('/', [CartController::class, 'index']);
     Route::get('items', [CartController::class, 'index']);
+    Route::post('shipping-estimate', [CartController::class, 'estimateShipping']);
     Route::post('items', [CartController::class, 'store']);
     Route::post('create-draft-order', [CartController::class, 'createDraftOrder']);
     Route::patch('items/{id}', [CartController::class, 'update']);

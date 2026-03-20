@@ -8,20 +8,16 @@ use App\Http\Resources\DraftOrderResource;
 use App\Models\CartItem;
 use App\Services\CartItemReviewService;
 use App\Services\DraftOrderService;
-use App\Services\Shipping\ProductToShippingInputMapper;
-use App\Services\Shipping\ShippingQuoteService;
+use App\Services\Shipping\CartShippingEstimateService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
-
 class CartController extends Controller
 {
     use AuthorizesRequests;
 
     public function __construct(
-        private ProductToShippingInputMapper $shippingInputMapper,
-        private ShippingQuoteService $shippingQuoteService,
+        private CartShippingEstimateService $cartShippingEstimate,
         private CartItemReviewService $reviewService,
     ) {}
 
@@ -67,7 +63,7 @@ class CartController extends Controller
         // Best-effort shipping estimate on add-to-cart (paste link / webview).
         // This uses the same config-driven shipping engine and may use fallback defaults
         // when product data is incomplete (estimated=true + missing_fields populated).
-        $quote = $this->quoteShippingEstimateForCartItem($validated, $qty);
+        $quote = $this->cartShippingEstimate->quoteForUser($request->user(), $validated, $qty);
 
         $item = CartItem::create([
             'user_id' => $request->user()->id,
@@ -108,69 +104,41 @@ class CartController extends Controller
     }
 
     /**
-     * Build and compute an estimated shipping quote for a cart item input.
-     *
-     * @param  array<string, mixed>  $validated
-     * @return array<string, mixed>  compatible with shipping_snapshot (amount, currency, notes, estimated, missing_fields...)
+     * Preview shipping for paste-link / webview before or without persisting a cart line.
      */
-    private function quoteShippingEstimateForCartItem(array $validated, int $quantity): array
+    public function estimateShipping(Request $request): JsonResponse
     {
-        // Shipping depends on user's default shipping address country.
-        // If user has no default address, we cannot estimate accurately.
-        $user = request()->user();
-        $default = null;
-        if ($user && method_exists($user, 'addresses')) {
-            $default = $user->addresses()->where('is_default', true)->with('country')->first();
+        $validated = $request->validate([
+            'quantity' => 'integer|min:1',
+            'weight' => 'nullable|numeric|min:0',
+            'weight_unit' => 'nullable|string|max:10',
+            'length' => 'nullable|numeric|min:0',
+            'width' => 'nullable|numeric|min:0',
+            'height' => 'nullable|numeric|min:0',
+            'dimension_unit' => 'nullable|string|max:10',
+        ]);
+
+        $qty = (int) ($validated['quantity'] ?? 1);
+        $qty = $qty < 1 ? 1 : $qty;
+
+        $quote = $this->cartShippingEstimate->quoteForUser($request->user(), $validated, $qty);
+
+        if ($quote === []) {
+            return response()->json([
+                'available' => false,
+                'message' => 'Add a default delivery address in the app to calculate shipping.',
+            ]);
         }
-        $destinationCountry = $default?->country?->code ?? null;
-        if (is_string($destinationCountry)) {
-            $destinationCountry = Str::upper(trim($destinationCountry));
-        }
-        if (! is_string($destinationCountry) || $destinationCountry === '') {
-            return [];
-        }
 
-        $normalized = [
-            'weight' => $validated['weight'] ?? null,
-            'weight_unit' => $validated['weight_unit'] ?? null,
-            'length' => $validated['length'] ?? null,
-            'width' => $validated['width'] ?? null,
-            'height' => $validated['height'] ?? null,
-            'dimension_unit' => $validated['dimension_unit'] ?? null,
-            'quantity' => $quantity,
-        ];
-
-        $overrides = [
-            'quantity' => $quantity,
-            'destination_country' => $destinationCountry,
-        ];
-
-        try {
-            $mapped = $this->shippingInputMapper->fromNormalizedProduct($normalized, $overrides);
-            $input = $mapped['input'] ?? null;
-            if (! is_array($input)) {
-                return [];
-            }
-
-            $result = $this->shippingQuoteService->quote($input);
-
-            return [
-                'carrier' => $result->carrier ?? 'auto',
-                'pricing_mode' => $result->pricingMode ?? 'default',
-                'warehouse_mode' => (bool) ($result->warehouseMode ?? false),
-                'actual_weight' => (float) ($result->actualWeightKg ?? 0),
-                'volumetric_weight' => (float) ($result->volumetricWeightKg ?? 0),
-                'chargeable_weight' => (float) ($result->chargeableWeightKg ?? 0),
-                'currency' => (string) ($result->currency ?? 'USD'),
-                'amount' => (float) ($result->finalAmount ?? 0),
-                'estimated' => (bool) ($mapped['estimated'] ?? false),
-                'missing_fields' => $mapped['missing_fields'] ?? [],
-                'notes' => $result->calculationNotes ?? [],
-                'calculation_breakdown' => $result->calculationBreakdown ?? [],
-            ];
-        } catch (\Throwable $e) {
-            return [];
-        }
+        return response()->json([
+            'available' => true,
+            'shipping_cost' => (float) ($quote['amount'] ?? 0),
+            'currency' => (string) ($quote['currency'] ?? 'USD'),
+            'estimated' => (bool) ($quote['estimated'] ?? false),
+            'missing_fields' => $quote['missing_fields'] ?? [],
+            'destination_country' => $quote['destination_country'] ?? null,
+            'snapshot' => $quote,
+        ]);
     }
 
     public function update(Request $request, int $id): JsonResponse

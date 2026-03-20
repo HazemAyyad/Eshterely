@@ -6,6 +6,7 @@ use App\Enums\Payment\PaymentEventSource;
 use App\Enums\Payment\PaymentStatus;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\CartItem;
 use App\Models\Wallet;
 use App\Models\WalletTopUpPayment;
 use App\Services\Fcm\OrderShipmentNotificationTrigger;
@@ -248,6 +249,29 @@ class StripeWebhookService
                 'status' => Order::STATUS_PAID,
                 'placed_at' => now(),
             ]);
+
+        $this->removePurchasedItemsFromCart($payment->order_id);
+    }
+
+    protected function removePurchasedItemsFromCart(int $orderId): void
+    {
+        $order = Order::with('shipments.lineItems')->find($orderId);
+        if ($order === null) {
+            return;
+        }
+        $cartItemIds = $order->shipments
+            ->flatMap(fn ($s) => $s->lineItems->pluck('cart_item_id'))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+        if ($cartItemIds === []) {
+            return;
+        }
+
+        CartItem::where('user_id', $order->user_id)
+            ->whereIn('id', $cartItemIds)
+            ->delete();
     }
 
     protected function addWebhookEvent(Payment $payment, string $eventType, array $payload): void

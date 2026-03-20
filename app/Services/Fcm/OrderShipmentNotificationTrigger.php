@@ -49,7 +49,7 @@ class OrderShipmentNotificationTrigger
                 $body,
                 'order',
                 (string) $order->id,
-                'order_detail',
+                'order_details',
                 ['order_id' => $order->id]
             ),
             (int) $order->id,
@@ -97,7 +97,7 @@ class OrderShipmentNotificationTrigger
                 $body,
                 'order',
                 (string) $order->id,
-                'order_detail',
+                'order_details',
                 ['order_id' => $order->id]
             ),
             (int) $order->id,
@@ -145,7 +145,7 @@ class OrderShipmentNotificationTrigger
                 $body,
                 'order',
                 (string) $order->id,
-                'order_detail',
+                'order_details',
                 ['order_id' => $order->id]
             ),
             (int) $order->id,
@@ -239,7 +239,7 @@ class OrderShipmentNotificationTrigger
                 $body,
                 'order',
                 (string) $order->id,
-                'order_detail',
+                'order_details',
                 ['order_id' => $order->id, 'status' => $status]
             ),
             (int) $order->id,
@@ -290,7 +290,7 @@ class OrderShipmentNotificationTrigger
                 $body,
                 'shipment',
                 (string) $shipment->id,
-                'order_detail',
+                'order_details',
                 ['order_id' => $order->id, 'shipment_id' => $shipment->id]
             ),
             (int) $order->id,
@@ -338,7 +338,7 @@ class OrderShipmentNotificationTrigger
                 $body,
                 'order',
                 (string) $order->id,
-                'order_detail',
+                'order_details',
                 ['order_id' => $order->id]
             ),
             (int) $order->id,
@@ -369,7 +369,7 @@ class OrderShipmentNotificationTrigger
                 $body,
                 'order',
                 (string) $order->id,
-                'order_detail',
+                'order_details',
                 ['order_id' => $order->id]
             ),
             (int) $order->id,

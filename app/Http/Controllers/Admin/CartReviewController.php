@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CartItem;
 use App\Models\Notification;
 use App\Services\Fcm\NotificationDispatchService;
+use App\Services\Shipping\CartShippingEstimateService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,7 +18,8 @@ use Yajra\DataTables\Facades\DataTables;
 class CartReviewController extends Controller
 {
     public function __construct(
-        protected NotificationDispatchService $dispatchService
+        protected NotificationDispatchService $dispatchService,
+        protected CartShippingEstimateService $cartShippingEstimate,
     ) {}
 
     public function index(): View
@@ -38,12 +40,25 @@ class CartReviewController extends Controller
             ->addColumn('user_contact', fn (CartItem $item) => $item->user?->phone ?? $item->user?->email ?? '-')
             ->editColumn('unit_price', fn (CartItem $item) => number_format((float) $item->unit_price, 2) . ' ' . $item->currency)
             ->addColumn('variation_text', fn (CartItem $item) => $item->variation_text ? \Str::limit($item->variation_text, 30) : '-')
-            ->addColumn('weight_dims', fn (CartItem $item) => $this->formatWeightDims($item))
+            ->addColumn('weight_dims', fn (CartItem $item) => $this->formatPackageColumn($item))
             ->addColumn('shipping_basis', fn (CartItem $item) => $this->formatShippingBasis($item))
             ->addColumn('shipping_cost_edit', function (CartItem $item) {
                 $url = route('admin.cart-review.shipping', $item->id);
-                $val = $item->shipping_cost !== null ? number_format((float) $item->shipping_cost, 2) : '';
-                return '<input type="number" step="0.01" min="0" class="form-control form-control-sm d-inline-block shipping-cost-input" style="width:80px" data-id="' . $item->id . '" data-url="' . $url . '" value="' . e($val) . '" placeholder="0"> <button type="button" class="btn btn-sm btn-outline-primary btn-save-shipping ms-1" data-id="' . $item->id . '" data-url="' . $url . '">' . __('admin.save') . '</button>';
+                $recalcUrl = route('admin.cart-review.recalculate-shipping', $item->id);
+                $val = $item->shipping_cost !== null ? number_format((float) $item->shipping_cost, 2, '.', '') : '';
+                $recalcLabel = e(__('admin.recalculate_shipping'));
+                $saveLabel = e(__('admin.save'));
+                $hint = e(__('admin.shipping_manual_hint'));
+
+                return '<div class="d-flex flex-column gap-2 cart-review-shipping-col" style="min-width:11rem">'
+                    . '<button type="button" class="btn btn-sm btn-primary btn-recalc-shipping" data-url="' . e($recalcUrl) . '">'
+                    . '<i class="icon-base ti tabler-refresh me-1"></i>' . $recalcLabel . '</button>'
+                    . '<div class="input-group input-group-sm">'
+                    . '<input type="number" step="0.01" min="0" class="form-control shipping-cost-input" data-id="' . $item->id . '" data-url="' . e($url) . '" value="' . e($val) . '" placeholder="0.00" title="' . e(__('admin.shipping_cost')) . '">'
+                    . '<button type="button" class="btn btn-outline-primary btn-save-shipping" data-id="' . $item->id . '" data-url="' . e($url) . '">' . $saveLabel . '</button>'
+                    . '</div>'
+                    . '<small class="text-muted">' . $hint . '</small>'
+                    . '</div>';
             })
             ->editColumn('created_at', fn (CartItem $item) => $item->created_at?->format('Y-m-d H:i'))
             ->addColumn('actions', function (CartItem $item) {
@@ -52,22 +67,50 @@ class CartReviewController extends Controller
                     ? '<button type="button" class="btn btn-sm btn-success btn-approve" data-url="' . e($approveUrl) . '" data-status="reviewed">' . __('admin.approve') . '</button> ' .
                       '<button type="button" class="btn btn-sm btn-danger btn-reject" data-url="' . e($approveUrl) . '" data-status="rejected">' . __('admin.reject') . '</button> '
                     : '<span class="badge bg-' . ($item->review_status === 'reviewed' ? 'success' : 'secondary') . '">' . e($item->review_status) . '</span>';
-                return '<button type="button" class="btn btn-sm btn-info btn-details me-1" data-details="' . e(json_encode($this->itemDetailsForModal($item))) . '">' . __('admin.details') . '</button> ' . $reviewBtns;
+                return '<button type="button" class="btn btn-sm btn-info btn-details me-1" data-details="' . e(json_encode($this->itemDetailsForModal($item))) . '">' . __('admin.details') . '</button> ' .
+                    $reviewBtns;
             })
-            ->rawColumns(['image', 'shipping_basis', 'actions', 'shipping_cost_edit'])
+            ->rawColumns(['image', 'weight_dims', 'shipping_basis', 'actions', 'shipping_cost_edit'])
             ->toJson();
     }
 
-    private function formatWeightDims(CartItem $item): string
+    /**
+     * Weight & dimensions with labels + edit button (modal saves via updatePackage).
+     */
+    private function formatPackageColumn(CartItem $item): string
     {
-        $parts = [];
-        if ($item->weight !== null && (float) $item->weight > 0) {
-            $parts[] = (float) $item->weight . ($item->weight_unit ?? '');
-        }
-        if ($item->length !== null || $item->width !== null || $item->height !== null) {
-            $parts[] = ($item->length ?? '-') . '×' . ($item->width ?? '-') . '×' . ($item->height ?? '-') . ' ' . ($item->dimension_unit ?? '');
-        }
-        return $parts ? implode(' / ', $parts) : '-';
+        $hasWt = $item->weight !== null && (float) $item->weight > 0;
+        $weightLine = $hasWt
+            ? '<strong>' . e((string) (float) $item->weight) . '</strong> ' . e((string) ($item->weight_unit ?? ''))
+            : '<span class="text-muted">—</span>';
+
+        $hasDim = $item->length !== null || $item->width !== null || $item->height !== null;
+        $dimsLine = $hasDim
+            ? '<strong>' . e((string) ($item->length ?? '—')) . '</strong>×<strong>' . e((string) ($item->width ?? '—')) . '</strong>×<strong>' . e((string) ($item->height ?? '—')) . '</strong>'
+                . ' <span class="text-muted">' . e((string) ($item->dimension_unit ?? '')) . '</span>'
+            : '<span class="text-muted">—</span>';
+
+        $pkg = [
+            'id' => $item->id,
+            'weight' => $hasWt ? (float) $item->weight : null,
+            'weight_unit' => $item->weight_unit,
+            'length' => $item->length !== null ? (float) $item->length : null,
+            'width' => $item->width !== null ? (float) $item->width : null,
+            'height' => $item->height !== null ? (float) $item->height : null,
+            'dimension_unit' => $item->dimension_unit,
+        ];
+        $pkgJson = e(json_encode($pkg, JSON_THROW_ON_ERROR | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP));
+        $savePkgUrl = e(route('admin.cart-review.package', $item->id));
+
+        $wtLabel = e(__('admin.package_weight_label'));
+        $dimLabel = e(__('admin.package_dims_label'));
+
+        return '<div class="small cart-review-package-col" style="min-width:10rem">'
+            . '<div class="mb-1">' . $wtLabel . ' ' . $weightLine . '</div>'
+            . '<div class="mb-2">' . $dimLabel . ' ' . $dimsLine . '</div>'
+            . '<button type="button" class="btn btn-sm btn-label-secondary btn-edit-package" data-save-url="' . $savePkgUrl . '" data-package="' . $pkgJson . '">'
+            . '<i class="icon-base ti tabler-edit me-1"></i>' . e(__('admin.edit_package')) . '</button>'
+            . '</div>';
     }
 
     private function itemDetailsForModal(CartItem $item): array
@@ -139,6 +182,57 @@ class CartReviewController extends Controller
         return '<span class="badge bg-label-success text-success" title="' . $tooltip . '"><i class="icon-base ti tabler-check"></i> Exact</span>';
     }
 
+    public function updatePackage(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'weight_unit' => 'nullable|string|in:lb,g,kg',
+            'dimension_unit' => 'nullable|string|in:in,cm',
+        ]);
+
+        $item = CartItem::findOrFail($id);
+
+        $data = [];
+        foreach (['weight', 'length', 'width', 'height'] as $key) {
+            if (! $request->has($key)) {
+                continue;
+            }
+            $raw = $request->input($key);
+            if ($raw === null || $raw === '') {
+                $data[$key] = null;
+            } elseif (is_numeric($raw)) {
+                $data[$key] = (float) $raw;
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('admin.error'),
+                ], 422);
+            }
+        }
+
+        if ($request->has('weight_unit')) {
+            $wu = $request->input('weight_unit');
+            $data['weight_unit'] = is_string($wu) && trim($wu) !== '' ? trim($wu) : null;
+        }
+        if ($request->has('dimension_unit')) {
+            $du = $request->input('dimension_unit');
+            $data['dimension_unit'] = is_string($du) && trim($du) !== '' ? trim($du) : null;
+        }
+
+        if ($data === []) {
+            return response()->json([
+                'success' => false,
+                'message' => __('admin.error'),
+            ], 422);
+        }
+
+        $item->update($data);
+
+        return response()->json([
+            'success' => true,
+            'message' => __('admin.package_updated'),
+        ]);
+    }
+
     public function updateShipping(Request $request, int $id): JsonResponse
     {
         $validated = $request->validate([
@@ -148,14 +242,26 @@ class CartReviewController extends Controller
         $item = CartItem::with('user')->findOrFail($id);
         $item->update(['shipping_cost' => $validated['shipping_cost']]);
 
-        $this->notifyCartReviewUser(
-            $item,
-            title: $this->appNotificationTitle(),
-            body: __('admin.shipping_cost_updated') . ' • ' . __('admin.view_cart'),
-            important: false
-        );
-
         return response()->json(['success' => true, 'message' => __('admin.shipping_cost_updated'), 'shipping_cost' => (float) $item->shipping_cost]);
+    }
+
+    public function recalculateShipping(Request $request, int $id): JsonResponse
+    {
+        $item = CartItem::with('user')->findOrFail($id);
+        $fresh = $this->cartShippingEstimate->recalculateAndPersist($item);
+
+        if ($fresh->shipping_snapshot === null || $fresh->shipping_cost === null) {
+            return response()->json([
+                'success' => false,
+                'message' => __('admin.shipping_recalculate_failed'),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => __('admin.shipping_recalculated'),
+            'shipping_cost' => (float) $fresh->shipping_cost,
+        ]);
     }
 
     public function approveOrReject(Request $request, int $id): JsonResponse|RedirectResponse

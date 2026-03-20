@@ -20,6 +20,8 @@ class OrderObserver
      */
     public function created(Order $order): void
     {
-        $this->notificationTrigger->onOrderCreated($order);
+        // Do not notify at order creation time to avoid premature "order added"
+        // pushes before hosted checkout is completed. Payment-success notifications
+        // are dispatched from payment webhooks.
     }
 }

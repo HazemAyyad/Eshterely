@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Webhooks\SquareWebhookController;
+use App\Http\Controllers\Web\StripeReturnController;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
 
@@ -31,14 +32,5 @@ Route::get('/storage-link', function () {
 
 // Stripe hosted checkout redirect pages (used by Stripe Checkout).
 // Mobile mainly relies on webhooks + refresh, but Stripe requires valid URLs.
-Route::get('/payment/stripe/success', function () {
-    return response()->json([
-        'message' => 'Stripe payment success',
-    ]);
-});
-
-Route::get('/payment/stripe/cancel', function () {
-    return response()->json([
-        'message' => 'Stripe payment cancelled',
-    ]);
-});
+Route::get('/payment/stripe/success', [StripeReturnController::class, 'success']);
+Route::get('/payment/stripe/cancel', [StripeReturnController::class, 'cancel']);

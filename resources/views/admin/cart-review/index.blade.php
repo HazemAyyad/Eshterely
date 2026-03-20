@@ -28,9 +28,9 @@
                     <th>Price</th>
                     <th>Qty</th>
                     <th>Variation</th>
-                    <th>Weight / Dims</th>
+                    <th>{{ __('admin.package_modal_title') }}</th>
                     <th>Shipping basis</th>
-                    <th>{{ __('admin.shipping_cost') }}</th>
+                    <th>{{ __('admin.shipping_cost') }} / {{ __('admin.recalculate_shipping') }}</th>
                     <th>{{ __('admin.date') }}</th>
                     <th>{{ __('admin.actions') }}</th>
                 </tr>
@@ -53,6 +53,61 @@
         </div>
     </div>
 </div>
+
+{{-- Modal: edit weight & dimensions (then admin can run system recalc) --}}
+<div class="modal fade" id="editPackageModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ __('admin.package_modal_title') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editPackageForm">
+                @csrf
+                <input type="hidden" name="_method" value="PATCH">
+                    <div class="row g-2">
+                        <div class="col-md-8">
+                            <label class="form-label">Weight</label>
+                            <input type="number" step="any" min="0" class="form-control" name="weight" id="pkg-weight" placeholder="e.g. 10">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Unit</label>
+                            <select class="form-select" name="weight_unit" id="pkg-weight-unit">
+                                <option value="lb">lb</option>
+                                <option value="g">g</option>
+                                <option value="kg">kg</option>
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">L</label>
+                            <input type="number" step="any" min="0" class="form-control" name="length" id="pkg-length">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">W</label>
+                            <input type="number" step="any" min="0" class="form-control" name="width" id="pkg-width">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">H</label>
+                            <input type="number" step="any" min="0" class="form-control" name="height" id="pkg-height">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Dimension unit</label>
+                            <select class="form-select" name="dimension_unit" id="pkg-dim-unit">
+                                <option value="in">in</option>
+                                <option value="cm">cm</option>
+                            </select>
+                        </div>
+                    </div>
+                    <p class="small text-muted mt-2 mb-0">{{ __('admin.package_save_hint') }}</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-label-secondary" data-bs-dismiss="modal">{{ __('admin.cancel') }}</button>
+                    <button type="submit" class="btn btn-primary" id="pkg-save-btn">{{ __('admin.save') }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 @endsection
 
 @push('styles')
@@ -68,6 +123,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const table = $('#cart-review-table').DataTable({
         processing: true,
         serverSide: true,
+        scrollX: true,
         ajax: "{{ route('admin.cart-review.data') }}",
         columns: [
             { data: 'id', name: 'id' },
@@ -101,6 +157,61 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     $(document).on('click', '#cart-review-table .btn-approve', function() { doReview($(this).data('url'), 'reviewed'); });
     $(document).on('click', '#cart-review-table .btn-reject', function() { doReview($(this).data('url'), 'rejected'); });
+
+    let editPackageModal = null;
+    $(document).on('click', '#cart-review-table .btn-edit-package', function() {
+        const $btn = $(this);
+        let p = $btn.data('package');
+        if (typeof p === 'string') {
+            try { p = JSON.parse(p); } catch (e) { return; }
+        }
+        if (!p || !p.id) return;
+        const saveUrl = $btn.data('save-url');
+        $('#editPackageForm').data('save-url', saveUrl);
+        $('#pkg-weight').val(p.weight != null && p.weight !== '' ? p.weight : '');
+        $('#pkg-weight-unit').val(p.weight_unit && ['lb','g','kg'].includes(p.weight_unit) ? p.weight_unit : 'lb');
+        $('#pkg-length').val(p.length != null && p.length !== '' ? p.length : '');
+        $('#pkg-width').val(p.width != null && p.width !== '' ? p.width : '');
+        $('#pkg-height').val(p.height != null && p.height !== '' ? p.height : '');
+        $('#pkg-dim-unit').val(p.dimension_unit && ['in','cm'].includes(p.dimension_unit) ? p.dimension_unit : 'in');
+        if (!editPackageModal) {
+            editPackageModal = new bootstrap.Modal(document.getElementById('editPackageModal'));
+        }
+        editPackageModal.show();
+    });
+
+    $('#editPackageForm').on('submit', function(e) {
+        e.preventDefault();
+        const saveUrl = $(this).data('save-url');
+        if (!saveUrl) return;
+        const fd = new FormData(this);
+        Swal.fire({ title: @json(__('admin.loading')), allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        fetch(saveUrl, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+            body: fd
+        })
+            .then(r => r.json()).then(d => {
+                Swal.close();
+                if (d.success) {
+                    Swal.fire({ icon: 'success', title: d.message });
+                    editPackageModal.hide();
+                    table.ajax.reload();
+                } else {
+                    Swal.fire({ icon: 'error', title: d.message || @json(__('admin.error')) });
+                }
+            }).catch(() => Swal.fire({ icon: 'error', title: @json(__('admin.error')) }));
+    });
+
+    $(document).on('click', '#cart-review-table .btn-recalc-shipping', function() {
+        const url = $(this).data('url');
+        Swal.fire({ title: @json(__('admin.loading')), allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        fetch(url, { method: 'POST', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.json()).then(d => {
+                Swal.close();
+                d.success ? (Swal.fire({ icon: 'success', title: d.message }), table.ajax.reload()) : Swal.fire({ icon: 'error', title: d.message || @json(__('admin.error')) });
+            }).catch(() => Swal.fire({ icon: 'error', title: @json(__('admin.error')) }));
+    });
 
     // Details modal
     $(document).on('click', '#cart-review-table .btn-details', function() {

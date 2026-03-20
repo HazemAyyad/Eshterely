@@ -59,7 +59,7 @@ class ShippingPricingConfigService
     private const DEFAULT_PLATFORM_MARKUP_PERCENT = 0.0;
     private const DEFAULT_MINIMUM_ORDER_FEE = 0.0;
     private const DEFAULT_MINIMUM_ORDER_THRESHOLD = 0.0;
-    private const DEFAULT_FALLBACK_WEIGHT = 0.5;
+    private const DEFAULT_FALLBACK_WEIGHT = 10.0;
     private const DEFAULT_FALLBACK_DIMENSION = 10.0;
     private const DEFAULT_ORDER_NUMBER_PREFIX = 'ZY';
 
@@ -206,7 +206,7 @@ class ShippingPricingConfigService
     {
         $v = ShippingSetting::getValue(self::KEY_SHIPPING_DEFAULT_WEIGHT_UNIT);
         if ($v === null || $v === '') {
-            return 'kg';
+            return 'lb';
         }
         $u = strtolower(trim((string) $v));
 

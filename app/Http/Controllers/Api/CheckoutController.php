@@ -167,12 +167,6 @@ class CheckoutController extends Controller
                     );
                 }
 
-                // Only remove items that participated in checkout; pending/rejected items remain in cart.
-                CartItem::where('user_id', $request->user()->id)
-                    ->whereNull('draft_order_id')
-                    ->where('review_status', CartItem::REVIEW_STATUS_REVIEWED)
-                    ->delete();
-
                 return [
                     'order' => $order->fresh(),
                     'order_number' => $orderNumber,
@@ -250,7 +244,11 @@ class CheckoutController extends Controller
             ->whereNull('draft_order_id')
             ->get();
 
-        $checkoutItems = $items->filter(fn (CartItem $i) => ($i->review_status ?? CartItem::REVIEW_STATUS_PENDING) === CartItem::REVIEW_STATUS_REVIEWED)->values();
+        // Include all non-rejected items so estimated shipping appears and checkout
+        // can proceed immediately after adding an item to cart.
+        $checkoutItems = $items->filter(
+            fn (CartItem $i) => ($i->review_status ?? CartItem::REVIEW_STATUS_PENDING) !== CartItem::REVIEW_STATUS_REJECTED
+        )->values();
         $defaultAddress = Address::where('user_id', $request->user()->id)
             ->where('is_default', true)
             ->with('country')

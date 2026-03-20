@@ -15,7 +15,7 @@ class OrderController extends Controller
     {
         $orders = Order::where('user_id', $request->user()->id)
             ->with('shipments.lineItems', 'shipments.trackingEvents', 'shipments.events', 'payments')
-            ->orderByDesc('placed_at')
+            ->orderByDesc(DB::raw('COALESCE(orders.placed_at, orders.created_at)'))
             ->get();
 
         return response()->json($orders->map(fn ($o) => $this->formatOrder($o)));
@@ -53,7 +53,7 @@ class OrderController extends Controller
             'status_key' => $this->orderStatusKey($o),
             'payment_status' => $this->orderPaymentStatus($o),
             'payment_reference' => $this->orderPaymentReference($o),
-            'placed_date' => $o->placed_at?->format('M j, Y'),
+            'placed_date' => $this->orderPlacedDateFormatted($o),
             'delivered_on' => $o->delivered_at?->format('M j, Y'),
             'total' => (float) $o->total_amount,
             'currency' => $o->currency ?? 'USD',
@@ -70,6 +70,7 @@ class OrderController extends Controller
             'refund_status' => $o->refund_status,
             'estimated_delivery' => $o->estimated_delivery,
             'shipping_address' => $o->shipping_address_text,
+            'invoice_issue_date' => $this->orderInvoiceIssueDateFormatted($o),
         ];
 
         if ($detailed) {
@@ -153,6 +154,9 @@ class OrderController extends Controller
         if ($o->needs_review || $o->status === Order::STATUS_UNDER_REVIEW) {
             return 'pending_review';
         }
+        if ($this->hasPaidPayment($o)) {
+            return 'paid';
+        }
         return match ($o->status) {
             Order::STATUS_PENDING_PAYMENT => 'pending_payment',
             Order::STATUS_PAID => 'paid',
@@ -166,15 +170,7 @@ class OrderController extends Controller
 
     private function orderPaymentStatus(Order $o): string
     {
-        // Payment is the source of truth: if we have a paid payment record,
-        // treat payment as paid even if the order status has moved on (e.g. shipped/in-transit).
-        if ($o->relationLoaded('payments')) {
-            if ($o->payments->contains(fn ($p) => $p->status->value === 'paid')) {
-                return 'paid';
-            }
-        }
-
-        if ($o->status === Order::STATUS_PAID) {
+        if ($this->hasPaidPayment($o) || $o->status === Order::STATUS_PAID) {
             return 'paid';
         }
 
@@ -185,6 +181,22 @@ class OrderController extends Controller
         return $o->status;
     }
 
+    private function hasPaidPayment(Order $o): bool
+    {
+        if ($o->relationLoaded('payments')) {
+            return $o->payments->contains(
+                fn ($p) => (($p->status->value ?? null) === 'paid') || ($p->paid_at !== null)
+            );
+        }
+
+        return $o->payments()
+            ->where(function ($q) {
+                $q->where('status', 'paid')
+                    ->orWhereNotNull('paid_at');
+            })
+            ->exists();
+    }
+
     private function orderPaymentReference(Order $o): ?string
     {
         if (! $o->relationLoaded('payments')) {
@@ -192,5 +204,50 @@ class OrderController extends Controller
         }
         $paid = $o->payments->filter(fn ($p) => $p->paid_at !== null)->sortByDesc('paid_at')->first();
         return $paid?->reference;
+    }
+
+    /**
+     * Date shown as "Placed on …" in the app: real placement time, else successful payment time, else order created_at.
+     */
+    private function orderPlacedDateFormatted(Order $o): string
+    {
+        if ($o->placed_at !== null) {
+            return $o->placed_at->format('M j, Y');
+        }
+
+        if ($o->relationLoaded('payments')) {
+            $paid = $o->payments
+                ->filter(fn ($p) => $p->paid_at !== null)
+                ->sortByDesc('paid_at')
+                ->first();
+            if ($paid?->paid_at !== null) {
+                return $paid->paid_at->format('M j, Y');
+            }
+        }
+
+        return $o->created_at?->format('M j, Y') ?? '';
+    }
+
+    /**
+     * Invoice issue date for the app: explicit column, else last successful payment time, else placed_at.
+     */
+    private function orderInvoiceIssueDateFormatted(Order $o): ?string
+    {
+        if ($o->invoice_issue_date !== null) {
+            return $o->invoice_issue_date->format('M j, Y');
+        }
+
+        if ($o->relationLoaded('payments')) {
+            $paid = $o->payments
+                ->filter(fn ($p) => $p->paid_at !== null)
+                ->sortByDesc('paid_at')
+                ->first();
+            if ($paid?->paid_at !== null) {
+                return $paid->paid_at->format('M j, Y');
+            }
+        }
+
+        return $o->placed_at?->format('M j, Y')
+            ?? $o->created_at?->format('M j, Y');
     }
 }
