@@ -12,6 +12,7 @@ use App\Services\Shipping\CartShippingEstimateService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 class CartController extends Controller
 {
     use AuthorizesRequests;
@@ -55,15 +56,23 @@ class CartController extends Controller
             'width' => 'nullable|numeric|min:0',
             'height' => 'nullable|numeric|min:0',
             'dimension_unit' => 'nullable|string|max:10',
+            'destination_address_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('addresses', 'id')->where(fn ($q) => $q->where('user_id', $request->user()->id)),
+            ],
         ]);
 
         $qty = (int) ($validated['quantity'] ?? 1);
         $qty = $qty < 1 ? 1 : $qty;
 
+        $destAddrId = isset($validated['destination_address_id']) ? (int) $validated['destination_address_id'] : null;
+        $destAddrId = $destAddrId > 0 ? $destAddrId : null;
+
         // Best-effort shipping estimate on add-to-cart (paste link / webview).
         // This uses the same config-driven shipping engine and may use fallback defaults
         // when product data is incomplete (estimated=true + missing_fields populated).
-        $quote = $this->cartShippingEstimate->quoteForUser($request->user(), $validated, $qty);
+        $quote = $this->cartShippingEstimate->quoteForUser($request->user(), $validated, $qty, $destAddrId);
 
         $item = CartItem::create([
             'user_id' => $request->user()->id,
@@ -116,12 +125,20 @@ class CartController extends Controller
             'width' => 'nullable|numeric|min:0',
             'height' => 'nullable|numeric|min:0',
             'dimension_unit' => 'nullable|string|max:10',
+            'destination_address_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('addresses', 'id')->where(fn ($q) => $q->where('user_id', $request->user()->id)),
+            ],
         ]);
 
         $qty = (int) ($validated['quantity'] ?? 1);
         $qty = $qty < 1 ? 1 : $qty;
 
-        $quote = $this->cartShippingEstimate->quoteForUser($request->user(), $validated, $qty);
+        $destAddrId = isset($validated['destination_address_id']) ? (int) $validated['destination_address_id'] : null;
+        $destAddrId = $destAddrId > 0 ? $destAddrId : null;
+
+        $quote = $this->cartShippingEstimate->quoteForUser($request->user(), $validated, $qty, $destAddrId);
 
         if ($quote === []) {
             return response()->json([
@@ -137,6 +154,8 @@ class CartController extends Controller
             'estimated' => (bool) ($quote['estimated'] ?? false),
             'missing_fields' => $quote['missing_fields'] ?? [],
             'destination_country' => $quote['destination_country'] ?? null,
+            'destination_label' => $quote['destination_label'] ?? null,
+            'destination_address_id' => $quote['destination_address_id'] ?? null,
             'snapshot' => $quote,
         ]);
     }

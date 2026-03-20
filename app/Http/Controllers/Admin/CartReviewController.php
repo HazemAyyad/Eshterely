@@ -41,6 +41,7 @@ class CartReviewController extends Controller
             ->editColumn('unit_price', fn (CartItem $item) => number_format((float) $item->unit_price, 2) . ' ' . $item->currency)
             ->addColumn('variation_text', fn (CartItem $item) => $item->variation_text ? \Str::limit($item->variation_text, 30) : '-')
             ->addColumn('weight_dims', fn (CartItem $item) => $this->formatPackageColumn($item))
+            ->addColumn('shipping_destination', fn (CartItem $item) => $this->formatShippingDestination($item))
             ->addColumn('shipping_basis', fn (CartItem $item) => $this->formatShippingBasis($item))
             ->addColumn('shipping_cost_edit', function (CartItem $item) {
                 $url = route('admin.cart-review.shipping', $item->id);
@@ -70,7 +71,7 @@ class CartReviewController extends Controller
                 return '<button type="button" class="btn btn-sm btn-info btn-details me-1" data-details="' . e(json_encode($this->itemDetailsForModal($item))) . '">' . __('admin.details') . '</button> ' .
                     $reviewBtns;
             })
-            ->rawColumns(['image', 'weight_dims', 'shipping_basis', 'actions', 'shipping_cost_edit'])
+            ->rawColumns(['image', 'weight_dims', 'shipping_destination', 'shipping_basis', 'actions', 'shipping_cost_edit'])
             ->toJson();
     }
 
@@ -138,6 +139,7 @@ class CartReviewController extends Controller
             'review_status' => $item->review_status,
             'shipping_cost' => $item->shipping_cost,
             'shipping_basis' => strip_tags($this->formatShippingBasis($item)),
+            'shipping_destination' => strip_tags($this->formatShippingDestination($item)),
             'created_at' => $item->created_at?->format('Y-m-d H:i'),
         ];
     }
@@ -150,6 +152,36 @@ class CartReviewController extends Controller
         }
         $src = str_starts_with($url, 'http') ? $url : asset($url);
         return '<img src="' . e($src) . '" alt="Product" class="rounded" style="width:48px;height:48px;object-fit:cover;">';
+    }
+
+    private function formatShippingDestination(CartItem $item): string
+    {
+        $snapshot = is_array($item->shipping_snapshot) ? $item->shipping_snapshot : [];
+        $cc = $snapshot['destination_country'] ?? null;
+        $label = $snapshot['destination_label'] ?? null;
+        $addrId = $snapshot['destination_address_id'] ?? null;
+
+        if (! is_string($cc) || trim($cc) === '') {
+            if (is_string($label) && trim($label) !== '') {
+                return '<div class="small"><span class="text-muted">' . e($label) . '</span></div>';
+            }
+
+            return '<span class="text-muted">—</span>';
+        }
+
+        $cc = e(trim($cc));
+        $labelHtml = is_string($label) && trim($label) !== ''
+            ? '<div class="text-muted mt-1" style="max-width:14rem">' . e($label) . '</div>'
+            : '';
+        $idHint = $addrId !== null && $addrId !== ''
+            ? '<div class="text-muted" style="font-size:0.7rem">#' . e((string) $addrId) . '</div>'
+            : '';
+
+        return '<div class="small">'
+            . '<span class="badge bg-label-info">' . $cc . '</span>'
+            . $labelHtml
+            . $idHint
+            . '</div>';
     }
 
     private function formatShippingBasis(CartItem $item): string

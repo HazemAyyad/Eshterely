@@ -17,14 +17,16 @@ class CartShippingEstimateService
 
     /**
      * @param  array<string, mixed>  $validated  Cart line fields (weight, dimensions, etc.)
+     * @param  int|null  $destinationAddressId  User's saved address id; falls back to default address
      * @return array<string, mixed>  Compatible with cart_items.shipping_snapshot
      */
-    public function quoteForUser(?User $user, array $validated, int $quantity): array
+    public function quoteForUser(?User $user, array $validated, int $quantity, ?int $destinationAddressId = null): array
     {
-        $destinationCountry = $this->resolveDestinationCountry($user);
-        if (! is_string($destinationCountry) || $destinationCountry === '') {
+        $meta = $this->resolveDestinationFromUser($user, $destinationAddressId);
+        if ($meta === null) {
             return [];
         }
+        $destinationCountry = $meta['country'];
 
         $normalized = [
             'weight' => $validated['weight'] ?? null,
@@ -64,6 +66,8 @@ class CartShippingEstimateService
                 'notes' => $result->calculationNotes ?? [],
                 'calculation_breakdown' => $result->calculationBreakdown ?? [],
                 'destination_country' => $destinationCountry,
+                'destination_address_id' => $meta['address_id'],
+                'destination_label' => $meta['label'],
             ];
         } catch (\Throwable $e) {
             return [];
@@ -76,6 +80,10 @@ class CartShippingEstimateService
     public function recalculateAndPersist(CartItem $item): CartItem
     {
         $item->loadMissing('user');
+        $snap = is_array($item->shipping_snapshot) ? $item->shipping_snapshot : [];
+        $destAddrId = isset($snap['destination_address_id']) ? (int) $snap['destination_address_id'] : null;
+        $destAddrId = $destAddrId > 0 ? $destAddrId : null;
+
         $quote = $this->quoteForUser($item->user, [
             'weight' => $item->weight,
             'weight_unit' => $item->weight_unit,
@@ -83,7 +91,7 @@ class CartShippingEstimateService
             'width' => $item->width,
             'height' => $item->height,
             'dimension_unit' => $item->dimension_unit,
-        ], (int) $item->quantity);
+        ], (int) $item->quantity, $destAddrId);
 
         if ($quote === []) {
             return $item;
@@ -108,20 +116,49 @@ class CartShippingEstimateService
         return $item->fresh();
     }
 
-    private function resolveDestinationCountry(?User $user): ?string
+    /**
+     * @return array{country: string, address_id: int, label: string}|null
+     */
+    private function resolveDestinationFromUser(?User $user, ?int $destinationAddressId): ?array
     {
-        $default = null;
-        if ($user && method_exists($user, 'addresses')) {
-            $default = $user->addresses()->where('is_default', true)->with('country')->first();
-        }
-        $destinationCountry = $default?->country?->code ?? null;
-        if (is_string($destinationCountry)) {
-            $destinationCountry = Str::upper(trim($destinationCountry));
-        }
-        if (is_string($destinationCountry) && $destinationCountry !== '') {
-            return $destinationCountry;
+        if ($user === null || ! method_exists($user, 'addresses')) {
+            return null;
         }
 
-        return null;
+        $addr = null;
+        if ($destinationAddressId !== null && $destinationAddressId > 0) {
+            $addr = $user->addresses()
+                ->with(['country', 'city'])
+                ->whereKey($destinationAddressId)
+                ->first();
+        }
+        if ($addr === null) {
+            $addr = $user->addresses()
+                ->where('is_default', true)
+                ->with(['country', 'city'])
+                ->first();
+        }
+        if ($addr === null) {
+            return null;
+        }
+
+        $code = $addr->country?->code ?? null;
+        if (! is_string($code) || trim($code) === '') {
+            return null;
+        }
+        $code = Str::upper(trim($code));
+
+        $parts = array_filter([
+            $addr->nickname,
+            $addr->city?->name,
+            $addr->country?->name,
+        ], fn ($v) => is_string($v) && trim($v) !== '');
+        $label = $parts !== [] ? implode(' · ', $parts) : $code;
+
+        return [
+            'country' => $code,
+            'address_id' => (int) $addr->id,
+            'label' => $label,
+        ];
     }
 }

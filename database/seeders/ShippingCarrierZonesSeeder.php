@@ -21,8 +21,8 @@ class ShippingCarrierZonesSeeder extends Seeder
             [
                 'carrier' => 'dhl',
                 'zone_code' => 'ME_LEVANT',
-                'countries' => ['PS', 'JO', 'LB', 'SY'],
-                'notes' => 'Starter DHL Levant zone (Palestine, Jordan, Lebanon, Syria)',
+                'countries' => ['PS', 'JO', 'LB', 'SY', 'IQ'],
+                'notes' => 'Starter DHL Levant zone (Palestine, Jordan, Lebanon, Syria, Iraq)',
             ],
             [
                 'carrier' => 'dhl',
@@ -33,8 +33,8 @@ class ShippingCarrierZonesSeeder extends Seeder
             [
                 'carrier' => 'ups',
                 'zone_code' => 'ME_LEVANT',
-                'countries' => ['PS', 'JO', 'LB', 'SY'],
-                'notes' => 'Starter UPS Levant zone (Palestine, Jordan, Lebanon, Syria)',
+                'countries' => ['PS', 'JO', 'LB', 'SY', 'IQ'],
+                'notes' => 'Starter UPS Levant zone (Palestine, Jordan, Lebanon, Syria, Iraq)',
             ],
             [
                 'carrier' => 'ups',
@@ -45,8 +45,8 @@ class ShippingCarrierZonesSeeder extends Seeder
             [
                 'carrier' => 'fedex',
                 'zone_code' => 'ME_LEVANT',
-                'countries' => ['PS', 'JO', 'LB', 'SY'],
-                'notes' => 'Starter FedEx Levant zone (Palestine, Jordan, Lebanon, Syria)',
+                'countries' => ['PS', 'JO', 'LB', 'SY', 'IQ'],
+                'notes' => 'Starter FedEx Levant zone (Palestine, Jordan, Lebanon, Syria, Iraq)',
             ],
             [
                 'carrier' => 'fedex',

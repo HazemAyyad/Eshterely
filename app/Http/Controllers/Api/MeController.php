@@ -8,6 +8,7 @@ use App\Models\Address;
 use App\Models\City;
 use App\Models\Country;
 use App\Models\User;
+use App\Services\Cart\ResetCartItemsReviewStatusService;
 use App\Services\Fcm\DeviceTokenService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -155,6 +156,10 @@ class MeController extends Controller
             'lng' => $validated['lng'] ?? null,
         ]);
 
+        if ($validated['is_default'] ?? false) {
+            app(ResetCartItemsReviewStatusService::class)($user->id);
+        }
+
         return (new AddressResource($address->load(['country', 'city'])))
             ->response()
             ->setStatusCode(201);
@@ -163,6 +168,7 @@ class MeController extends Controller
     public function updateAddress(Request $request, int $id): JsonResponse
     {
         $address = Address::where('user_id', $request->user()->id)->findOrFail($id);
+        $wasDefault = (bool) $address->is_default;
 
         $validated = $request->validate([
             'country_id' => 'sometimes|exists:countries,id',
@@ -188,14 +194,23 @@ class MeController extends Controller
         $address->fill(array_filter($validated));
         $address->save();
 
+        if (($validated['is_default'] ?? false) && ! $wasDefault) {
+            app(ResetCartItemsReviewStatusService::class)($request->user()->id);
+        }
+
         return response()->json(new AddressResource($address->fresh()->load(['country', 'city'])));
     }
 
     public function setDefaultAddress(Request $request, int $id): JsonResponse
     {
         $address = Address::where('user_id', $request->user()->id)->findOrFail($id);
+        $wasAlreadyDefault = (bool) $address->is_default;
         $request->user()->addresses()->update(['is_default' => false]);
         $address->update(['is_default' => true]);
+
+        if (! $wasAlreadyDefault) {
+            app(ResetCartItemsReviewStatusService::class)($request->user()->id);
+        }
 
         return response()->json(['message' => 'Updated']);
     }

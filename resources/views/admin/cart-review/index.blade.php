@@ -29,6 +29,7 @@
                     <th>Qty</th>
                     <th>Variation</th>
                     <th>{{ __('admin.package_modal_title') }}</th>
+                    <th>Ship to</th>
                     <th>Shipping basis</th>
                     <th>{{ __('admin.shipping_cost') }} / {{ __('admin.recalculate_shipping') }}</th>
                     <th>{{ __('admin.date') }}</th>
@@ -137,6 +138,7 @@ document.addEventListener('DOMContentLoaded', function() {
             { data: 'quantity', name: 'quantity' },
             { data: 'variation_text', name: 'variation_text', orderable: false, searchable: false },
             { data: 'weight_dims', name: 'weight_dims', orderable: false, searchable: false },
+            { data: 'shipping_destination', name: 'shipping_destination', orderable: false, searchable: false },
             { data: 'shipping_basis', name: 'shipping_basis', orderable: false, searchable: false },
             { data: 'shipping_cost_edit', name: 'shipping_cost', orderable: false, searchable: false },
             { data: 'created_at', name: 'created_at' },
@@ -244,7 +246,7 @@ document.addEventListener('DOMContentLoaded', function() {
             id: 'ID', name: 'Product', product_url: 'URL', unit_price: 'Unit price', quantity: 'Qty', currency: 'Currency',
             store_name: 'Store', store_key: 'Store key', product_id: 'Product ID', country: 'Country', variation_text: 'Variation',
             weight: 'Weight', weight_unit: 'Weight unit', length: 'Length', width: 'Width', height: 'Height', dimension_unit: 'Dimension unit',
-            source: 'Source', review_status: 'Review status', shipping_cost: 'Shipping cost', created_at: 'Created'
+            source: 'Source', review_status: 'Review status', shipping_cost: 'Shipping cost', shipping_destination: 'Ship to', shipping_basis: 'Shipping basis', created_at: 'Created'
         };
         let html = '';
         for (const [k, v] of Object.entries(d)) {

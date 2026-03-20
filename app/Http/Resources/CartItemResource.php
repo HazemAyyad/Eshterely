@@ -55,6 +55,13 @@ class CartItemResource extends JsonResource
         $data['source_url'] = $item->product_url;
         $data['source_store'] = $item->store_name ?? $item->store_key;
 
+        $snap = is_array($item->shipping_snapshot) ? $item->shipping_snapshot : [];
+        $data['shipping_destination'] = [
+            'address_id' => $snap['destination_address_id'] ?? null,
+            'country_code' => $snap['destination_country'] ?? null,
+            'label' => $snap['destination_label'] ?? null,
+        ];
+
         return $data;
     }
 }
