@@ -154,9 +154,24 @@ class OrderController extends Controller
         if ($o->needs_review || $o->status === Order::STATUS_UNDER_REVIEW) {
             return 'pending_review';
         }
+
+        // Payment succeeded: never expose stale pending_payment / ambiguous "paid" key to the app.
         if ($this->hasPaidPayment($o)) {
-            return 'paid';
+            return match ($o->status) {
+                Order::STATUS_PENDING_PAYMENT,
+                Order::STATUS_PAID,
+                Order::STATUS_APPROVED,
+                Order::STATUS_PROCESSING,
+                Order::STATUS_PURCHASED => 'processing',
+                Order::STATUS_SHIPPED_TO_WAREHOUSE,
+                Order::STATUS_INTERNATIONAL_SHIPPING,
+                Order::STATUS_IN_TRANSIT => 'shipped',
+                Order::STATUS_DELIVERED => 'delivered',
+                Order::STATUS_CANCELLED => 'cancelled',
+                default => 'processing',
+            };
         }
+
         return match ($o->status) {
             Order::STATUS_PENDING_PAYMENT => 'pending_payment',
             Order::STATUS_PAID => 'paid',
