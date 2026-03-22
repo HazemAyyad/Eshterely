@@ -24,8 +24,11 @@ class SessionsController extends Controller
 
         $hasMeta = Schema::hasColumn('personal_access_tokens', 'device_type');
 
-        return response()->json($tokens->map(function (PersonalAccessToken $t) use ($current, $hasMeta) {
-            $deviceType = $hasMeta ? ($t->getAttribute('device_type') ?? '') : '';
+        $hasDeviceModel = Schema::hasColumn('personal_access_tokens', 'device_model');
+
+        return response()->json($tokens->map(function (PersonalAccessToken $t) use ($current, $hasMeta, $hasDeviceModel) {
+            $deviceType = $hasMeta ? (string) ($t->getAttribute('device_type') ?? '') : '';
+            $deviceModel = $hasDeviceModel ? (string) ($t->getAttribute('device_model') ?? '') : '';
             $location = '';
             if ($hasMeta) {
                 $location = (string) ($t->getAttribute('location_label') ?? '');
@@ -35,18 +38,29 @@ class SessionsController extends Controller
                 }
             }
 
-            $deviceLabel = $t->name ?: 'Session';
-            if ($deviceType !== '') {
-                $deviceLabel = $deviceLabel.' · '.$deviceType;
+            // Primary title: rich model (e.g. Xiaomi Redmi … · Android 13), else token name + platform.
+            $deviceLabel = $deviceModel !== ''
+                ? $deviceModel
+                : (($t->name ?: 'Session').($deviceType !== '' ? ' · '.$deviceType : ''));
+
+            if ($deviceModel !== '' && $deviceType !== '') {
+                $clientInfo = strtoupper($deviceType).' · '.$deviceModel;
+            } elseif ($deviceModel !== '') {
+                $clientInfo = $deviceModel;
+            } elseif ($deviceType !== '') {
+                $clientInfo = strtoupper($deviceType);
+            } else {
+                $clientInfo = $t->name ?: 'API';
             }
 
             return [
                 'id' => (string) $t->id,
                 'device_name' => $deviceLabel,
                 'device_type' => $deviceType,
+                'device_model' => $deviceModel,
                 'location' => $location,
                 'last_active' => ($t->last_used_at ?? $t->created_at)?->toIso8601String(),
-                'client_info' => ($t->name ?: '').($deviceType !== '' ? ' · '.$deviceType : ''),
+                'client_info' => $clientInfo,
                 'is_current' => $current ? ($t->id === $current->id) : false,
                 'created_at' => $t->created_at?->toIso8601String(),
             ];
@@ -85,9 +99,11 @@ class SessionsController extends Controller
             ->get();
 
         $hasMeta = Schema::hasColumn('personal_access_tokens', 'device_type');
+        $hasDeviceModel = Schema::hasColumn('personal_access_tokens', 'device_model');
 
-        return response()->json($tokens->map(function (PersonalAccessToken $t) use ($hasMeta) {
-            $deviceType = $hasMeta ? ($t->getAttribute('device_type') ?? '') : '';
+        return response()->json($tokens->map(function (PersonalAccessToken $t) use ($hasMeta, $hasDeviceModel) {
+            $deviceType = $hasMeta ? (string) ($t->getAttribute('device_type') ?? '') : '';
+            $deviceModel = $hasDeviceModel ? (string) ($t->getAttribute('device_model') ?? '') : '';
             $location = '';
             if ($hasMeta) {
                 $location = (string) ($t->getAttribute('location_label') ?? '');
@@ -96,15 +112,16 @@ class SessionsController extends Controller
                     $location = $ip !== '' ? 'IP: '.$ip : '';
                 }
             }
-            $device = $t->name ?: 'Unknown device';
-            if ($deviceType !== '') {
-                $device = $device.' · '.$deviceType;
-            }
+            $device = $deviceModel !== ''
+                ? $deviceModel
+                : (($t->name ?: 'Unknown device').($deviceType !== '' ? ' · '.$deviceType : ''));
 
             return [
                 'id' => (string) $t->id,
                 'location' => $location,
                 'device' => $device,
+                'device_type' => $deviceType,
+                'device_model' => $deviceModel,
                 'timestamp' => ($t->last_used_at ?? $t->created_at)?->toIso8601String() ?? '',
                 'last_active' => ($t->last_used_at ?? $t->created_at)?->toIso8601String() ?? '',
             ];

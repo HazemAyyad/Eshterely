@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rules\Password;
 
@@ -222,6 +223,7 @@ class MeController extends Controller
             'device_type' => ['nullable', 'string', 'max:20'],
             'platform' => ['nullable', 'string', 'max:30'],
             'device_name' => ['nullable', 'string', 'max:100'],
+            'device_model' => ['nullable', 'string', 'max:191'],
             'app_version' => ['nullable', 'string', 'max:50'],
         ]);
 
@@ -234,6 +236,22 @@ class MeController extends Controller
             $validated['device_name'] ?? null,
             $validated['app_version'] ?? null
         );
+
+        $current = $user->currentAccessToken();
+        if ($current && Schema::hasColumn('personal_access_tokens', 'device_model')) {
+            $deviceModel = $validated['device_model'] ?? $validated['device_name'] ?? null;
+            $updates = [];
+            if (is_string($deviceModel) && $deviceModel !== '') {
+                $updates['device_model'] = mb_substr($deviceModel, 0, 191);
+            }
+            if (($validated['device_type'] ?? null) !== null && (string) $validated['device_type'] !== '') {
+                $updates['device_type'] = $validated['device_type'];
+            }
+            if ($updates !== []) {
+                $updates['updated_at'] = now();
+                DB::table('personal_access_tokens')->where('id', $current->id)->update($updates);
+            }
+        }
 
         return response()->json(['message' => 'FCM token updated']);
     }

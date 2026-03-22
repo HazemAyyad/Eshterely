@@ -329,9 +329,11 @@ class UserController extends Controller
             ->get();
 
         $hasMeta = Schema::hasColumn('personal_access_tokens', 'device_type');
+        $hasDeviceModel = Schema::hasColumn('personal_access_tokens', 'device_model');
 
-        return $tokens->map(function (PersonalAccessToken $t) use ($hasMeta) {
+        return $tokens->map(function (PersonalAccessToken $t) use ($hasMeta, $hasDeviceModel) {
             $deviceType = $hasMeta ? (string) ($t->getAttribute('device_type') ?? '') : '';
+            $deviceModel = $hasDeviceModel ? (string) ($t->getAttribute('device_model') ?? '') : '';
             $location = '';
             if ($hasMeta) {
                 $location = (string) ($t->getAttribute('location_label') ?? '');
@@ -341,14 +343,23 @@ class UserController extends Controller
                 }
             }
             $name = $t->name ?: 'Session';
-            $deviceLabel = $deviceType !== '' ? $name.' · '.$deviceType : $name;
+            $deviceLabel = $deviceModel !== ''
+                ? $deviceModel
+                : ($deviceType !== '' ? $name.' · '.$deviceType : $name);
+
+            $clientInfo = $deviceType !== '' ? strtoupper($deviceType) : ($t->name ?? 'API');
+            if ($deviceModel !== '' && $deviceType !== '') {
+                $clientInfo = strtoupper($deviceType).' · '.$deviceModel;
+            } elseif ($deviceModel !== '') {
+                $clientInfo = $deviceModel;
+            }
 
             $lastAt = $t->last_used_at ?? $t->created_at;
 
             return (object) [
                 'id' => $t->id,
                 'device_name' => $deviceLabel,
-                'client_info' => $deviceType !== '' ? $deviceType : ($t->name ?? 'API'),
+                'client_info' => $clientInfo,
                 'location' => $location !== '' ? $location : '—',
                 'last_active_at' => $lastAt,
                 'is_current' => false,

@@ -69,6 +69,7 @@ class AuthController extends Controller
             'device_type' => ['nullable', 'string', 'max:40'],
             'platform' => ['nullable', 'string', 'max:30'],
             'device_name' => ['nullable', 'string', 'max:100'],
+            'device_model' => ['nullable', 'string', 'max:191'],
             'app_version' => ['nullable', 'string', 'max:50'],
         ];
         if ($request->mode === 'reset') {
@@ -135,6 +136,7 @@ class AuthController extends Controller
             'device_type' => ['nullable', 'string', 'max:40'],
             'platform' => ['nullable', 'string', 'max:30'],
             'device_name' => ['nullable', 'string', 'max:100'],
+            'device_model' => ['nullable', 'string', 'max:191'],
             'app_version' => ['nullable', 'string', 'max:50'],
         ]);
 
@@ -171,12 +173,20 @@ class AuthController extends Controller
             ? trim((string) $countryHint).($ip ? ' · IP: '.$ip : '')
             : ($ip ? 'IP: '.$ip : null);
 
-        DB::table('personal_access_tokens')->where('id', $token->id)->update([
+        $deviceModel = $request->input('device_model') ?: $request->input('device_name');
+        $deviceModel = is_string($deviceModel) ? mb_substr($deviceModel, 0, 191) : null;
+
+        $row = [
             'device_type' => $request->input('device_type'),
             'ip_address' => $ip,
             'location_label' => $locationLabel,
             'updated_at' => now(),
-        ]);
+        ];
+        if (Schema::hasColumn('personal_access_tokens', 'device_model')) {
+            $row['device_model'] = $deviceModel;
+        }
+
+        DB::table('personal_access_tokens')->where('id', $token->id)->update($row);
     }
 
     private function upsertFcmToken(User $user, Request $request): void
