@@ -262,4 +262,40 @@ class MeController extends Controller
 
         return response()->json(['message' => 'Password updated']);
     }
+
+    /**
+     * Summary for Security & Access screen in the mobile app.
+     */
+    public function security(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $tokens = $user->tokens()->orderByDesc('last_used_at')->orderByDesc('created_at')->get();
+        $first = $tokens->first();
+
+        return response()->json([
+            'two_factor_enabled' => (bool) $user->two_factor_enabled,
+            'active_sessions_count' => $tokens->count(),
+            'recent_activity_preview' => $first
+                ? (string) (($first->name ?: 'Session').' • '.(($first->last_used_at ?? $first->created_at)?->diffForHumans() ?? ''))
+                : '',
+            'change_password_hint' => 'Use a strong password you don\'t use elsewhere.',
+        ]);
+    }
+
+    public function updateTwoFactor(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'enabled' => ['required', 'boolean'],
+        ]);
+
+        $user = $request->user();
+        $user->update([
+            'two_factor_enabled' => $validated['enabled'],
+        ]);
+
+        return response()->json([
+            'two_factor_enabled' => (bool) $user->two_factor_enabled,
+            'message' => $validated['enabled'] ? 'Two-factor authentication enabled' : 'Two-factor authentication disabled',
+        ]);
+    }
 }

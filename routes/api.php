@@ -64,6 +64,9 @@ Route::middleware('auth:sanctum')->prefix('me')->group(function () {
     Route::patch('addresses/{id}', [MeController::class, 'updateAddress']);
     Route::post('addresses/{id}/default', [MeController::class, 'setDefaultAddress']); // Set as default address
     Route::post('change-password', [MeController::class, 'changePassword']);
+    Route::get('security', [MeController::class, 'security']);
+    Route::patch('two-factor', [MeController::class, 'updateTwoFactor']);
+    Route::get('login-history', [SessionsController::class, 'loginHistory']);
     Route::patch('fcm-token', [MeController::class, 'updateFcmToken']);
     Route::get('notification-preferences', [NotificationPrefsController::class, 'show']);
     Route::patch('notification-preferences', [NotificationPrefsController::class, 'update']);
@@ -71,6 +74,8 @@ Route::middleware('auth:sanctum')->prefix('me')->group(function () {
     Route::patch('settings', [SettingsController::class, 'update']);
     Route::get('sessions', [SessionsController::class, 'index']);
     Route::delete('sessions/{id}', [SessionsController::class, 'destroy']);
+    Route::post('sessions/revoke-others', [SessionsController::class, 'revokeOthers']);
+    Route::post('sessions/revoke-all', [SessionsController::class, 'revokeAll']);
 });
 
 // Cart (auth required)
