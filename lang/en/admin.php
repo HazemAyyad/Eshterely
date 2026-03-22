@@ -175,6 +175,7 @@ return [
     'default' => 'Default',
     'sessions' => 'Sessions',
     'active_sessions' => 'Active Sessions',
+    'sessions_sanctum_hint' => 'Mobile app sessions (Laravel Sanctum) — same tokens as in the app Security & Access screen.',
     'no_sessions' => 'No sessions',
     'device' => 'Device',
     'location' => 'Location',

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class SessionsController extends Controller
@@ -21,15 +22,35 @@ class SessionsController extends Controller
             ->orderByDesc('created_at')
             ->get();
 
-        return response()->json($tokens->map(fn (PersonalAccessToken $t) => [
-            'id' => (string) $t->id,
-            'device_name' => $t->name ?: 'Session',
-            'location' => '',
-            'last_active' => ($t->last_used_at ?? $t->created_at)?->toIso8601String(),
-            'client_info' => $t->name ?: '',
-            'is_current' => $current ? ($t->id === $current->id) : false,
-            'created_at' => $t->created_at?->toIso8601String(),
-        ])->values());
+        $hasMeta = Schema::hasColumn('personal_access_tokens', 'device_type');
+
+        return response()->json($tokens->map(function (PersonalAccessToken $t) use ($current, $hasMeta) {
+            $deviceType = $hasMeta ? ($t->getAttribute('device_type') ?? '') : '';
+            $location = '';
+            if ($hasMeta) {
+                $location = (string) ($t->getAttribute('location_label') ?? '');
+                if ($location === '') {
+                    $ip = (string) ($t->getAttribute('ip_address') ?? '');
+                    $location = $ip !== '' ? 'IP: '.$ip : '';
+                }
+            }
+
+            $deviceLabel = $t->name ?: 'Session';
+            if ($deviceType !== '') {
+                $deviceLabel = $deviceLabel.' · '.$deviceType;
+            }
+
+            return [
+                'id' => (string) $t->id,
+                'device_name' => $deviceLabel,
+                'device_type' => $deviceType,
+                'location' => $location,
+                'last_active' => ($t->last_used_at ?? $t->created_at)?->toIso8601String(),
+                'client_info' => ($t->name ?: '').($deviceType !== '' ? ' · '.$deviceType : ''),
+                'is_current' => $current ? ($t->id === $current->id) : false,
+                'created_at' => $t->created_at?->toIso8601String(),
+            ];
+        })->values());
     }
 
     public function destroy(Request $request, int $id): JsonResponse
@@ -63,13 +84,31 @@ class SessionsController extends Controller
             ->limit(30)
             ->get();
 
-        return response()->json($tokens->map(fn (PersonalAccessToken $t) => [
-            'id' => (string) $t->id,
-            'location' => '',
-            'device' => $t->name ?: 'Unknown device',
-            'timestamp' => ($t->last_used_at ?? $t->created_at)?->toIso8601String() ?? '',
-            'last_active' => ($t->last_used_at ?? $t->created_at)?->toIso8601String() ?? '',
-        ])->values());
+        $hasMeta = Schema::hasColumn('personal_access_tokens', 'device_type');
+
+        return response()->json($tokens->map(function (PersonalAccessToken $t) use ($hasMeta) {
+            $deviceType = $hasMeta ? ($t->getAttribute('device_type') ?? '') : '';
+            $location = '';
+            if ($hasMeta) {
+                $location = (string) ($t->getAttribute('location_label') ?? '');
+                if ($location === '') {
+                    $ip = (string) ($t->getAttribute('ip_address') ?? '');
+                    $location = $ip !== '' ? 'IP: '.$ip : '';
+                }
+            }
+            $device = $t->name ?: 'Unknown device';
+            if ($deviceType !== '') {
+                $device = $device.' · '.$deviceType;
+            }
+
+            return [
+                'id' => (string) $t->id,
+                'location' => $location,
+                'device' => $device,
+                'timestamp' => ($t->last_used_at ?? $t->created_at)?->toIso8601String() ?? '',
+                'last_active' => ($t->last_used_at ?? $t->created_at)?->toIso8601String() ?? '',
+            ];
+        })->values());
     }
 
     public function revokeOthers(Request $request): JsonResponse

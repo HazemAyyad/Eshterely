@@ -175,6 +175,7 @@ return [
     'default' => 'افتراضي',
     'sessions' => 'الجلسات',
     'active_sessions' => 'الجلسات النشطة',
+    'sessions_sanctum_hint' => 'جلسات تطبيق الجوال (Laravel Sanctum) — نفس الرموز التي تظهر في شاشة الأمان بالتطبيق.',
     'no_sessions' => 'لا توجد جلسات',
     'device' => 'الجهاز',
     'location' => 'الموقع',

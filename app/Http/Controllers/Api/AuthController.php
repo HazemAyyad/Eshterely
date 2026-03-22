@@ -8,8 +8,11 @@ use App\Models\User;
 use App\Services\Fcm\DeviceTokenService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
+use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
@@ -63,7 +66,10 @@ class AuthController extends Controller
             'code' => ['required', 'string', 'size:6'],
             'mode' => ['nullable', 'string', 'in:signup,reset,login'],
             'fcm_token' => ['nullable', 'string', 'max:500'],
-            'device_type' => ['nullable', 'string', 'max:20'],
+            'device_type' => ['nullable', 'string', 'max:40'],
+            'platform' => ['nullable', 'string', 'max:30'],
+            'device_name' => ['nullable', 'string', 'max:100'],
+            'app_version' => ['nullable', 'string', 'max:50'],
         ];
         if ($request->mode === 'reset') {
             $rules['password'] = ['required', 'confirmed', Password::min(8)->numbers()->symbols()];
@@ -109,12 +115,12 @@ class AuthController extends Controller
 
         $user->tokens()->delete();
 
-        $token = $user->createToken('mobile-app')->plainTextToken;
-
-        $this->upsertFcmToken($user, $request->fcm_token, $request->device_type);
+        $newToken = $user->createToken('mobile-app');
+        $this->attachSanctumSessionMeta($newToken->accessToken, $request);
+        $this->upsertFcmToken($user, $request);
 
         return response()->json([
-            'token' => $token,
+            'token' => $newToken->plainTextToken,
             'token_type' => 'Bearer',
             'user' => $user,
         ]);
@@ -126,7 +132,10 @@ class AuthController extends Controller
             'phone' => ['required', 'string', 'regex:/^[0-9]+$/', 'min:10', 'max:15'],
             'password' => ['required'],
             'fcm_token' => ['nullable', 'string', 'max:500'],
-            'device_type' => ['nullable', 'string', 'max:20'],
+            'device_type' => ['nullable', 'string', 'max:40'],
+            'platform' => ['nullable', 'string', 'max:30'],
+            'device_name' => ['nullable', 'string', 'max:100'],
+            'app_version' => ['nullable', 'string', 'max:50'],
         ]);
 
         if ($validator->fails()) {
@@ -140,23 +149,50 @@ class AuthController extends Controller
         }
 
         $user->tokens()->delete();
-        $token = $user->createToken('mobile-app')->plainTextToken;
-
-        $this->upsertFcmToken($user, $request->fcm_token, $request->device_type);
+        $newToken = $user->createToken('mobile-app');
+        $this->attachSanctumSessionMeta($newToken->accessToken, $request);
+        $this->upsertFcmToken($user, $request);
 
         return response()->json([
-            'token' => $token,
+            'token' => $newToken->plainTextToken,
             'token_type' => 'Bearer',
             'user' => $user,
         ]);
     }
 
-    private function upsertFcmToken(User $user, ?string $fcmToken, ?string $deviceType): void
+    private function attachSanctumSessionMeta(PersonalAccessToken $token, Request $request): void
     {
+        if (! Schema::hasColumn('personal_access_tokens', 'device_type')) {
+            return;
+        }
+        $ip = $request->ip();
+        $countryHint = $request->header('X-App-Country');
+        $locationLabel = $countryHint
+            ? trim((string) $countryHint).($ip ? ' · IP: '.$ip : '')
+            : ($ip ? 'IP: '.$ip : null);
+
+        DB::table('personal_access_tokens')->where('id', $token->id)->update([
+            'device_type' => $request->input('device_type'),
+            'ip_address' => $ip,
+            'location_label' => $locationLabel,
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function upsertFcmToken(User $user, Request $request): void
+    {
+        $fcmToken = $request->input('fcm_token');
         if (empty($fcmToken)) {
             return;
         }
-        app(DeviceTokenService::class)->upsertToken($user, $fcmToken, $deviceType);
+        app(DeviceTokenService::class)->upsertToken(
+            $user,
+            $fcmToken,
+            $request->input('device_type'),
+            $request->input('platform'),
+            $request->input('device_name'),
+            $request->input('app_version'),
+        );
     }
 
     public function forgotPassword(Request $request): JsonResponse

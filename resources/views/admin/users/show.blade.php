@@ -249,10 +249,14 @@
             <div class="tab-pane fade" id="tab-sessions" role="tabpanel">
                 <div class="card border-0 shadow-sm">
                     <h5 class="card-header">{{ __('admin.active_sessions') }}</h5>
+                    <div class="card-body border-bottom py-3">
+                        <p class="mb-0 small text-body-secondary">{{ __('admin.sessions_sanctum_hint') }}</p>
+                    </div>
                     <div class="table-responsive">
                         <table class="table table-hover">
                             <thead class="border-top">
                                 <tr>
+                                    <th style="width:88px">#</th>
                                     <th>{{ __('admin.device') }}</th>
                                     <th>{{ __('admin.location') }}</th>
                                     <th>{{ __('admin.last_active') }}</th>
@@ -262,13 +266,24 @@
                                 @if($sessions && $sessions->isNotEmpty())
                                     @foreach($sessions as $s)
                                     <tr>
+                                        <td class="text-body-secondary small font-monospace">{{ $s->id ?? '—' }}</td>
                                         <td>
                                             <div class="fw-medium">{{ $s->device_name ?? '-' }}</div>
                                             <div class="text-body-secondary small">{{ $s->client_info ?? '-' }}</div>
                                         </td>
                                         <td>{{ $s->location ?? '-' }}</td>
                                         <td>
-                                            <div>{{ $s->last_active_at ? \Carbon\Carbon::parse($s->last_active_at)->diffForHumans() : '-' }}</div>
+                                            <div>
+                                                @if(!empty($s->last_active_at))
+                                                    @if($s->last_active_at instanceof \Carbon\Carbon)
+                                                        {{ $s->last_active_at->diffForHumans() }}
+                                                    @else
+                                                        {{ \Carbon\Carbon::parse($s->last_active_at)->diffForHumans() }}
+                                                    @endif
+                                                @else
+                                                    —
+                                                @endif
+                                            </div>
                                             <div class="text-body-secondary small">
                                                 @if($s->is_current ?? false)
                                                     <span class="badge bg-label-success">{{ __('admin.current') }}</span>
@@ -279,7 +294,7 @@
                                     @endforeach
                                 @else
                                 <tr>
-                                    <td colspan="3" class="text-center py-4 text-body-secondary">{{ __('admin.no_sessions') }}</td>
+                                    <td colspan="4" class="text-center py-4 text-body-secondary">{{ __('admin.no_sessions') }}</td>
                                 </tr>
                                 @endif
                             </tbody>

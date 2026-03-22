@@ -32,8 +32,13 @@ class ConfigController extends Controller
         $stores = $storesQuery->orderByDesc('is_featured')->get();
 
         // Only expose markets (countries) that actually have at least one featured store.
+        // Compare country codes case-insensitively (e.g. US vs us) so one store does not "drop" the country.
         $countriesWithStores = $countries->filter(function ($c) use ($stores) {
-            return $stores->contains(fn ($s) => $s->country_code === $c->code);
+            $code = strtoupper((string) ($c->code ?? ''));
+
+            return $stores->contains(function ($s) use ($code) {
+                return strtoupper((string) ($s->country_code ?? '')) === $code;
+            });
         })->values();
         $promoBanners = DB::table('promo_banners')->where('is_active', true)->orderBy('sort_order')->get();
         $warehouses = DB::table('warehouses')->where('is_active', true)->orderBy('label')->get();

@@ -62,6 +62,9 @@ class FeaturedStoresController extends Controller
         ]);
         $validated['is_featured'] = $request->boolean('is_featured');
         $validated['is_active'] = $request->has('is_active');
+        if (! empty($validated['country_code'])) {
+            $validated['country_code'] = strtoupper((string) $validated['country_code']);
+        }
         unset($validated['logo']);
 
         $store = FeaturedStore::create($validated);
@@ -96,6 +99,9 @@ class FeaturedStoresController extends Controller
         ]);
         $validated['is_featured'] = $request->boolean('is_featured');
         $validated['is_active'] = $request->has('is_active');
+        if (! empty($validated['country_code'])) {
+            $validated['country_code'] = strtoupper((string) $validated['country_code']);
+        }
         unset($validated['logo']);
 
         $featured_store->update($validated);

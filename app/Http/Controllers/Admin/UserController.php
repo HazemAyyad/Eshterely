@@ -14,8 +14,11 @@ use App\Models\CartItem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
+use Laravel\Sanctum\PersonalAccessToken;
 use Yajra\DataTables\Facades\DataTables;
 
 class UserController extends Controller
@@ -51,7 +54,7 @@ class UserController extends Controller
 
         $settings = DB::table('user_settings')->where('user_id', $userModel->id)->first();
         $notificationPrefs = DB::table('notification_prefs')->where('user_id', $userModel->id)->first();
-        $sessions = DB::table('user_sessions')->where('user_id', $userModel->id)->orderBy('last_active_at', 'desc')->get();
+        $sessions = $this->sanctumSessionsForAdmin($userModel);
 
         $primaryAddressModel = $userModel->addresses->firstWhere('is_default', true) ?? $userModel->addresses->first();
         $primaryAddressCountry = $primaryAddressModel?->country?->name;
@@ -305,6 +308,52 @@ class UserController extends Controller
         $w = trim((string) $warehouseId);
 
         return $w === '' ? null : $w;
+    }
+
+    /**
+     * Active API sessions (Laravel Sanctum) — same source as the mobile app.
+     *
+     * @return Collection<int, object>
+     */
+    private function sanctumSessionsForAdmin(User $userModel): Collection
+    {
+        if (! Schema::hasTable('personal_access_tokens')) {
+            return collect();
+        }
+
+        $tokens = PersonalAccessToken::query()
+            ->where('tokenable_type', User::class)
+            ->where('tokenable_id', $userModel->id)
+            ->orderByDesc('last_used_at')
+            ->orderByDesc('created_at')
+            ->get();
+
+        $hasMeta = Schema::hasColumn('personal_access_tokens', 'device_type');
+
+        return $tokens->map(function (PersonalAccessToken $t) use ($hasMeta) {
+            $deviceType = $hasMeta ? (string) ($t->getAttribute('device_type') ?? '') : '';
+            $location = '';
+            if ($hasMeta) {
+                $location = (string) ($t->getAttribute('location_label') ?? '');
+                if ($location === '') {
+                    $ip = (string) ($t->getAttribute('ip_address') ?? '');
+                    $location = $ip !== '' ? 'IP: '.$ip : '';
+                }
+            }
+            $name = $t->name ?: 'Session';
+            $deviceLabel = $deviceType !== '' ? $name.' · '.$deviceType : $name;
+
+            $lastAt = $t->last_used_at ?? $t->created_at;
+
+            return (object) [
+                'id' => $t->id,
+                'device_name' => $deviceLabel,
+                'client_info' => $deviceType !== '' ? $deviceType : ($t->name ?? 'API'),
+                'location' => $location !== '' ? $location : '—',
+                'last_active_at' => $lastAt,
+                'is_current' => false,
+            ];
+        });
     }
 
     private function resolveAvatarUrl(?string $path): ?string
