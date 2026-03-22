@@ -40,11 +40,20 @@ class PaymentEligibilityService
             ->exists();
 
         if ($hasPaidPayment) {
-            return [
-                'eligible' => false,
-                'error_key' => 'already_paid',
-                'message' => 'Order is already paid.',
-            ];
+            $due = (float) ($order->amount_due_now ?? 0);
+            $hasCardPaid = $order->payments()
+                ->where('status', PaymentStatus::Paid)
+                ->whereIn('provider', ['square', 'stripe'])
+                ->exists();
+
+            // Wallet (or similar) may be recorded as paid while amount_due_now > 0; allow gateway for the remainder.
+            if ($due <= 0.00001 || $hasCardPaid) {
+                return [
+                    'eligible' => false,
+                    'error_key' => 'already_paid',
+                    'message' => 'Order is already paid.',
+                ];
+            }
         }
 
         if ($this->hasUnresolvedBlockingIssue($order)) {

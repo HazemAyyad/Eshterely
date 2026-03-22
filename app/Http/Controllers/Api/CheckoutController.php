@@ -12,6 +12,7 @@ use App\Models\OrderShipment;
 use App\Models\Payment;
 use App\Models\Wallet;
 use App\Services\Payments\PaymentReferenceGenerator;
+use App\Services\Cart\RemoveOrderedCartItemsService;
 use App\Services\PromoCodeService;
 use App\Services\Shipping\ShippingPricingConfigService;
 use Illuminate\Http\JsonResponse;
@@ -67,7 +68,11 @@ class CheckoutController extends Controller
         $summary = $this->buildCheckoutSummary($request, $promoCode, $useWallet);
 
         if ($summary['checkout_items']->isEmpty()) {
-            return response()->json(['message' => 'Cart is empty', 'errors' => [], 'status' => 400], 400);
+            $message = $summary['items']->isEmpty()
+                ? 'Cart is empty'
+                : 'No reviewed items are ready for checkout. Items still pending admin review stay in your cart until they are approved.';
+
+            return response()->json(['message' => $message, 'errors' => [], 'status' => 400], 400);
         }
 
         if (! $summary['default_address']) {
@@ -193,6 +198,11 @@ class CheckoutController extends Controller
                     );
                 }
 
+                // Keep cart lines while waiting for card payment; clear once order is paid or held under review.
+                if ($status !== Order::STATUS_PENDING_PAYMENT) {
+                    (app(RemoveOrderedCartItemsService::class))($order->id);
+                }
+
                 return [
                     'order' => $order->fresh(),
                     'order_number' => $orderNumber,
@@ -270,10 +280,10 @@ class CheckoutController extends Controller
             ->whereNull('draft_order_id')
             ->get();
 
-        // Include all non-rejected items so estimated shipping appears and checkout
-        // can proceed immediately after adding an item to cart.
+        // Checkout and wallet application apply only to admin-reviewed items.
+        // Pending-review and rejected lines stay in the cart until reviewed or removed.
         $checkoutItems = $items->filter(
-            fn (CartItem $i) => ($i->review_status ?? CartItem::REVIEW_STATUS_PENDING) !== CartItem::REVIEW_STATUS_REJECTED
+            fn (CartItem $i) => ($i->review_status ?? CartItem::REVIEW_STATUS_PENDING) === CartItem::REVIEW_STATUS_REVIEWED
         )->values();
         $defaultAddress = Address::where('user_id', $request->user()->id)
             ->where('is_default', true)

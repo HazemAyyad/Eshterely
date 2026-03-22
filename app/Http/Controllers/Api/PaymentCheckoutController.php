@@ -25,9 +25,16 @@ class PaymentCheckoutController extends Controller
             abort(404, 'Order not found.');
         }
 
-        $existingPaid = $order->payments()->where('status', PaymentStatus::Paid)->exists();
-        if ($existingPaid) {
-            return response()->json(['message' => 'Order is already paid.'], 422);
+        $hasPaidPayment = $order->payments()->where('status', PaymentStatus::Paid)->exists();
+        if ($hasPaidPayment) {
+            $due = (float) ($order->amount_due_now ?? 0);
+            $hasCardPaid = $order->payments()
+                ->where('status', PaymentStatus::Paid)
+                ->whereIn('provider', ['square', 'stripe'])
+                ->exists();
+            if ($due <= 0.00001 || $hasCardPaid) {
+                return response()->json(['message' => 'Order is already paid.'], 422);
+            }
         }
 
         $paymentService = app(PaymentService::class);
