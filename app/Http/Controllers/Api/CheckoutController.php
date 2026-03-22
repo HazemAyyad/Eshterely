@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Enums\Payment\PaymentStatus;
 use App\Models\Address;
 use App\Models\CartItem;
 use App\Models\Order;
 use App\Models\OrderLineItem;
 use App\Models\OrderShipment;
+use App\Models\Payment;
 use App\Models\Wallet;
+use App\Services\Payments\PaymentReferenceGenerator;
 use App\Services\PromoCodeService;
 use App\Services\Shipping\ShippingPricingConfigService;
 use Illuminate\Http\JsonResponse;
@@ -132,17 +135,40 @@ class CheckoutController extends Controller
                 $this->createOrderShipmentsAndItems($order, $summary['checkout_items']);
                 $this->persistPriceLines($order, $summary['currency'], $summary['subtotal'], $summary['shipping'], $promoDiscount, $walletApplied, $totalAfterPromo, $amountDueNow);
 
-                if ($walletApplied > 0 && ! $needsReview && ! $estimated) {
-                    $wallet = $summary['wallet'];
+                if ($walletApplied > 0) {
+                    $wallet = Wallet::whereKey($summary['wallet']->id)->lockForUpdate()->first();
+                    if ($wallet === null) {
+                        throw new \RuntimeException('Wallet not found.');
+                    }
+                    if ((float) $wallet->available_balance + 0.00001 < $walletApplied) {
+                        throw new \RuntimeException('Insufficient wallet balance.');
+                    }
                     $wallet->available_balance = max(0, (float) $wallet->available_balance - $walletApplied);
                     $wallet->save();
                     $wallet->transactions()->create([
                         'type' => 'payment',
                         'title' => 'Order #' . $orderNumber,
                         'amount' => -$walletApplied,
-                        'subtitle' => 'WALLET',
+                        'subtitle' => ($needsReview || $estimated) ? 'WALLET · pending review' : 'WALLET',
                         'reference_type' => 'order',
                         'reference_id' => $order->id,
+                    ]);
+
+                    Payment::create([
+                        'user_id' => $request->user()->id,
+                        'order_id' => $order->id,
+                        'provider' => 'wallet',
+                        'currency' => $summary['currency'],
+                        'amount' => $walletApplied,
+                        'status' => PaymentStatus::Paid,
+                        'reference' => app(PaymentReferenceGenerator::class)->generate(),
+                        'idempotency_key' => 'wallet_checkout_' . $order->id,
+                        'paid_at' => now(),
+                        'metadata' => [
+                            'payment_method' => 'wallet',
+                            'source' => 'checkout',
+                            'pending_review' => $needsReview || $estimated,
+                        ],
                     ]);
                 }
 

@@ -70,6 +70,7 @@ class AuthController extends Controller
             'platform' => ['nullable', 'string', 'max:30'],
             'device_name' => ['nullable', 'string', 'max:100'],
             'device_model' => ['nullable', 'string', 'max:191'],
+            'app_country' => ['nullable', 'string', 'max:191'],
             'app_version' => ['nullable', 'string', 'max:50'],
         ];
         if ($request->mode === 'reset') {
@@ -137,6 +138,7 @@ class AuthController extends Controller
             'platform' => ['nullable', 'string', 'max:30'],
             'device_name' => ['nullable', 'string', 'max:100'],
             'device_model' => ['nullable', 'string', 'max:191'],
+            'app_country' => ['nullable', 'string', 'max:191'],
             'app_version' => ['nullable', 'string', 'max:50'],
         ]);
 
@@ -169,9 +171,16 @@ class AuthController extends Controller
         }
         $ip = $request->ip();
         $countryHint = $request->header('X-App-Country');
-        $locationLabel = $countryHint
-            ? trim((string) $countryHint).($ip ? ' · IP: '.$ip : '')
+        if (! is_string($countryHint) || trim($countryHint) === '') {
+            $countryHint = $request->input('app_country');
+        }
+        $countryHint = is_string($countryHint) ? trim($countryHint) : '';
+        $locationLabel = $countryHint !== ''
+            ? $countryHint.($ip ? ' · IP: '.$ip : '')
             : ($ip ? 'IP: '.$ip : null);
+        if (is_string($locationLabel) && mb_strlen($locationLabel) > 191) {
+            $locationLabel = mb_substr($locationLabel, 0, 188).'...';
+        }
 
         $deviceModel = $request->input('device_model') ?: $request->input('device_name');
         $deviceModel = is_string($deviceModel) ? mb_substr($deviceModel, 0, 191) : null;

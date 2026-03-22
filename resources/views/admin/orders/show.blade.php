@@ -83,17 +83,33 @@
         <div class="card border-0 shadow-sm">
             <div class="card-header"><h5 class="mb-0">{{ __('admin.payments') }}</h5></div>
             <div class="card-body">
+                @if(((float) ($order->wallet_applied_amount ?? 0)) > 0 && ($order->needs_review || $order->status === \App\Models\Order::STATUS_UNDER_REVIEW))
+                    <div class="alert alert-light border mb-3 py-2 small">
+                        <strong>{{ __('admin.wallet_checkout_pending') }}:</strong>
+                        {{ number_format((float) $order->wallet_applied_amount, 2) }} {{ $order->currency }}
+                        <div class="text-muted mt-1 mb-0">{{ __('admin.wallet_checkout_pending_help') }}</div>
+                    </div>
+                @endif
                 @forelse($order->payments as $p)
                     @php
                         $statusValue = $p->status->value;
                         $badgeClass = $statusValue === 'paid' ? 'success' : ($statusValue === 'failed' ? 'danger' : 'secondary');
+                        $methodLabel = match ((string) ($p->provider ?? '')) {
+                            'wallet' => __('admin.payment_method_wallet'),
+                            'square' => 'Square',
+                            'stripe' => 'Stripe',
+                            default => $p->provider ? (string) $p->provider : '—',
+                        };
                     @endphp
                     <div class="mb-3 pb-2 border-bottom">
                         <p class="mb-1">
                             <strong>{{ __('admin.reference') }}:</strong> {{ $p->reference }}
                             <span class="badge bg-{{ $badgeClass }} ms-1">{{ $statusValue }}</span>
-                            @if($p->provider) <span class="text-muted small">({{ __('admin.provider') }}: {{ $p->provider }})</span> @endif
                         </p>
+                        <p class="mb-1 small"><strong>{{ __('admin.payment_method') }}:</strong> {{ $methodLabel }}</p>
+                        @if($p->provider && (string) $p->provider !== 'wallet')
+                            <p class="mb-1 small text-muted">{{ __('admin.provider') }}: {{ $p->provider }}</p>
+                        @endif
                         <p class="mb-0 small">{{ number_format((float)$p->amount, 2) }} {{ $p->currency }} @if($p->paid_at) — {{ __('admin.paid') }} {{ $p->paid_at->format('Y-m-d H:i') }} @endif</p>
                         @if($statusValue === 'failed' && ($p->failure_code || $p->failure_message))
                             <p class="mb-0 small text-danger">{{ __('admin.failure_code') }}: {{ $p->failure_code ?? '-' }} — {{ __('admin.failure_message') }}: {{ Str::limit($p->failure_message ?? '-', 100) }}</p>
