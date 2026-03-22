@@ -23,7 +23,13 @@ class ConfigController extends Controller
         $splash = DB::table('splash_config')->first();
         $onboarding = DB::table('onboarding_pages')->orderBy('sort_order')->get();
         $countries = DB::table('market_countries')->get();
-        $stores = DB::table('featured_stores')->where('is_featured', true)->get();
+        $storesQuery = DB::table('featured_stores');
+        if (Schema::hasColumn('featured_stores', 'is_active')) {
+            $storesQuery->where('is_active', true);
+        } else {
+            $storesQuery->where('is_featured', true);
+        }
+        $stores = $storesQuery->orderByDesc('is_featured')->get();
 
         // Only expose markets (countries) that actually have at least one featured store.
         $countriesWithStores = $countries->filter(function ($c) use ($stores) {

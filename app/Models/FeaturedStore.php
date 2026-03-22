@@ -15,12 +15,14 @@ class FeaturedStore extends Model
         'country_code',
         'store_url',
         'is_featured',
+        'is_active',
     ];
 
     protected function casts(): array
     {
         return [
             'is_featured' => 'boolean',
+            'is_active' => 'boolean',
         ];
     }
 }

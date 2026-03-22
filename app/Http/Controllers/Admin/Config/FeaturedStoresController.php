@@ -20,10 +20,14 @@ class FeaturedStoresController extends Controller
 
     public function data(): JsonResponse
     {
-        $query = FeaturedStore::query()->orderBy('is_featured', 'desc')->orderBy('name');
+        $query = FeaturedStore::query()
+            ->orderBy('is_active', 'desc')
+            ->orderBy('is_featured', 'desc')
+            ->orderBy('name');
 
         return DataTables::eloquent($query)
             ->editColumn('country_code', fn (FeaturedStore $s) => $s->country_code ?? '-')
+            ->editColumn('is_active', fn (FeaturedStore $s) => $s->is_active ? __('admin.yes') : __('admin.no'))
             ->editColumn('is_featured', fn (FeaturedStore $s) => $s->is_featured ? __('admin.yes') : __('admin.no'))
             ->addColumn('actions', function (FeaturedStore $s) {
                 $editUrl = route('admin.config.featured-stores.edit', $s);
@@ -57,6 +61,7 @@ class FeaturedStoresController extends Controller
             'is_featured' => 'boolean',
         ]);
         $validated['is_featured'] = $request->boolean('is_featured');
+        $validated['is_active'] = $request->has('is_active');
         unset($validated['logo']);
 
         $store = FeaturedStore::create($validated);
@@ -90,6 +95,7 @@ class FeaturedStoresController extends Controller
             'is_featured' => 'boolean',
         ]);
         $validated['is_featured'] = $request->boolean('is_featured');
+        $validated['is_active'] = $request->has('is_active');
         unset($validated['logo']);
 
         $featured_store->update($validated);

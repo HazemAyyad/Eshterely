@@ -61,7 +61,7 @@ class AuthController extends Controller
         $rules = [
             'phone' => ['required', 'string', 'regex:/^[0-9]+$/', 'min:10', 'max:15'],
             'code' => ['required', 'string', 'size:6'],
-            'mode' => ['nullable', 'string', 'in:signup,reset'],
+            'mode' => ['nullable', 'string', 'in:signup,reset,login'],
             'fcm_token' => ['nullable', 'string', 'max:500'],
             'device_type' => ['nullable', 'string', 'max:20'],
         ];
@@ -106,6 +106,8 @@ class AuthController extends Controller
         if ($mode === 'reset' && $request->password) {
             $user->update(['password' => $request->password]);
         }
+
+        $user->tokens()->delete();
 
         $token = $user->createToken('mobile-app')->plainTextToken;
 
@@ -195,5 +197,48 @@ class AuthController extends Controller
         $request->user()->currentAccessToken()->delete();
 
         return response()->json(['message' => 'Logged out']);
+    }
+
+    /**
+     * Send OTP for passwordless login (user must already exist).
+     */
+    public function loginOtp(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'phone' => ['required', 'string', 'regex:/^[0-9]+$/', 'min:10', 'max:15'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $user = User::where('phone', $request->phone)->first();
+        if (! $user) {
+            return response()->json(['message' => 'Phone not registered'], 404);
+        }
+
+        OtpCode::query()
+            ->where('phone', $request->phone)
+            ->where('mode', 'login')
+            ->where('used', false)
+            ->update(['used' => true]);
+
+        $code = config('app.debug') ? '123456' : str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        OtpCode::create([
+            'phone' => $user->phone,
+            'code' => $code,
+            'mode' => 'login',
+            'expires_at' => now()->addMinutes(10),
+        ]);
+
+        $payload = [
+            'message' => 'OTP sent',
+            'phone' => $user->phone,
+        ];
+        if (config('app.debug')) {
+            $payload['otp'] = $code;
+        }
+
+        return response()->json($payload);
     }
 }

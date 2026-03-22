@@ -26,6 +26,8 @@ return [
     'onboarding' => 'صفحات التعريف',
     'market_countries' => 'الأسواق والدول',
     'featured_stores' => 'المتاجر المميزة',
+    'featured_store_visible_in_app' => 'ظهور في التطبيق',
+    'featured_store_visible_in_app_help' => 'عند الإيقاف لا يظهر السوق في قائمة الأسواق داخل التطبيق.',
     'promo_banners' => 'بانرات العروض',
     'promo_codes' => 'أكواد الخصم',
     'warehouses' => 'المستودعات',
@@ -99,6 +101,9 @@ return [
 
     // Admin panel
     'admin_panel' => 'لوحة الإدارة',
+    'admin_footer_tagline' => 'لوحة إدارة التطبيق.',
+    'login_page_title' => 'تسجيل الدخول | :name',
+    'login_welcome_heading' => 'مرحباً بك في :name! 👋',
 
     // Entities
     'add_page' => 'إضافة صفحة',

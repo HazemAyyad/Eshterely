@@ -29,6 +29,7 @@
                     <th>store_slug</th>
                     <th>name</th>
                     <th>country_code</th>
+                    <th>{{ __('admin.featured_store_visible_in_app') }}</th>
                     <th>is_featured</th>
                     <th>{{ __('admin.actions') }}</th>
                 </tr>
@@ -57,6 +58,7 @@ document.addEventListener('DOMContentLoaded', function() {
             { data: 'store_slug', name: 'store_slug' },
             { data: 'name', name: 'name' },
             { data: 'country_code', name: 'country_code' },
+            { data: 'is_active', name: 'is_active' },
             { data: 'is_featured', name: 'is_featured' },
             { data: 'actions', name: 'actions', orderable: false, searchable: false }
         ],

@@ -53,6 +53,13 @@
                     @error('logo')<div class="text-danger small">{{ $message }}</div>@enderror
                 </div>
                 <div class="col-md-6">
+                    <label class="form-label">{{ __('admin.featured_store_visible_in_app') }}</label>
+                    <div class="form-check form-switch mt-2">
+                        <input type="checkbox" name="is_active" value="1" class="form-check-input" {{ old('is_active', $store->exists ? ($store->is_active ?? true) : true) ? 'checked' : '' }}>
+                    </div>
+                    <div class="form-text">{{ __('admin.featured_store_visible_in_app_help') }}</div>
+                </div>
+                <div class="col-md-6">
                     <label class="form-label">is_featured</label>
                     <div class="form-check form-switch mt-2">
                         <input type="checkbox" name="is_featured" value="1" class="form-check-input" {{ old('is_featured', $store->is_featured) ? 'checked' : '' }}>

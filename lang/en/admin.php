@@ -26,6 +26,8 @@ return [
     'onboarding' => 'Onboarding Pages',
     'market_countries' => 'Markets & Countries',
     'featured_stores' => 'Featured Stores',
+    'featured_store_visible_in_app' => 'Visible in app',
+    'featured_store_visible_in_app_help' => 'When off, this store is hidden from the in-app markets list.',
     'promo_banners' => 'Promo Banners',
     'promo_codes' => 'Promo Codes',
     'warehouses' => 'Warehouses',
@@ -99,6 +101,9 @@ return [
 
     // Admin panel
     'admin_panel' => 'Admin Panel',
+    'admin_footer_tagline' => 'Application admin panel.',
+    'login_page_title' => 'Sign in | :name',
+    'login_welcome_heading' => 'Welcome to :name! 👋',
 
     // Entities
     'add_page' => 'Add Page',

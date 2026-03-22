@@ -34,7 +34,7 @@
                 <label class="form-label">اسم التطبيق</label>
                 <input type="text" name="app_name" id="app_name" class="form-control"
                        value="{{ old('app_name', $config['app_name'] ?? '') }}"
-                       placeholder="Zayer">
+                       placeholder="eshterely">
                 <small class="text-muted">يُعرَض كعنوان للتطبيق داخل الواجهة.</small>
                 @error('app_name')<div class="text-danger small">{{ $message }}</div>@enderror
             </div>

@@ -17,8 +17,10 @@ use App\Services\Shipping\ShippingZoneRepository;
 use App\Services\Shipping\Contracts\ShippingZoneRepositoryInterface;
 use App\Services\Shipping\ShippingQuoteService;
 use App\Services\Shipping\VolumetricWeightCalculator;
+use App\View\Composers\AdminBrandingComposer;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Kreait\Firebase\Contract\Messaging;
 use Kreait\Firebase\Factory;
@@ -90,5 +92,15 @@ class AppServiceProvider extends ServiceProvider
     {
         Paginator::useBootstrapFive();
         Order::observe(OrderObserver::class);
+
+        View::composer(
+            [
+                'layouts.admin.partials.head',
+                'layouts.admin.partials.menu',
+                'layouts.admin.partials.footer',
+                'admin.login',
+            ],
+            AdminBrandingComposer::class
+        );
     }
 }
