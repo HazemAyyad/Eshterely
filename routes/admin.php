@@ -15,6 +15,9 @@ use App\Http\Controllers\Admin\Config\PaymentGatewaysController;
 use App\Http\Controllers\Admin\Config\SplashConfigController;
 use App\Http\Controllers\Admin\Config\ThemeConfigController;
 use App\Http\Controllers\Admin\Config\WarehousesController;
+use App\Http\Controllers\Admin\Config\ProductImportStoreSettingsController;
+use App\Http\Controllers\Admin\Config\ProductImportLogsController;
+use App\Http\Controllers\Admin\Config\ProductImportTesterController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\OrderController;
@@ -63,6 +66,15 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
 
         Route::get('shipping-settings', [ShippingSettingsController::class, 'edit'])->name('shipping-settings.edit');
         Route::patch('shipping-settings', [ShippingSettingsController::class, 'update'])->name('shipping-settings.update');
+
+        // Product Import
+        Route::get('product-import/store-settings', [ProductImportStoreSettingsController::class, 'index'])->name('product-import.store-settings.index');
+        Route::get('product-import/store-settings/{setting}/edit', [ProductImportStoreSettingsController::class, 'edit'])->name('product-import.store-settings.edit');
+        Route::patch('product-import/store-settings/{setting}', [ProductImportStoreSettingsController::class, 'update'])->name('product-import.store-settings.update');
+        Route::get('product-import/logs', [ProductImportLogsController::class, 'index'])->name('product-import.logs.index');
+        Route::get('product-import/logs/data', [ProductImportLogsController::class, 'data'])->name('product-import.logs.data');
+        Route::get('product-import/tester', [ProductImportTesterController::class, 'index'])->name('product-import.tester');
+        Route::post('product-import/tester/test', [ProductImportTesterController::class, 'test'])->name('product-import.tester.test');
         Route::resource('shipping-zones', ShippingCarrierZonesController::class)
             ->except(['show'])
             ->names('shipping-zones');

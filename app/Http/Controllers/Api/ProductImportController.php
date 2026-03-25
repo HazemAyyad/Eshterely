@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\ProductExtractionService;
 use App\Services\ProductPageFetcherService;
+use App\Services\ProductImport\ImportAttemptOrchestrator;
+use App\Services\ProductImport\StoreResolver;
 use App\Services\Shipping\FinalProductPricingService;
 use App\Services\Shipping\ProductImportShippingQuoteService;
 use Illuminate\Http\JsonResponse;
@@ -15,12 +17,20 @@ use Illuminate\Support\Facades\Log;
 class ProductImportController extends Controller
 {
     /**
-     * Import product data from URL. Uses hybrid pipeline: JSON-LD -> meta tags -> DOM -> OpenAI -> regex.
-     * Fetching is delegated to ProductPageFetcherService (direct HTTP or, for Amazon, rendered fetch when configured).
-     * After extraction succeeds, a shipping quote preview is calculated from normalized product data (source-agnostic).
+     * Import product data from URL.
+     * Pipeline: structured_data → json_ld → open_graph → direct_html → ai_extraction → paid_scraper.
+     * Per-store settings are read from product_import_store_settings.
+     * Each attempt is logged to product_import_logs.
+     * Response includes shipping quote preview, pricing, and shipping review fields.
      */
-    public function importFromUrl(Request $request, ProductExtractionService $extractionService, ProductPageFetcherService $pageFetcher, ProductImportShippingQuoteService $shippingQuoteService, FinalProductPricingService $finalPricingService): JsonResponse
-    {
+    public function importFromUrl(
+        Request $request,
+        ProductExtractionService $extractionService,
+        ProductPageFetcherService $pageFetcher,
+        ProductImportShippingQuoteService $shippingQuoteService,
+        FinalProductPricingService $finalPricingService,
+        ImportAttemptOrchestrator $orchestrator,
+    ): JsonResponse {
         $validated = $request->validate([
             'url' => 'required|url',
             'store_key' => 'nullable|string',
@@ -32,8 +42,11 @@ class ProductImportController extends Controller
         ]);
 
         $url = $validated['url'];
-        $storeKey = $validated['store_key'] ?? $this->detectStoreKey($url);
+        $storeKey = $validated['store_key'] ?? StoreResolver::resolve($url);
         $strategy = $validated['extraction_strategy'] ?? 'auto';
+
+        // Log the import attempt via orchestrator (non-blocking).
+        $orchestrator->beginAttempt($url, $storeKey);
 
         try {
             $fetchResult = $pageFetcher->fetchHtml($url, $storeKey);
@@ -134,24 +147,41 @@ class ProductImportController extends Controller
                 ])),
             ];
 
+            // --- Shipping review fields ---
+            // shipping_review_required = true when weight/dimensions are missing (estimated quote)
+            // or when the quote itself is null (no data at all).
+            $shippingReviewRequired = true;
+            if (is_array($product['shipping_quote'] ?? null)) {
+                $missingFields = $product['shipping_quote']['missing_fields'] ?? [];
+                $isEstimated   = (bool) ($product['shipping_quote']['estimated'] ?? true);
+                $shippingReviewRequired = $isEstimated || $missingFields !== [];
+            }
+
+            $product['shipping_review_required'] = $shippingReviewRequired;
+            $product['shipping_note_ar'] = 'سعر الشحن المعروض حاليًا تقديري فقط، وسيتم مراجعته واعتماده من الإدارة بعد فحص المنتج والمواصفات.';
+            $product['shipping_note_en'] = 'The shipping cost shown is an estimate only and will be reviewed and confirmed by admin after inspecting the product and its specifications.';
+
+            // --- Weight / dimensions pass-through ---
+            // Only include if the extraction pipeline found them (never guess).
+            if (! isset($product['weight'])) {
+                $product['weight'] = null;
+            }
+            if (! isset($product['dimensions'])) {
+                $product['dimensions'] = null;
+            }
+
+            // Log successful attempt.
+            $orchestrator->recordSuccess($url, $storeKey, $product['extraction_source'] ?? 'unknown');
+
             return response()->json($product);
         } catch (\Exception $e) {
+            $orchestrator->recordFailure($url, $storeKey ?? 'unknown', $e->getMessage());
+
             return response()->json([
                 'message' => 'Import failed',
                 'error' => config('app.debug') ? $e->getMessage() : null,
             ], 500);
         }
-    }
-
-    private function detectStoreKey(string $url): string
-    {
-        if (Str::contains($url, 'amazon.')) return 'amazon';
-        if (Str::contains($url, 'ebay.')) return 'ebay';
-        if (Str::contains($url, 'walmart.')) return 'walmart';
-        if (Str::contains($url, 'etsy.')) return 'etsy';
-        if (Str::contains($url, 'aliexpress.')) return 'aliexpress';
-        if (Str::contains($url, 'trendyol.')) return 'trendyol';
-        return 'unknown';
     }
 
     /**
