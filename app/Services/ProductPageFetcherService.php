@@ -2,13 +2,19 @@
 
 namespace App\Services;
 
+use App\Models\ProductImportStoreSetting;
+use App\Services\ProductImport\Providers\PlaywrightProvider;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 /**
  * Fetches HTML for product URL import.
- * For Amazon, eBay, Walmart, AliExpress: uses ScraperAPI (render=true) when configured; otherwise direct HTTP.
- * For other stores: direct HTTP with improved headers.
+ *
+ * Attempt order (free → paid):
+ *   1. Direct HTTP          — always first, zero cost.
+ *   2. Playwright renderer  — free rendered HTML via Node service; runs when direct HTTP is blocked
+ *                             and store settings allow it (allow_playwright_fallback = true).
+ *   3. ScraperAPI rendered  — paid fallback; only when Playwright is unavailable or also fails.
  */
 class ProductPageFetcherService
 {
@@ -42,6 +48,10 @@ class ProductPageFetcherService
         'access denied',
         'blocked',
         'not a robot',
+        // Amazon geo-restriction: buy box is hidden; price won't be extractable from this IP.
+        // ScraperAPI (US proxy) will serve the correct page with visible pricing.
+        'this item cannot be shipped to your selected delivery location',
+        'item cannot be shipped to the selected delivery location',
     ];
 
     /**
@@ -52,20 +62,89 @@ class ProductPageFetcherService
     public function fetchHtml(string $url, string $storeKey): array
     {
         $storeKey = strtolower($storeKey);
-        $useScraperApi = in_array($storeKey, self::SCRAPERAPI_STORES, true) && $this->shouldUseRenderedFetcher();
 
-        if ($useScraperApi) {
-            $result = $this->fetchViaScraperApiRendered($url);
-            if ($result !== null) {
-                return $result;
+        // Always try direct HTTP first (free).
+        $result = $this->fetchDirect($url);
+        $result['fetch_source'] = 'direct_http';
+        $result['html_strategy'] = 'initial_html';
+
+        // If direct fetch succeeded and page is not blocked, return immediately.
+        if ($result['html'] !== '' && ! $result['blocked_or_captcha']) {
+            return $result;
+        }
+
+        // Step 2: Playwright — free rendered HTML fallback (before paid ScraperAPI).
+        if ($this->shouldUsePlaywright($storeKey)) {
+            $playwrightResult = $this->fetchViaPlaywright($url, $storeKey);
+            if ($playwrightResult !== null) {
+                return $playwrightResult;
             }
         }
 
-        $result = $this->fetchDirect($url);
-        $result['fetch_source'] = $useScraperApi ? 'fallback_http' : 'direct_http';
-        $result['html_strategy'] = 'initial_html';
+        // Step 3: ScraperAPI rendered — paid fallback (supported stores only).
+        $canUseScraperApi = in_array($storeKey, self::SCRAPERAPI_STORES, true) && $this->shouldUseRenderedFetcher();
+        if ($canUseScraperApi) {
+            $scraperResult = $this->fetchViaScraperApiRendered($url);
+            if ($scraperResult !== null) {
+                return $scraperResult;
+            }
+        }
 
+        // Return whatever direct fetch gave us (even if blocked/empty — caller handles it).
         return $result;
+    }
+
+    /**
+     * Fetch via the Playwright renderer Node service.
+     * Returns null when the service is unconfigured, unavailable, or returns empty HTML.
+     *
+     * @return array{html: string, fetch_source: string, html_strategy: string, blocked_or_captcha: bool}|null
+     */
+    private function fetchViaPlaywright(string $url, string $storeKey): ?array
+    {
+        $provider = app(PlaywrightProvider::class);
+        if (! $provider->isConfigured()) {
+            return null;
+        }
+
+        $timeoutSeconds = (int) config('services.playwright.timeout_seconds', 30);
+
+        // Per-store timeout override when configured.
+        $storeSetting = ProductImportStoreSetting::forStore($storeKey);
+        if ($storeSetting && $storeSetting->playwright_timeout_seconds > 0) {
+            $timeoutSeconds = $storeSetting->playwright_timeout_seconds;
+        }
+
+        $rendered = $provider->render($url, $storeKey, $timeoutSeconds);
+        if ($rendered === null || $rendered['html'] === '') {
+            return null;
+        }
+
+        return [
+            'html'               => $rendered['html'],
+            'fetch_source'       => 'playwright',
+            'html_strategy'      => 'rendered_html',
+            'blocked_or_captcha' => false,
+        ];
+    }
+
+    /**
+     * Whether Playwright should be attempted for this store.
+     * Requires: service configured + store setting allows it (or no setting found = allow by default).
+     */
+    private function shouldUsePlaywright(string $storeKey): bool
+    {
+        if (empty(config('services.playwright.url'))) {
+            return false;
+        }
+
+        $setting = ProductImportStoreSetting::forStore($storeKey);
+        // If no store setting exists, allow Playwright by default.
+        if ($setting === null) {
+            return true;
+        }
+
+        return (bool) $setting->allow_playwright_fallback;
     }
 
     /**

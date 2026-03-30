@@ -485,6 +485,58 @@ class StructuredProductImportService
             $imageUrl = null;
         }
 
+        // --- Weight & Dimensions ---
+        $weight = null;
+        $weightUnit = null;
+        $dimensions = null;
+
+        if ($storeKey === 'amazon') {
+            $info = is_array($rawResponse['product_information'] ?? null) ? $rawResponse['product_information'] : [];
+
+            // Weight: "Item Weight" key, e.g. "1.5 pounds" or "680 grams"
+            $weightRaw = $info['Item Weight'] ?? $info['item_weight'] ?? $rawResponse['weight'] ?? null;
+            if (is_string($weightRaw) && trim($weightRaw) !== '') {
+                [$weight, $weightUnit] = $this->parseWeightString($weightRaw);
+            }
+
+            // Dimensions: "Package Dimensions" or "Product Dimensions", e.g. "10 x 5 x 3 inches"
+            $dimRaw = $info['Package Dimensions'] ?? $info['Product Dimensions'] ?? $info['package_dimensions'] ?? $info['product_dimensions'] ?? null;
+            if (is_string($dimRaw) && trim($dimRaw) !== '') {
+                $dimensions = $this->parseDimensionString($dimRaw);
+            }
+        }
+
+        if ($storeKey === 'ebay') {
+            // eBay item_specifics may contain "Weight", "Item Width", etc.
+            $specs = is_array($rawResponse['item_specifics'] ?? null) ? $rawResponse['item_specifics'] : [];
+            foreach ($specs as $spec) {
+                if (! is_array($spec)) continue;
+                $label = strtolower(trim((string) ($spec['label'] ?? $spec['name'] ?? '')));
+                $value = trim((string) ($spec['value'] ?? ''));
+                if ($value === '') continue;
+                if (in_array($label, ['weight', 'item weight', 'net weight'], true)) {
+                    [$weight, $weightUnit] = $this->parseWeightString($value);
+                }
+            }
+        }
+
+        if ($storeKey === 'walmart') {
+            $specs = is_array($rawResponse['specifications'] ?? null) ? $rawResponse['specifications'] : [];
+            foreach ($specs as $spec) {
+                if (! is_array($spec)) continue;
+                $label = strtolower(trim((string) ($spec['name'] ?? $spec['label'] ?? '')));
+                $value = trim((string) ($spec['value'] ?? ''));
+                if ($value === '') continue;
+                if (str_contains($label, 'weight')) {
+                    [$weight, $weightUnit] = $this->parseWeightString($value);
+                }
+                if (str_contains($label, 'dimension') || str_contains($label, 'size')) {
+                    $parsed = $this->parseDimensionString($value);
+                    if ($parsed !== null) $dimensions = $parsed;
+                }
+            }
+        }
+
         return [
             'name' => $name,
             'price' => $price,
@@ -498,8 +550,75 @@ class StructuredProductImportService
             'fetch_source' => 'scraperapi',
             'html_strategy' => 'structured_api',
             'blocked_or_captcha' => false,
+            // Weight (flat — consumed by ProductToShippingInputMapper)
+            'weight' => $weight,
+            'weight_unit' => $weightUnit,
+            // Dimensions flat fields — consumed by ProductToShippingInputMapper
+            'length' => $dimensions['length'] ?? null,
+            'width' => $dimensions['width'] ?? null,
+            'height' => $dimensions['height'] ?? null,
+            'dimension_unit' => $dimensions['unit'] ?? null,
+            // Nested dimensions object — for API response display
+            'dimensions' => $dimensions,
             'scraperapi_raw' => $rawResponse,
         ];
+    }
+
+    /**
+     * Parse a weight string like "1.5 pounds", "680 grams", "2.3 kg", "5 lbs".
+     * Returns [float $value, string $unit] or [null, null] on failure.
+     *
+     * @return array{float|null, string|null}
+     */
+    private function parseWeightString(string $raw): array
+    {
+        $raw = trim($raw);
+        if (! preg_match('/^([\d.,]+)\s*([a-zA-Z]+)/u', $raw, $m)) {
+            return [null, null];
+        }
+        $value = (float) str_replace(',', '', $m[1]);
+        $unit  = strtolower(trim($m[2]));
+
+        $unit = match (true) {
+            in_array($unit, ['pound', 'pounds', 'lb', 'lbs'], true) => 'lb',
+            in_array($unit, ['ounce', 'ounces', 'oz'], true)        => 'oz',
+            in_array($unit, ['gram', 'grams', 'g'], true)           => 'g',
+            in_array($unit, ['kilogram', 'kilograms', 'kg'], true)  => 'kg',
+            default => $unit,
+        };
+
+        return $value > 0 ? [$value, $unit] : [null, null];
+    }
+
+    /**
+     * Parse a dimension string like "10 x 5 x 3 inches" or "25.4 x 12.7 x 7.6 cm".
+     * Returns ['length'=>float,'width'=>float,'height'=>float,'unit'=>string] or null.
+     *
+     * @return array{length: float, width: float, height: float, unit: string}|null
+     */
+    private function parseDimensionString(string $raw): ?array
+    {
+        $raw = trim($raw);
+        // Match: number x number x number [unit]
+        if (! preg_match('/^([\d.,]+)\s*[xX×]\s*([\d.,]+)\s*[xX×]\s*([\d.,]+)\s*([a-zA-Z]*)/u', $raw, $m)) {
+            return null;
+        }
+        $l = (float) str_replace(',', '', $m[1]);
+        $w = (float) str_replace(',', '', $m[2]);
+        $h = (float) str_replace(',', '', $m[3]);
+        if ($l <= 0 || $w <= 0 || $h <= 0) {
+            return null;
+        }
+        $unit = strtolower(trim($m[4]));
+        $unit = match (true) {
+            in_array($unit, ['inch', 'inches', 'in', '"'], true) => 'in',
+            in_array($unit, ['centimeter', 'centimeters', 'cm'], true) => 'cm',
+            in_array($unit, ['millimeter', 'millimeters', 'mm'], true) => 'mm',
+            $unit === '' => 'in', // Amazon default is inches
+            default => $unit,
+        };
+
+        return ['length' => $l, 'width' => $w, 'height' => $h, 'unit' => $unit];
     }
 
     private function amazonTldFromUrl(string $url): string

@@ -111,38 +111,14 @@ class ProductExtractionService
             return $result;
         }
 
-        // strategy === 'auto': try StructuredProductImportService FIRST for supported stores; only then HTML pipeline
+        // strategy === 'auto':
+        // 1. Run free HTML pipeline first on whatever HTML we have.
+        // 2. If result is complete (name + price + image) → return immediately, no paid call.
+        // 3. If result is incomplete → try ScraperAPI structured as paid fallback.
+        // 4. Merge: take best fields from HTML result and structured result.
         $storeKeyLower = strtolower($storeKey);
 
-        if ($storeKeyLower === 'amazon') {
-            $structured = $this->structuredImportService->extractAmazonStructured($url);
-            $acceptable = $this->isStructuredResultAcceptable($structured);
-            Log::debug('Amazon structured acceptance', [
-                'url' => $url,
-                'has_structured' => $structured !== null,
-                'extraction_source' => $structured['extraction_source'] ?? null,
-                'acceptable' => $acceptable,
-            ]);
-            if ($acceptable) {
-                return $structured;
-            }
-            // Structured failed or unavailable → fall back to HTML pipeline
-        }
-
-        if ($storeKeyLower === 'ebay') {
-            $structured = $this->structuredImportService->extractEbayStructured($url);
-            if ($this->isStructuredResultAcceptable($structured)) {
-                return $structured;
-            }
-        }
-
-        if ($storeKeyLower === 'walmart') {
-            $structured = $this->structuredImportService->extractWalmartStructured($url);
-            if ($this->isStructuredResultAcceptable($structured)) {
-                return $structured;
-            }
-        }
-
+        // AliExpress: direct HTML is always JS-rendered — skip HTML pipeline, go straight to paid rendered fetch.
         if ($storeKeyLower === 'aliexpress') {
             $rendered = $this->structuredImportService->extractAliExpressRendered($url);
             if ($rendered !== null && isset($rendered['html']) && $rendered['html'] !== '') {
@@ -154,10 +130,43 @@ class ProductExtractionService
                 $pipelineResult['blocked_or_captcha'] = false;
                 return $pipelineResult;
             }
+            // AliExpress rendered fetch failed → run HTML pipeline on whatever we have.
+            return $this->runHtmlOnlyPipeline($html, $url, $storeKey);
         }
 
-        // Fallback: run existing HTML pipeline (JSON-LD → Meta → DOM → OpenAI → Regex)
-        return $this->runHtmlOnlyPipeline($html, $url, $storeKey);
+        // For Amazon, eBay, Walmart and all other stores: free HTML pipeline first.
+        $htmlResult = $this->runHtmlOnlyPipeline($html, $url, $storeKey);
+
+        // If HTML result is complete (name + price + image all present) → done, no paid call needed.
+        if ($this->isCompleteResult($htmlResult)) {
+            Log::debug('Product extraction: HTML pipeline complete, skipping paid API', [
+                'store' => $storeKeyLower,
+                'source' => $htmlResult['extraction_source'] ?? null,
+            ]);
+            return $htmlResult;
+        }
+
+        // HTML result is incomplete — try ScraperAPI structured as paid fallback.
+        $structured = null;
+        if ($storeKeyLower === 'amazon') {
+            $structured = $this->structuredImportService->extractAmazonStructured($url);
+            Log::debug('Amazon structured fallback', [
+                'url' => $url,
+                'acceptable' => $this->isStructuredResultAcceptable($structured),
+            ]);
+        } elseif ($storeKeyLower === 'ebay') {
+            $structured = $this->structuredImportService->extractEbayStructured($url);
+        } elseif ($storeKeyLower === 'walmart') {
+            $structured = $this->structuredImportService->extractWalmartStructured($url);
+        }
+
+        if ($this->isStructuredResultAcceptable($structured)) {
+            // Merge: structured wins on price/image/weight/dimensions, HTML wins on nothing it lacks.
+            return $this->mergeHtmlWithStructured($htmlResult, $structured);
+        }
+
+        // Paid fallback also failed — return best HTML result we have.
+        return $htmlResult;
     }
 
     /**
@@ -208,13 +217,21 @@ class ProductExtractionService
      */
     private function runHtmlOnlyPipeline(string $html, string $url, string $storeKey): array
     {
-        $data = $this->extractFromJsonLd($html);
-        if ($this->isValidResult($data)) {
-            return $this->normalizeResult($data, $url, $storeKey, 'json_ld');
+        $jsonLdData = $this->extractFromJsonLd($html);
+        $jsonLdValid = $this->isValidResult($jsonLdData);
+        // If JSON-LD has a name+image but price=0, don't stop — try next stages for a better price.
+        $jsonLdNeedsPrice = $jsonLdValid && (float) ($jsonLdData['price'] ?? 0) === 0.0;
+
+        if ($jsonLdValid && ! $jsonLdNeedsPrice) {
+            return $this->normalizeResult($jsonLdData, $url, $storeKey, 'json_ld');
         }
 
         $data = $this->extractFromMetaTags($html);
         if ($this->isValidResult($data)) {
+            // If JSON-LD had a good name/image but no price, merge: prefer JSON-LD name/image, meta/DOM price.
+            if ($jsonLdNeedsPrice) {
+                $data = $this->mergeResults($jsonLdData, $data, $storeKey);
+            }
             $domData = $this->extractFromDom($html, $storeKey);
             $merged = $this->mergeMetaWithDom($data, $domData, $url, $storeKey);
             return $this->normalizeResult($merged['data'], $url, $storeKey, $merged['source']);
@@ -222,7 +239,16 @@ class ProductExtractionService
 
         $data = $this->extractFromDom($html, $storeKey);
         if ($this->isValidResult($data)) {
+            // If JSON-LD had name/image but no price, merge DOM price in.
+            if ($jsonLdNeedsPrice) {
+                $data = $this->mergeResults($jsonLdData, $data, $storeKey);
+            }
             return $this->normalizeResult($data, $url, $storeKey, 'dom');
+        }
+
+        // If JSON-LD was valid (name+image) but price still missing after all HTML stages, return it as-is.
+        if ($jsonLdNeedsPrice) {
+            return $this->normalizeResult($jsonLdData, $url, $storeKey, 'json_ld');
         }
 
         $data = $this->extractWithOpenAI($html, $url, $storeKey);
@@ -279,6 +305,68 @@ class ProductExtractionService
             || str_contains($lower, 'producttitle');
 
         return ! $hasProductMarkers;
+    }
+
+    /**
+     * Result is complete when name + price > 0 + image are ALL present.
+     * Used to decide whether to skip the paid ScraperAPI call.
+     */
+    private function isCompleteResult(?array $data): bool
+    {
+        if ($data === null || ! is_array($data)) {
+            return false;
+        }
+        $name  = trim((string) ($data['name'] ?? ''));
+        $price = (float) ($data['price'] ?? 0);
+        $image = trim((string) ($data['image_url'] ?? ''));
+
+        return $name !== '' && $name !== 'Product' && $price > 0 && $image !== '';
+    }
+
+    /**
+     * Merge HTML pipeline result with ScraperAPI structured result.
+     * Structured wins on: price (if HTML has none), image, weight, dimensions, variations, raw.
+     * HTML result fields are kept as base — structured only overrides when it adds value.
+     *
+     * @param  array<string, mixed>  $htmlResult
+     * @param  array<string, mixed>  $structured
+     * @return array<string, mixed>
+     */
+    private function mergeHtmlWithStructured(array $htmlResult, array $structured): array
+    {
+        $merged = $htmlResult;
+
+        // Price: use structured if HTML has none.
+        if ((float) ($merged['price'] ?? 0) === 0.0 && (float) ($structured['price'] ?? 0) > 0) {
+            $merged['price']    = $structured['price'];
+            $merged['currency'] = $structured['currency'] ?? $merged['currency'];
+        }
+
+        // Image: use structured if HTML has none.
+        if (empty(trim((string) ($merged['image_url'] ?? ''))) && ! empty(trim((string) ($structured['image_url'] ?? '')))) {
+            $merged['image_url'] = $structured['image_url'];
+        }
+
+        // Name: use structured if HTML still has generic placeholder.
+        $htmlName = trim((string) ($merged['name'] ?? ''));
+        $structName = trim((string) ($structured['name'] ?? ''));
+        if (($htmlName === '' || strtolower($htmlName) === 'product') && $structName !== '' && strtolower($structName) !== 'product') {
+            $merged['name'] = $structName;
+        }
+
+        // Weight, dimensions, variations: only available from structured.
+        foreach (['weight', 'weight_unit', 'length', 'width', 'height', 'dimension_unit', 'dimensions'] as $field) {
+            if (! empty($structured[$field])) {
+                $merged[$field] = $structured[$field];
+            }
+        }
+        if (! empty($structured['scraperapi_raw'])) {
+            $merged['scraperapi_raw'] = $structured['scraperapi_raw'];
+        }
+
+        $merged['extraction_source'] = 'html_structured_merged';
+
+        return $merged;
     }
 
     /**
@@ -871,6 +959,15 @@ class ProductExtractionService
 
                     if ($this->containsAny($combined, $excludeKeywords)) {
                         continue;
+                    }
+
+                    // Skip prices displayed in non-USD currencies (e.g. "ILS 12.88", "EUR 9.99").
+                    // Amazon serves regional currencies based on IP; ScraperAPI (US proxy) will give USD.
+                    if (preg_match('/^([A-Z]{3})\s[\d]/', $parseText, $currMatch)) {
+                        $currencyCode = $currMatch[1];
+                        if ($currencyCode !== 'USD') {
+                            continue;
+                        }
                     }
 
                     if (preg_match('/\$?€?£?([\d,]+\.?\d*)/', $parseText, $m)) {

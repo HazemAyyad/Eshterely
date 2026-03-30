@@ -42,6 +42,11 @@ return [
         'brightdata_api_key' => env('BRIGHTDATA_API_KEY'),
     ],
 
+    'playwright' => [
+        'url'             => env('PLAYWRIGHT_SERVICE_URL', ''),
+        'timeout_seconds' => (int) env('PLAYWRIGHT_TIMEOUT_SECONDS', 30),
+    ],
+
     'shipping' => [
         'default_destination_country' => env('SHIPPING_DEFAULT_DESTINATION_COUNTRY', 'US'),
     ],
