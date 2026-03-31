@@ -21,6 +21,9 @@ class StoreResolver
         'temu.'        => 'temu',
         'shein.'       => 'shein',
         'shopify.'     => 'shopify',
+        'macys.'       => 'macys',
+        'iherb.'       => 'iherb',
+        'sephora.'     => 'sephora',
     ];
 
     /**

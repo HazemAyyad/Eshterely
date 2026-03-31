@@ -25,15 +25,22 @@ class PlaywrightProvider
      */
     public function render(string $url, string $storeKey, int $timeoutSeconds = 30): ?array
     {
+        $startedAt = microtime(true);
+
+        // Prefer ZenRows HTTP API when key is configured — provides US residential IPs
+        // + JavaScript rendering + anti-bot bypass without needing the local Node service.
+        $zenrowsKey = config('services.product_import.zenrows_api_key');
+        if (! empty($zenrowsKey)) {
+            return $this->renderViaZenRowsApi($url, $storeKey, $zenrowsKey, $timeoutSeconds, $startedAt);
+        }
+
+        // Fall back to the local Node playwright-renderer service.
         $serviceUrl = config('services.playwright.url');
         if (empty($serviceUrl)) {
             return null;
         }
 
-        $startedAt = microtime(true);
-
         try {
-            // Extra 5 s HTTP timeout buffer so we don't cut off a slow response.
             $response = Http::timeout($timeoutSeconds + 5)
                 ->post(rtrim((string) $serviceUrl, '/') . '/render', [
                     'url'            => $url,
@@ -67,10 +74,64 @@ class PlaywrightProvider
 
         } catch (\Throwable $e) {
             $elapsedMs = (int) round((microtime(true) - $startedAt) * 1000);
-            Log::warning('PlaywrightProvider exception', [
-                'url'   => $url,
-                'error' => $e->getMessage(),
+            Log::warning('PlaywrightProvider exception', ['url' => $url, 'error' => $e->getMessage()]);
+            $this->logAttempt($url, $storeKey, false, $elapsedMs, $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Fetch rendered HTML via ZenRows HTTP API with JS rendering + premium proxy.
+     * This bypasses Amazon/Walmart bot detection by routing through US residential IPs.
+     */
+    private function renderViaZenRowsApi(
+        string $url,
+        string $storeKey,
+        string $apiKey,
+        int $timeoutSeconds,
+        float $startedAt
+    ): ?array {
+        try {
+            $apiUrl = 'https://api.zenrows.com/v1/?' . http_build_query([
+                'apikey'        => $apiKey,
+                'url'           => $url,
+                'js_render'     => 'true',
+                'premium_proxy' => 'true',
+                'proxy_country' => 'us',
             ]);
+
+            $response = Http::timeout($timeoutSeconds + 10)
+                ->withHeaders([
+                    'Accept' => 'text/html,application/xhtml+xml,*/*',
+                ])
+                ->get($apiUrl);
+
+            $elapsedMs = (int) round((microtime(true) - $startedAt) * 1000);
+
+            if (! $response->successful()) {
+                $this->logAttempt($url, $storeKey, false, $elapsedMs, 'ZenRows HTTP ' . $response->status());
+                return null;
+            }
+
+            $html = $response->body();
+            if (empty(trim($html))) {
+                $this->logAttempt($url, $storeKey, false, $elapsedMs, 'ZenRows empty response');
+                return null;
+            }
+
+            $this->logAttempt($url, $storeKey, true, $elapsedMs, null);
+
+            return [
+                'html'               => $html,
+                'fetch_source'       => 'zenrows',
+                'html_strategy'      => 'rendered_html',
+                'blocked_or_captcha' => false,
+                'final_url'          => null,
+            ];
+
+        } catch (\Throwable $e) {
+            $elapsedMs = (int) round((microtime(true) - $startedAt) * 1000);
+            Log::warning('PlaywrightProvider ZenRows exception', ['url' => $url, 'error' => $e->getMessage()]);
             $this->logAttempt($url, $storeKey, false, $elapsedMs, $e->getMessage());
             return null;
         }

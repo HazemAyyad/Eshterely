@@ -170,6 +170,12 @@ class ProductImportController extends Controller
                 $product['dimensions'] = null;
             }
 
+            // measurements_found: true when the pipeline extracted real weight AND dimensions.
+            // shipping_estimate_source: 'exact' = real measurements, 'fallback' = defaults used.
+            $hasMeasurements = $product['weight'] !== null && $product['dimensions'] !== null;
+            $product['measurements_found'] = $hasMeasurements;
+            $product['shipping_estimate_source'] = $hasMeasurements ? 'exact' : 'fallback';
+
             // Log successful attempt.
             $orchestrator->recordSuccess($url, $storeKey, $product['extraction_source'] ?? 'unknown');
 

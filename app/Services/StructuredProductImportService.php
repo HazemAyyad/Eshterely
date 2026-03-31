@@ -499,8 +499,15 @@ class StructuredProductImportService
                 [$weight, $weightUnit] = $this->parseWeightString($weightRaw);
             }
 
-            // Dimensions: "Package Dimensions" or "Product Dimensions", e.g. "10 x 5 x 3 inches"
-            $dimRaw = $info['Package Dimensions'] ?? $info['Product Dimensions'] ?? $info['package_dimensions'] ?? $info['product_dimensions'] ?? null;
+            // Dimensions: try multiple key variants ScraperAPI may return.
+            $dimRaw = $info['Package Dimensions']
+                ?? $info['Product Dimensions']
+                ?? $info['package_dimensions']
+                ?? $info['product_dimensions']
+                ?? $info['item_dimensions_d_x_w_x_h']
+                ?? $info['item_dimensions_l_x_w_x_h']
+                ?? $info['item_dimensions']
+                ?? null;
             if (is_string($dimRaw) && trim($dimRaw) !== '') {
                 $dimensions = $this->parseDimensionString($dimRaw);
             }
@@ -599,8 +606,19 @@ class StructuredProductImportService
     private function parseDimensionString(string $raw): ?array
     {
         $raw = trim($raw);
+
+        // Format: "15"D x 15"W x 14"H" — inches symbol after each number with D/W/H labels
+        if (preg_match('/([\d.,]+)"[DdLl]\s*[xX×]\s*([\d.,]+)"[Ww]\s*[xX×]\s*([\d.,]+)"[Hh]/u', $raw, $m)) {
+            $l = (float) str_replace(',', '', $m[1]);
+            $w = (float) str_replace(',', '', $m[2]);
+            $h = (float) str_replace(',', '', $m[3]);
+            if ($l > 0 && $w > 0 && $h > 0) {
+                return ['length' => $l, 'width' => $w, 'height' => $h, 'unit' => 'in'];
+            }
+        }
+
         // Match: number x number x number [unit]
-        if (! preg_match('/^([\d.,]+)\s*[xX×]\s*([\d.,]+)\s*[xX×]\s*([\d.,]+)\s*([a-zA-Z]*)/u', $raw, $m)) {
+        if (! preg_match('/^([\d.,]+)\s*[xX×]\s*([\d.,]+)\s*[xX×]\s*([\d.,]+)\s*([a-zA-Z"]*)/u', $raw, $m)) {
             return null;
         }
         $l = (float) str_replace(',', '', $m[1]);

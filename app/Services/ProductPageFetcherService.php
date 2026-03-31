@@ -20,6 +20,12 @@ class ProductPageFetcherService
 {
     /** Store keys that use ScraperAPI for HTML fetch when configured. */
     private const SCRAPERAPI_STORES = ['amazon', 'ebay', 'walmart', 'aliexpress'];
+
+    /**
+     * Stores where direct HTTP always returns geo-restricted prices from non-US IPs.
+     * When a rendered provider (ZenRows/Playwright) is configured, direct HTTP is skipped entirely.
+     */
+    private const SKIP_DIRECT_HTTP_STORES = ['amazon'];
     private const DIRECT_TIMEOUT = 15;
 
     private const RENDERED_TIMEOUT = 45;
@@ -63,17 +69,27 @@ class ProductPageFetcherService
     {
         $storeKey = strtolower($storeKey);
 
-        // Always try direct HTTP first (free).
-        $result = $this->fetchDirect($url);
-        $result['fetch_source'] = 'direct_http';
-        $result['html_strategy'] = 'initial_html';
+        // For stores where direct HTTP always returns geo-restricted prices (e.g. Amazon),
+        // skip it entirely when a rendered provider (ZenRows/Playwright) is configured.
+        $skipDirect = in_array($storeKey, self::SKIP_DIRECT_HTTP_STORES, true)
+            && $this->shouldUsePlaywright($storeKey);
 
-        // If direct fetch succeeded and page is not blocked, return immediately.
-        if ($result['html'] !== '' && ! $result['blocked_or_captcha']) {
-            return $result;
+        if (! $skipDirect) {
+            // Try direct HTTP first (free).
+            $result = $this->fetchDirect($url);
+            $result['fetch_source'] = 'direct_http';
+            $result['html_strategy'] = 'initial_html';
+
+            // If direct fetch succeeded and page is not blocked, return immediately.
+            if ($result['html'] !== '' && ! $result['blocked_or_captcha']) {
+                return $result;
+            }
+        } else {
+            // Placeholder so $result exists for the final fallback return.
+            $result = ['html' => '', 'fetch_source' => 'direct_http', 'html_strategy' => 'initial_html', 'blocked_or_captcha' => true];
         }
 
-        // Step 2: Playwright — free rendered HTML fallback (before paid ScraperAPI).
+        // Step 2: Playwright/ZenRows — rendered HTML (US IP, anti-bot bypass).
         if ($this->shouldUsePlaywright($storeKey)) {
             $playwrightResult = $this->fetchViaPlaywright($url, $storeKey);
             if ($playwrightResult !== null) {
@@ -122,7 +138,7 @@ class ProductPageFetcherService
 
         return [
             'html'               => $rendered['html'],
-            'fetch_source'       => 'playwright',
+            'fetch_source'       => $rendered['fetch_source'] ?? 'playwright',
             'html_strategy'      => 'rendered_html',
             'blocked_or_captcha' => false,
         ];

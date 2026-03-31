@@ -137,8 +137,14 @@ class ProductExtractionService
         // For Amazon, eBay, Walmart and all other stores: free HTML pipeline first.
         $htmlResult = $this->runHtmlOnlyPipeline($html, $url, $storeKey);
 
-        // If HTML result is complete (name + price + image all present) → done, no paid call needed.
-        if ($this->isCompleteResult($htmlResult)) {
+        // For Amazon: always call ScraperAPI structured when key is configured, even when HTML
+        // result is complete. ScraperAPI structured provides weight, dimensions, and variations
+        // that are not reliably extractable from HTML.
+        // For other stores: only call structured when HTML result is incomplete.
+        $hasStructuredKey = ! empty(config('services.product_import.scraperapi_key'));
+        $alwaysUseStructured = $storeKeyLower === 'amazon' && $hasStructuredKey;
+
+        if (! $alwaysUseStructured && $this->isCompleteResult($htmlResult)) {
             Log::debug('Product extraction: HTML pipeline complete, skipping paid API', [
                 'store' => $storeKeyLower,
                 'source' => $htmlResult['extraction_source'] ?? null,
@@ -146,12 +152,13 @@ class ProductExtractionService
             return $htmlResult;
         }
 
-        // HTML result is incomplete — try ScraperAPI structured as paid fallback.
+        // Call ScraperAPI structured to get weight/dimensions/variations (or as price fallback).
         $structured = null;
         if ($storeKeyLower === 'amazon') {
             $structured = $this->structuredImportService->extractAmazonStructured($url);
-            Log::debug('Amazon structured fallback', [
+            Log::debug('Amazon structured call', [
                 'url' => $url,
+                'always' => $alwaysUseStructured,
                 'acceptable' => $this->isStructuredResultAcceptable($structured),
             ]);
         } elseif ($storeKeyLower === 'ebay') {
@@ -161,11 +168,12 @@ class ProductExtractionService
         }
 
         if ($this->isStructuredResultAcceptable($structured)) {
-            // Merge: structured wins on price/image/weight/dimensions, HTML wins on nothing it lacks.
+            // Merge: HTML wins on price when already correct (ZenRows USD), structured fills
+            // in weight/dimensions/variations that HTML extraction cannot provide.
             return $this->mergeHtmlWithStructured($htmlResult, $structured);
         }
 
-        // Paid fallback also failed — return best HTML result we have.
+        // Structured call failed — return best HTML result we have.
         return $htmlResult;
     }
 
@@ -795,6 +803,9 @@ class ProductExtractionService
             'ebay' => ['#icImg', '#vi_main_img_fs', '.img.img500', '[itemprop="image"]', 'img[data-testid="product-image"]'],
             'walmart' => ['[data-automation-id="product-image"]', '.prod-hero-image img', '[itemprop="image"]'],
             'etsy' => ['#listing-page-image', '.wt-max-width-full', '[data-buy-box-listing-image] img'],
+            'macys' => ['#productMainImage img', '.product-image-main img', '[class*="product-image"] img', '[data-component="productImage"] img'],
+            'iherb' => ['#product-image', '.product-image-main img', '[class*="product-image"] img', '.product-overview-container img'],
+            'sephora' => ['[data-comp="ProductImage"] img', '[class*="ProductImage"] img', '.css-cbpku4 img', '.product-image img'],
             default => [],
         };
 
@@ -846,6 +857,9 @@ class ProductExtractionService
             'ebay' => ['#prcIsum', '.notranslate', '[itemprop="price"]', '.u-flL.condText', '.notranslate.mm-price'],
             'walmart' => ['[itemprop="price"]', '.price-current', '[data-automation-id="product-price"]', '.prod-PriceHero .price'],
             'etsy' => ['.wt-text-title-larger', '[data-buy-box-region] .wt-text-title-larger', '.wt-text-title-03'],
+            'macys' => ['[class*="price"] [class*="regular"]', '[class*="price"] .value', '[data-auto="price-regular"]', '[class*="ProductDetail"] [class*="price"]'],
+            'iherb' => ['[class*="price-container"] .price', '.sub-total .price', '[class*="discount-price"]', '[itemprop="price"]'],
+            'sephora' => ['[data-at="sku_item_price_regular"]', '[class*="price-container"]', '[data-comp="Price"] p', '[itemprop="price"]'],
             default => [],
         };
 
@@ -1280,7 +1294,7 @@ class ProductExtractionService
     private function getCountryForStore(string $storeKey): string
     {
         return match ($storeKey) {
-            'amazon', 'ebay', 'walmart', 'etsy' => 'USA',
+            'amazon', 'ebay', 'walmart', 'etsy', 'macys', 'iherb', 'sephora' => 'USA',
             'aliexpress' => 'China',
             'trendyol' => 'Turkey',
             default => 'Unknown',
