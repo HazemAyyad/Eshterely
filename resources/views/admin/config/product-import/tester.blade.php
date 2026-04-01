@@ -251,6 +251,17 @@
                         </div>
                     </div>
 
+                    {{-- AI parsed JSON --}}
+                    <div class="mb-3">
+                        <button class="btn btn-sm btn-outline-secondary w-100 text-start d-flex justify-content-between align-items-center"
+                            type="button" data-bs-toggle="collapse" data-bs-target="#debug-ai">
+                            <span>AI Parsed JSON</span><span id="ai-json-badge" class="badge bg-secondary">n/a</span>
+                        </button>
+                        <div id="debug-ai" class="collapse mt-2">
+                            <pre id="ai-json-pre" class="bg-dark text-light p-3 rounded small mb-0" style="max-height:450px;overflow:auto;white-space:pre-wrap;word-break:break-all;"></pre>
+                        </div>
+                    </div>
+
                     {{-- Full JSON --}}
                     <div>
                         <button class="btn btn-sm btn-outline-secondary w-100 text-start d-flex justify-content-between align-items-center"
@@ -467,6 +478,12 @@ function renderResponse(data) {
     document.getElementById('raw-pre').textContent = rawData
         ? JSON.stringify(rawData, null, 2)
         : 'No ScraperAPI raw data (HTML pipeline was used or key not set).';
+
+    const aiJson = data.ai_parsed_json || p.ai_parsed_json || null;
+    document.getElementById('ai-json-badge').textContent = aiJson ? 'available' : 'n/a';
+    document.getElementById('ai-json-pre').textContent = aiJson
+        ? JSON.stringify(aiJson, null, 2)
+        : 'AI parser was not used or did not return valid JSON.';
     document.getElementById('full-json').textContent = JSON.stringify(data, null, 2);
 
     // ── Show tabs, activate store tab

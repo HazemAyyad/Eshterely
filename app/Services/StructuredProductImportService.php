@@ -632,9 +632,14 @@ class StructuredProductImportService
             in_array($unit, ['inch', 'inches', 'in', '"'], true) => 'in',
             in_array($unit, ['centimeter', 'centimeters', 'cm'], true) => 'cm',
             in_array($unit, ['millimeter', 'millimeters', 'mm'], true) => 'mm',
-            $unit === '' => 'in', // Amazon default is inches
+            $unit === '' => '', // DO NOT GUESS measurements unit
             default => $unit,
         };
+
+        // No unit explicitly found → do not guess.
+        if ($unit === '') {
+            return null;
+        }
 
         return ['length' => $l, 'width' => $w, 'height' => $h, 'unit' => $unit];
     }

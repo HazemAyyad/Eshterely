@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\ProductExtractionService;
 use App\Services\ProductPageFetcherService;
 use App\Services\ProductImport\StoreResolver;
+use App\Services\ProductImport\ImportOrchestrator;
 use App\Services\StructuredProductImportService;
 use App\Services\Shipping\FinalProductPricingService;
 use App\Services\Shipping\ProductImportShippingQuoteService;
@@ -23,11 +24,10 @@ class ProductImportTesterController extends Controller
 
     public function test(
         Request $request,
-        ProductExtractionService $extractionService,
-        ProductPageFetcherService $pageFetcher,
         ProductImportShippingQuoteService $shippingQuoteService,
         FinalProductPricingService $finalPricingService,
         StructuredProductImportService $structuredService,
+        ImportOrchestrator $importOrchestrator,
     ): JsonResponse {
         $validated = $request->validate([
             'url'                  => 'required|url',
@@ -49,60 +49,21 @@ class ProductImportTesterController extends Controller
         $providerAttempts = [];
 
         try {
-            // ── Fetch ────────────────────────────────────────────────────────────
-            $timing['fetch_start'] = microtime(true);
-            $fetchResult           = $pageFetcher->fetchHtml($url, $storeKey);
-            $timing['fetch_ms']    = round((microtime(true) - $timing['fetch_start']) * 1000);
+            // ── Import pipeline (same as API) ────────────────────────────────────
+            $timing['import_start'] = microtime(true);
+            $import = $importOrchestrator->import($url, $storeKey, [
+                'extraction_strategy' => $strategy,
+            ]);
+            $timing['extract_ms'] = round((microtime(true) - $timing['import_start']) * 1000);
 
-            $html        = $fetchResult['html'] ?? '';
-            $htmlStrategy = $fetchResult['html_strategy'] ?? 'initial_html';
+            $product = $import['product'];
+            $debug = $import['debug'];
 
-            $providerAttempts[] = [
-                'provider' => $fetchResult['fetch_source'] ?? 'direct_http',
-                'strategy' => $htmlStrategy,
-                'success'  => $html !== '' || $htmlStrategy === 'structured_api',
-                'note'     => $htmlStrategy === 'structured_api'
-                    ? 'Delegated to ScraperAPI structured — no HTML fetch needed'
-                    : ($html === '' ? 'Empty response' : 'HTML fetched (' . strlen($html) . ' bytes)'),
-            ];
-
-            // Allow empty HTML when structured_api is the provider (Amazon).
-            if ($html === '' && $htmlStrategy !== 'structured_api') {
-                return response()->json([
-                    'ok'               => false,
-                    'error'            => 'Could not fetch the URL — empty HTML returned.',
-                    'store_resolution' => $this->buildStoreResolution($url, $storeKey, $asin, $tld),
-                    'provider_attempts'=> $providerAttempts,
-                    'meta'             => ['store_key' => $storeKey, 'fetch_source' => $fetchResult['fetch_source'] ?? null],
-                ], 422);
-            }
-
-            $fetchMetadata = [
-                'fetch_source'       => $fetchResult['fetch_source'] ?? 'direct_http',
-                'html_strategy'      => $htmlStrategy,
-                'blocked_or_captcha' => $fetchResult['blocked_or_captcha'] ?? false,
-            ];
-
-            // ── Extract ──────────────────────────────────────────────────────────
-            $timing['extract_start'] = microtime(true);
-            $product                 = $extractionService->extract($html, $url, $storeKey, $strategy, $fetchMetadata);
-            $timing['extract_ms']    = round((microtime(true) - $timing['extract_start']) * 1000);
-
-            $extractionSource = $product['extraction_source'] ?? 'unknown';
-            $providerAttempts[] = [
-                'provider' => $extractionSource,
-                'strategy' => 'extraction',
-                'success'  => ($product['name'] ?? '') !== '' && ($product['name'] ?? '') !== 'Product',
-                'note'     => 'name=' . ($product['name'] ?? '—') . ', price=' . ($product['price'] ?? 0),
-            ];
-
-            // Pass-through fetch metadata
-            $product['fetch_source']       = $product['fetch_source']       ?? $fetchResult['fetch_source'] ?? 'direct_http';
-            $product['html_strategy']      = $product['html_strategy']       ?? $htmlStrategy;
-            $product['blocked_or_captcha'] = $product['blocked_or_captcha']  ?? $fetchResult['blocked_or_captcha'] ?? false;
+            // Provider attempts from orchestrator (ordered)
+            $providerAttempts = $debug['provider_attempts'] ?? [];
 
             // ScraperAPI raw keys (for debug tab)
-            $raw = $product['scraperapi_raw'] ?? [];
+            $raw = $debug['scraperapi_raw'] ?? ($product['scraperapi_raw'] ?? []);
             $product['_scraperapi_raw_keys'] = is_array($raw) ? array_keys($raw) : [];
 
             // ── Shipping quote ───────────────────────────────────────────────────
@@ -116,9 +77,18 @@ class ProductImportTesterController extends Controller
             $product['shipping_quote'] = $shippingQuoteService->quoteFromProduct(
                 $product,
                 $shippingOverrides,
-                $extractionSource
+                $product['extraction_source'] ?? null
             );
             $timing['shipping_ms'] = round((microtime(true) - $timing['shipping_start']) * 1000);
+
+            $amount = is_array($product['shipping_quote'] ?? null) && isset($product['shipping_quote']['amount'])
+                ? (float) $product['shipping_quote']['amount']
+                : null;
+            $product['shipping_estimate'] = [
+                'amount' => $amount,
+                'source' => ($product['shipping_estimate_source'] ?? 'fallback') === 'exact' ? 'exact' : 'fallback',
+                'note' => 'approximate',
+            ];
 
             // ── Final pricing ────────────────────────────────────────────────────
             $product['final_pricing'] = null;
@@ -148,11 +118,15 @@ class ProductImportTesterController extends Controller
             $hasMeasurements                    = $product['weight'] !== null && $product['dimensions'] !== null;
             $product['measurements_found']      = $hasMeasurements;
             $product['shipping_estimate_source'] = $hasMeasurements ? 'exact' : 'fallback';
+            $product['provider_used'] = $debug['provider_used'] ?? ($product['extraction_source'] ?? 'unknown');
+            $product['warnings'] = $debug['warnings'] ?? [];
+            $product['asin'] = $debug['asin'] ?? null;
+            $product['ai_parsed_json'] = $debug['ai_parsed_json'] ?? null;
 
             $timing['total_ms'] = round((microtime(true) - $timing['started_at']) * 1000);
 
             // Separate scraperapi_raw from main product (too large for inline display)
-            $scraperApiRaw = $product['scraperapi_raw'] ?? null;
+            $scraperApiRaw = $raw ?: ($product['scraperapi_raw'] ?? null);
             unset($product['scraperapi_raw']);
 
             return response()->json([
@@ -160,14 +134,15 @@ class ProductImportTesterController extends Controller
                 'store_resolution' => $this->buildStoreResolution($url, $storeKey, $asin, $tld),
                 'provider_attempts'=> $providerAttempts,
                 'timing'           => [
-                    'fetch_ms'    => $timing['fetch_ms'],
+                    'fetch_ms'    => null,
                     'extract_ms'  => $timing['extract_ms'],
                     'shipping_ms' => $timing['shipping_ms'],
                     'total_ms'    => $timing['total_ms'],
                 ],
                 'product'          => $product,
-                'html_length'      => strlen($html),
+                'html_length'      => null,
                 'scraperapi_raw'   => $scraperApiRaw,
+                'ai_parsed_json'   => $product['ai_parsed_json'] ?? null,
             ]);
 
         } catch (\Throwable $e) {

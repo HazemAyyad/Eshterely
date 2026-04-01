@@ -195,7 +195,8 @@ class ShippingPricingConfigService
     {
         $v = ShippingSetting::getValue(self::KEY_SHIPPING_DEFAULT_WEIGHT);
         if ($v === null || $v === '') {
-            return self::DEFAULT_FALLBACK_WEIGHT;
+            $cfg = (float) config('shipping.default_weight', 0);
+            return $cfg > 0 ? $cfg : self::DEFAULT_FALLBACK_WEIGHT;
         }
         $f = (float) $v;
 
@@ -233,7 +234,14 @@ class ShippingPricingConfigService
     {
         $v = ShippingSetting::getValue($key);
         if ($v === null || $v === '') {
-            return self::DEFAULT_FALLBACK_DIMENSION;
+            $map = [
+                self::KEY_SHIPPING_DEFAULT_LENGTH => 'length',
+                self::KEY_SHIPPING_DEFAULT_WIDTH => 'width',
+                self::KEY_SHIPPING_DEFAULT_HEIGHT => 'height',
+            ];
+            $k = $map[$key] ?? null;
+            $cfg = $k !== null ? (float) (config('shipping.default_dimensions.' . $k, 0)) : 0.0;
+            return $cfg > 0 ? $cfg : self::DEFAULT_FALLBACK_DIMENSION;
         }
         $f = (float) $v;
 
@@ -244,7 +252,8 @@ class ShippingPricingConfigService
     {
         $v = ShippingSetting::getValue(self::KEY_SHIPPING_DEFAULT_DIMENSION_UNIT);
         if ($v === null || $v === '') {
-            return 'cm';
+            $cfg = strtolower(trim((string) config('shipping.default_dimensions.unit', 'cm')));
+            return $cfg === 'in' ? 'in' : 'cm';
         }
         $u = strtolower(trim((string) $v));
 

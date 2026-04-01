@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\ProductExtractionService;
 use App\Services\ProductPageFetcherService;
 use App\Services\ProductImport\ImportAttemptOrchestrator;
+use App\Services\ProductImport\ImportOrchestrator;
 use App\Services\ProductImport\StoreResolver;
 use App\Services\Shipping\FinalProductPricingService;
 use App\Services\Shipping\ProductImportShippingQuoteService;
@@ -25,11 +26,10 @@ class ProductImportController extends Controller
      */
     public function importFromUrl(
         Request $request,
-        ProductExtractionService $extractionService,
-        ProductPageFetcherService $pageFetcher,
         ProductImportShippingQuoteService $shippingQuoteService,
         FinalProductPricingService $finalPricingService,
         ImportAttemptOrchestrator $orchestrator,
+        ImportOrchestrator $importOrchestrator,
     ): JsonResponse {
         $validated = $request->validate([
             'url' => 'required|url',
@@ -49,32 +49,14 @@ class ProductImportController extends Controller
         $orchestrator->beginAttempt($url, $storeKey);
 
         try {
-            $fetchResult = $pageFetcher->fetchHtml($url, $storeKey);
-            $html = $fetchResult['html'] ?? '';
-            $htmlStrategy = $fetchResult['html_strategy'] ?? 'initial_html';
+            $import = $importOrchestrator->import($url, $storeKey, [
+                'extraction_strategy' => $strategy,
+            ]);
 
-            // Allow empty HTML when the fetcher delegates to ScraperAPI structured (Amazon).
-            if ($html === '' && $htmlStrategy !== 'structured_api') {
-                return response()->json(['message' => 'Could not fetch URL'], 400);
-            }
+            $product = $import['product'];
+            $debug = $import['debug'];
 
-            $fetchMetadata = [
-                'fetch_source' => $fetchResult['fetch_source'] ?? 'direct_http',
-                'html_strategy' => $fetchResult['html_strategy'] ?? 'initial_html',
-                'blocked_or_captcha' => $fetchResult['blocked_or_captcha'] ?? false,
-            ];
-            $product = $extractionService->extract($html, $url, $storeKey, $strategy, $fetchMetadata);
-
-            if (! isset($product['fetch_source'])) {
-                $product['fetch_source'] = $fetchResult['fetch_source'] ?? 'direct_http';
-            }
-            if (! isset($product['html_strategy'])) {
-                $product['html_strategy'] = $fetchResult['html_strategy'] ?? 'initial_html';
-            }
-            if (! array_key_exists('blocked_or_captcha', $product)) {
-                $product['blocked_or_captcha'] = $fetchResult['blocked_or_captcha'] ?? false;
-            }
-
+            // If ScraperAPI raw exists, build variations for app.
             $raw = $product['scraperapi_raw'] ?? [];
             if (is_array($raw) && $raw !== []) {
                 $product['variations'] = $this->extractVariationsFromRaw($raw);
@@ -92,6 +74,16 @@ class ProductImportController extends Controller
                 $shippingOverrides,
                 $product['extraction_source'] ?? null
             );
+
+            // Required shape: shipping_estimate.amount + source exact|fallback + note "approximate"
+            $amount = is_array($product['shipping_quote'] ?? null) && isset($product['shipping_quote']['amount'])
+                ? (float) $product['shipping_quote']['amount']
+                : null;
+            $product['shipping_estimate'] = [
+                'amount' => $amount,
+                'source' => ($product['shipping_estimate_source'] ?? 'fallback') === 'exact' ? 'exact' : 'fallback',
+                'note' => 'approximate',
+            ];
 
             $product['final_pricing'] = null;
             if ($product['shipping_quote'] !== null) {
@@ -177,6 +169,13 @@ class ProductImportController extends Controller
             $hasMeasurements = $product['weight'] !== null && $product['dimensions'] !== null;
             $product['measurements_found'] = $hasMeasurements;
             $product['shipping_estimate_source'] = $hasMeasurements ? 'exact' : 'fallback';
+
+            // Debug blocks (safe for app; used by admin tester).
+            $product['provider_attempts'] = $debug['provider_attempts'] ?? [];
+            $product['provider_used'] = $debug['provider_used'] ?? ($product['extraction_source'] ?? 'unknown');
+            $product['warnings'] = $debug['warnings'] ?? [];
+            $product['asin'] = $debug['asin'] ?? null;
+            $product['ai_parsed_json'] = $debug['ai_parsed_json'] ?? null;
 
             // Log successful attempt.
             $orchestrator->recordSuccess($url, $storeKey, $product['extraction_source'] ?? 'unknown');
