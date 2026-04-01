@@ -2,8 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\ProductImportStoreSetting;
-use App\Services\ProductImport\Providers\PlaywrightProvider;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
@@ -12,20 +10,21 @@ use Illuminate\Support\Str;
  *
  * Attempt order (free → paid):
  *   1. Direct HTTP          — always first, zero cost.
- *   2. Playwright renderer  — free rendered HTML via Node service; runs when direct HTTP is blocked
- *                             and store settings allow it (allow_playwright_fallback = true).
- *   3. ScraperAPI rendered  — paid fallback; only when Playwright is unavailable or also fails.
+ *   2. ScraperAPI rendered  — paid fallback for supported stores (ebay, walmart, aliexpress).
+ *
+ * Special case — Amazon + ScraperAPI key configured:
+ *   Returns a structured_api sentinel (empty HTML) immediately.
+ *   ProductExtractionService will call the ScraperAPI structured endpoint directly,
+ *   which returns clean US-priced product data including weight and dimensions.
  */
 class ProductPageFetcherService
 {
-    /** Store keys that use ScraperAPI for HTML fetch when configured. */
-    private const SCRAPERAPI_STORES = ['amazon', 'ebay', 'walmart', 'aliexpress'];
-
     /**
-     * Stores where direct HTTP always returns geo-restricted prices from non-US IPs.
-     * When a rendered provider (ZenRows/Playwright) is configured, direct HTTP is skipped entirely.
+     * Store keys that use ScraperAPI rendered HTML as fallback when direct HTTP is blocked.
+     * Amazon is excluded: it uses the structured endpoint instead.
      */
-    private const SKIP_DIRECT_HTTP_STORES = ['amazon'];
+    private const SCRAPERAPI_RENDERED_STORES = ['ebay', 'walmart', 'aliexpress'];
+
     private const DIRECT_TIMEOUT = 15;
 
     private const RENDERED_TIMEOUT = 45;
@@ -34,16 +33,16 @@ class ProductPageFetcherService
      * Standard headers for direct HTTP fetches (browser-like).
      */
     private const DIRECT_HEADERS = [
-        'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language' => 'en-US,en;q=0.9',
-        'Cache-Control' => 'no-cache',
-        'Pragma' => 'no-cache',
+        'User-Agent'               => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept'                   => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language'          => 'en-US,en;q=0.9',
+        'Cache-Control'            => 'no-cache',
+        'Pragma'                   => 'no-cache',
         'Upgrade-Insecure-Requests' => '1',
     ];
 
     /**
-     * Phrases that suggest a captcha / bot block page.
+     * Phrases that suggest a captcha / bot-block page.
      */
     private const BLOCKED_PHRASES = [
         'captcha',
@@ -54,14 +53,15 @@ class ProductPageFetcherService
         'access denied',
         'blocked',
         'not a robot',
-        // Amazon geo-restriction: buy box is hidden; price won't be extractable from this IP.
-        // ScraperAPI (US proxy) will serve the correct page with visible pricing.
         'this item cannot be shipped to your selected delivery location',
         'item cannot be shipped to the selected delivery location',
     ];
 
     /**
-     * Fetch HTML for a product URL. For Amazon, eBay, Walmart, AliExpress uses ScraperAPI when configured.
+     * Fetch HTML for a product URL.
+     *
+     * For Amazon when SCRAPERAPI_KEY is configured: returns a structured_api sentinel
+     * (empty HTML) so the extraction layer calls the ScraperAPI structured endpoint directly.
      *
      * @return array{html: string, fetch_source: string, html_strategy: string, blocked_or_captcha: bool}
      */
@@ -69,170 +69,46 @@ class ProductPageFetcherService
     {
         $storeKey = strtolower($storeKey);
 
-        // For stores where direct HTTP always returns geo-restricted prices (e.g. Amazon),
-        // skip it entirely when a rendered provider (ZenRows/Playwright) is configured.
-        $skipDirect = in_array($storeKey, self::SKIP_DIRECT_HTTP_STORES, true)
-            && $this->shouldUsePlaywright($storeKey);
-
-        if (! $skipDirect) {
-            // Try direct HTTP first (free).
-            $result = $this->fetchDirect($url);
-            $result['fetch_source'] = 'direct_http';
-            $result['html_strategy'] = 'initial_html';
-
-            // If direct fetch succeeded and page is not blocked, return immediately.
-            if ($result['html'] !== '' && ! $result['blocked_or_captcha']) {
-                return $result;
-            }
-        } else {
-            // Placeholder so $result exists for the final fallback return.
-            $result = ['html' => '', 'fetch_source' => 'direct_http', 'html_strategy' => 'initial_html', 'blocked_or_captcha' => true];
+        // Amazon + ScraperAPI key: structured endpoint is the primary provider.
+        // Skip HTML fetch entirely — ProductExtractionService handles the structured call.
+        if ($storeKey === 'amazon' && ! empty(config('services.product_import.scraperapi_key'))) {
+            return [
+                'html'               => '',
+                'fetch_source'       => 'scraperapi_structured',
+                'html_strategy'      => 'structured_api',
+                'blocked_or_captcha' => false,
+            ];
         }
 
-        // Step 2: Playwright/ZenRows — rendered HTML (US IP, anti-bot bypass).
-        if ($this->shouldUsePlaywright($storeKey)) {
-            $playwrightResult = $this->fetchViaPlaywright($url, $storeKey);
-            if ($playwrightResult !== null) {
-                return $playwrightResult;
-            }
+        // Step 1: Try direct HTTP first (free).
+        $result = $this->fetchDirect($url);
+        $result['fetch_source'] = 'direct_http';
+        $result['html_strategy'] = 'initial_html';
+
+        if ($result['html'] !== '' && ! $result['blocked_or_captcha']) {
+            return $result;
         }
 
-        // Step 3: ScraperAPI rendered — paid fallback (supported stores only).
-        $canUseScraperApi = in_array($storeKey, self::SCRAPERAPI_STORES, true) && $this->shouldUseRenderedFetcher();
-        if ($canUseScraperApi) {
+        // Step 2: ScraperAPI rendered — paid fallback for supported stores.
+        if (in_array($storeKey, self::SCRAPERAPI_RENDERED_STORES, true) && $this->shouldUseScraperApiRendered()) {
             $scraperResult = $this->fetchViaScraperApiRendered($url);
             if ($scraperResult !== null) {
                 return $scraperResult;
             }
         }
 
-        // Return whatever direct fetch gave us (even if blocked/empty — caller handles it).
+        // Return whatever direct fetch gave us (caller handles empty/blocked).
         return $result;
     }
 
     /**
-     * Fetch via the Playwright renderer Node service.
-     * Returns null when the service is unconfigured, unavailable, or returns empty HTML.
-     *
-     * @return array{html: string, fetch_source: string, html_strategy: string, blocked_or_captcha: bool}|null
-     */
-    private function fetchViaPlaywright(string $url, string $storeKey): ?array
-    {
-        $provider = app(PlaywrightProvider::class);
-        if (! $provider->isConfigured()) {
-            return null;
-        }
-
-        $timeoutSeconds = (int) config('services.playwright.timeout_seconds', 30);
-
-        // Per-store timeout override when configured.
-        $storeSetting = ProductImportStoreSetting::forStore($storeKey);
-        if ($storeSetting && $storeSetting->playwright_timeout_seconds > 0) {
-            $timeoutSeconds = $storeSetting->playwright_timeout_seconds;
-        }
-
-        $rendered = $provider->render($url, $storeKey, $timeoutSeconds);
-        if ($rendered === null || $rendered['html'] === '') {
-            return null;
-        }
-
-        return [
-            'html'               => $rendered['html'],
-            'fetch_source'       => $rendered['fetch_source'] ?? 'playwright',
-            'html_strategy'      => 'rendered_html',
-            'blocked_or_captcha' => false,
-        ];
-    }
-
-    /**
-     * Whether Playwright should be attempted for this store.
-     * Requires: service configured + store setting allows it (or no setting found = allow by default).
-     */
-    private function shouldUsePlaywright(string $storeKey): bool
-    {
-        if (empty(config('services.playwright.url'))) {
-            return false;
-        }
-
-        $setting = ProductImportStoreSetting::forStore($storeKey);
-        // If no store setting exists, allow Playwright by default.
-        if ($setting === null) {
-            return true;
-        }
-
-        return (bool) $setting->allow_playwright_fallback;
-    }
-
-    /**
-     * Try to fetch page via ScraperAPI with render=true (Amazon, eBay, Walmart, AliExpress).
-     * Returns null on failure so caller can fall back to direct HTTP.
-     *
-     * @return array{html: string, fetch_source: string, html_strategy: string, blocked_or_captcha: bool}|null
-     */
-    private function fetchViaScraperApiRendered(string $url): ?array
-    {
-        $driver = config('services.product_import.rendered_fetcher', '');
-        if ($driver === 'scraperapi') {
-            return $this->fetchViaScraperApi($url);
-        }
-
-        return null;
-    }
-
-    /**
-     * @return array{html: string, fetch_source: string, html_strategy: string, blocked_or_captcha: bool}|null
-     */
-    private function fetchViaScraperApi(string $url): ?array
-    {
-        $apiKey = config('services.product_import.scraperapi_key');
-        if (empty($apiKey)) {
-            return null;
-        }
-
-        try {
-            $apiUrl = 'https://api.scraperapi.com/?' . http_build_query([
-                'api_key' => $apiKey,
-                'url' => $url,
-                'render' => 'true',
-            ]);
-
-            $response = Http::timeout(self::RENDERED_TIMEOUT)
-                ->withHeaders([
-                    'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language' => 'en-US,en;q=0.9',
-                ])
-                ->get($apiUrl);
-
-            if (! $response->successful()) {
-                return null;
-            }
-
-            $html = $response->body();
-            if ($html === '' || ! $this->looksLikeHtml($response)) {
-                return null;
-            }
-
-            $blocked = $this->detectBlockedOrCaptcha($html);
-
-            return [
-                'html' => $html,
-                'fetch_source' => 'scraperapi',
-                'html_strategy' => 'rendered_html',
-                'blocked_or_captcha' => $blocked,
-            ];
-        } catch (\Throwable) {
-            return null;
-        }
-    }
-
-    /**
-     * Direct HTTP fetch with improved headers and validation.
+     * Direct HTTP fetch with browser-like headers.
      *
      * @return array{html: string, fetch_source: string, html_strategy: string, blocked_or_captcha: bool}
      */
     private function fetchDirect(string $url): array
     {
-        $html = '';
+        $html    = '';
         $blocked = false;
 
         try {
@@ -251,17 +127,67 @@ class ProductPageFetcherService
         }
 
         return [
-            'html' => $html,
-            'fetch_source' => 'direct_http',
-            'html_strategy' => 'initial_html',
+            'html'               => $html,
+            'fetch_source'       => 'direct_http',
+            'html_strategy'      => 'initial_html',
             'blocked_or_captcha' => $blocked,
         ];
     }
 
-    private function shouldUseRenderedFetcher(): bool
+    /**
+     * Fetch via ScraperAPI with render=true (paid rendered HTML).
+     *
+     * @return array{html: string, fetch_source: string, html_strategy: string, blocked_or_captcha: bool}|null
+     */
+    private function fetchViaScraperApiRendered(string $url): ?array
     {
-        $driver = config('services.product_import.rendered_fetcher', '');
-        if ($driver !== 'scraperapi') {
+        $apiKey = config('services.product_import.scraperapi_key');
+        if (empty($apiKey)) {
+            return null;
+        }
+
+        try {
+            $apiUrl = 'https://api.scraperapi.com/?' . http_build_query([
+                'api_key' => $apiKey,
+                'url'     => $url,
+                'render'  => 'true',
+            ]);
+
+            $response = Http::timeout(self::RENDERED_TIMEOUT)
+                ->withHeaders([
+                    'Accept'          => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language' => 'en-US,en;q=0.9',
+                ])
+                ->get($apiUrl);
+
+            if (! $response->successful()) {
+                return null;
+            }
+
+            $html = $response->body();
+            if ($html === '' || ! $this->looksLikeHtml($response)) {
+                return null;
+            }
+
+            $blocked = $this->detectBlockedOrCaptcha($html);
+
+            return [
+                'html'               => $html,
+                'fetch_source'       => 'scraperapi',
+                'html_strategy'      => 'rendered_html',
+                'blocked_or_captcha' => $blocked,
+            ];
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Whether ScraperAPI rendered fetcher is configured.
+     */
+    private function shouldUseScraperApiRendered(): bool
+    {
+        if (config('services.product_import.rendered_fetcher', '') !== 'scraperapi') {
             return false;
         }
 
@@ -276,15 +202,20 @@ class ProductPageFetcherService
         }
 
         $contentType = $response->header('Content-Type');
-        if ($contentType !== null && stripos($contentType, 'text/html') === false && stripos($contentType, 'application/xhtml') === false) {
+        if ($contentType !== null
+            && stripos($contentType, 'text/html') === false
+            && stripos($contentType, 'application/xhtml') === false
+        ) {
             return false;
         }
 
-        return Str::startsWith(trim($body), '<') || stripos($body, '<html') !== false || stripos($body, '<!DOCTYPE') !== false;
+        return Str::startsWith(trim($body), '<')
+            || stripos($body, '<html') !== false
+            || stripos($body, '<!DOCTYPE') !== false;
     }
 
     /**
-     * Detect likely captcha / bot block / access denied page.
+     * Detect likely captcha / bot-block / access-denied page.
      */
     public function detectBlockedOrCaptcha(string $html): bool
     {

@@ -112,68 +112,83 @@ class ProductExtractionService
         }
 
         // strategy === 'auto':
-        // 1. Run free HTML pipeline first on whatever HTML we have.
-        // 2. If result is complete (name + price + image) → return immediately, no paid call.
-        // 3. If result is incomplete → try ScraperAPI structured as paid fallback.
-        // 4. Merge: take best fields from HTML result and structured result.
+        // Provider priority by store:
+        //   Amazon   → ScraperAPI structured FIRST (US prices + measurements), HTML fallback only
+        //   AliExpress → ScraperAPI rendered HTML
+        //   eBay/Walmart → HTML pipeline first, ScraperAPI structured when incomplete
+        //   Others   → HTML pipeline only
         $storeKeyLower = strtolower($storeKey);
+        $hasStructuredKey = ! empty(config('services.product_import.scraperapi_key'));
 
-        // AliExpress: direct HTML is always JS-rendered — skip HTML pipeline, go straight to paid rendered fetch.
+        // ── Amazon ────────────────────────────────────────────────────────────────
+        // ScraperAPI structured is the mandatory FIRST provider for Amazon.
+        // It returns clean US-priced data with weight and dimensions.
+        // HTML pipeline is used only when structured API fails or no key is configured.
+        if ($storeKeyLower === 'amazon') {
+            if ($hasStructuredKey) {
+                $structured = $this->structuredImportService->extractAmazonStructured($url);
+                Log::debug('Amazon structured API result', [
+                    'url'        => $url,
+                    'acceptable' => $this->isStructuredResultAcceptable($structured),
+                    'name'       => $structured['name'] ?? null,
+                    'price'      => $structured['price'] ?? null,
+                ]);
+                if ($this->isStructuredResultAcceptable($structured)) {
+                    return $structured;
+                }
+                // Structured failed — fall back to HTML pipeline if HTML was fetched.
+                Log::debug('Amazon structured failed, falling back to HTML pipeline', ['url' => $url]);
+            }
+            // No key or structured failed: run HTML pipeline on whatever HTML was fetched.
+            if ($html !== '') {
+                return $this->runHtmlOnlyPipeline($html, $url, $storeKey);
+            }
+            return $this->normalizeResult(['name' => 'Product', 'price' => 0], $url, $storeKey, 'strategy_failed');
+        }
+
+        // ── AliExpress ────────────────────────────────────────────────────────────
+        // Direct HTML is always JS-rendered; use ScraperAPI rendered endpoint.
         if ($storeKeyLower === 'aliexpress') {
             $rendered = $this->structuredImportService->extractAliExpressRendered($url);
             if ($rendered !== null && isset($rendered['html']) && $rendered['html'] !== '') {
                 $pipelineResult = $this->runHtmlOnlyPipeline($rendered['html'], $url, $storeKey);
-                $pipelineResult['scraperapi_raw'] = $rendered['scraperapi_raw'] ?? [];
-                $pipelineResult['extraction_source'] = 'aliexpress_rendered';
-                $pipelineResult['fetch_source'] = 'scraperapi';
-                $pipelineResult['html_strategy'] = 'rendered_html';
+                $pipelineResult['scraperapi_raw']     = $rendered['scraperapi_raw'] ?? [];
+                $pipelineResult['extraction_source']  = 'aliexpress_rendered';
+                $pipelineResult['fetch_source']       = 'scraperapi';
+                $pipelineResult['html_strategy']      = 'rendered_html';
                 $pipelineResult['blocked_or_captcha'] = false;
+
                 return $pipelineResult;
             }
-            // AliExpress rendered fetch failed → run HTML pipeline on whatever we have.
+            // Rendered fetch failed — run HTML pipeline on whatever we have.
             return $this->runHtmlOnlyPipeline($html, $url, $storeKey);
         }
 
-        // For Amazon, eBay, Walmart and all other stores: free HTML pipeline first.
+        // ── eBay / Walmart / all others ───────────────────────────────────────────
+        // HTML pipeline first (free). Only call structured when result is incomplete.
         $htmlResult = $this->runHtmlOnlyPipeline($html, $url, $storeKey);
 
-        // For Amazon: always call ScraperAPI structured when key is configured, even when HTML
-        // result is complete. ScraperAPI structured provides weight, dimensions, and variations
-        // that are not reliably extractable from HTML.
-        // For other stores: only call structured when HTML result is incomplete.
-        $hasStructuredKey = ! empty(config('services.product_import.scraperapi_key'));
-        $alwaysUseStructured = $storeKeyLower === 'amazon' && $hasStructuredKey;
-
-        if (! $alwaysUseStructured && $this->isCompleteResult($htmlResult)) {
-            Log::debug('Product extraction: HTML pipeline complete, skipping paid API', [
-                'store' => $storeKeyLower,
+        if (! $hasStructuredKey || $this->isCompleteResult($htmlResult)) {
+            Log::debug('Product extraction: HTML pipeline sufficient', [
+                'store'  => $storeKeyLower,
                 'source' => $htmlResult['extraction_source'] ?? null,
             ]);
+
             return $htmlResult;
         }
 
-        // Call ScraperAPI structured to get weight/dimensions/variations (or as price fallback).
+        // HTML result is incomplete: try ScraperAPI structured as supplement.
         $structured = null;
-        if ($storeKeyLower === 'amazon') {
-            $structured = $this->structuredImportService->extractAmazonStructured($url);
-            Log::debug('Amazon structured call', [
-                'url' => $url,
-                'always' => $alwaysUseStructured,
-                'acceptable' => $this->isStructuredResultAcceptable($structured),
-            ]);
-        } elseif ($storeKeyLower === 'ebay') {
+        if ($storeKeyLower === 'ebay') {
             $structured = $this->structuredImportService->extractEbayStructured($url);
         } elseif ($storeKeyLower === 'walmart') {
             $structured = $this->structuredImportService->extractWalmartStructured($url);
         }
 
         if ($this->isStructuredResultAcceptable($structured)) {
-            // Merge: HTML wins on price when already correct (ZenRows USD), structured fills
-            // in weight/dimensions/variations that HTML extraction cannot provide.
             return $this->mergeHtmlWithStructured($htmlResult, $structured);
         }
 
-        // Structured call failed — return best HTML result we have.
         return $htmlResult;
     }
 

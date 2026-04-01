@@ -51,8 +51,10 @@ class ProductImportController extends Controller
         try {
             $fetchResult = $pageFetcher->fetchHtml($url, $storeKey);
             $html = $fetchResult['html'] ?? '';
+            $htmlStrategy = $fetchResult['html_strategy'] ?? 'initial_html';
 
-            if ($html === '') {
+            // Allow empty HTML when the fetcher delegates to ScraperAPI structured (Amazon).
+            if ($html === '' && $htmlStrategy !== 'structured_api') {
                 return response()->json(['message' => 'Could not fetch URL'], 400);
             }
 

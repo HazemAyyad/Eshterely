@@ -37,14 +37,8 @@ return [
 
     'product_import' => [
         'rendered_fetcher' => env('PRODUCT_IMPORT_RENDERED_FETCHER', ''),
-        'scraperapi_key' => env('SCRAPERAPI_KEY'),
-        'zenrows_api_key' => env('ZENROWS_API_KEY'),
+        'scraperapi_key'   => env('SCRAPERAPI_KEY'),
         'brightdata_api_key' => env('BRIGHTDATA_API_KEY'),
-    ],
-
-    'playwright' => [
-        'url'             => env('PLAYWRIGHT_SERVICE_URL', ''),
-        'timeout_seconds' => (int) env('PLAYWRIGHT_TIMEOUT_SECONDS', 30),
     ],
 
     'shipping' => [
