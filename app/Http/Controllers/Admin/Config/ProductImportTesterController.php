@@ -87,7 +87,9 @@ class ProductImportTesterController extends Controller
             $product['shipping_estimate'] = [
                 'amount' => $amount,
                 'source' => ($product['shipping_estimate_source'] ?? 'fallback') === 'exact' ? 'exact' : 'fallback',
-                'note' => 'approximate',
+                'note' => ($product['shipping_estimate_source'] ?? 'fallback') === 'exact'
+                    ? 'exact measurements'
+                    : 'fallback defaults',
             ];
 
             // ── Final pricing ────────────────────────────────────────────────────
@@ -122,6 +124,7 @@ class ProductImportTesterController extends Controller
             $product['warnings'] = $debug['warnings'] ?? [];
             $product['asin'] = $debug['asin'] ?? null;
             $product['ai_parsed_json'] = $debug['ai_parsed_json'] ?? null;
+            $product['normalized_url'] = $product['canonical_url'] ?? $url;
 
             $timing['total_ms'] = round((microtime(true) - $timing['started_at']) * 1000);
 

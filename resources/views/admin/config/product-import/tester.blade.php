@@ -402,9 +402,35 @@ function renderResponse(data) {
         ? `L=${dims.length ?? '?'} × W=${dims.width ?? '?'} × H=${dims.height ?? '?'} ${dims.unit || ''}`
         : (dims ? String(dims) : '—');
 
+    // Normalized measurement output (required contract)
+    const wVal  = p.weight_value ?? p.weight ?? null;
+    const wUnit = p.weight_unit ?? null;
+    const dl = p.dimensions_length ?? (dims?.length ?? null);
+    const dw = p.dimensions_width  ?? (dims?.width  ?? null);
+    const dh = p.dimensions_height ?? (dims?.height ?? null);
+    const dUnit = p.dimensions_unit ?? (dims?.unit ?? null);
+    const hasExact = p.has_exact_measurements === true;
+    const src = p.measurements_source || null;
+    const srcFields = p.measurements_source_fields || null;
+
+    let rawWeightField = '—';
+    let rawDimsField   = '—';
+    if (srcFields && typeof srcFields === 'object') {
+        const w = srcFields.weight || {};
+        const d = srcFields.dimensions || {};
+        rawWeightField = w.key ? `<span class="badge bg-dark font-monospace">${escHtml(w.key)}</span> <span class="font-monospace small">${escHtml(w.raw || '')}</span>` : '—';
+        rawDimsField   = d.key ? `<span class="badge bg-dark font-monospace">${escHtml(d.key)}</span> <span class="font-monospace small">${escHtml(d.raw || '')}</span>` : '—';
+    }
+
     tableRows('meas-table', [
-        ['Weight',           p.weight != null ? `${p.weight} ${p.weight_unit || 'kg'}` : '<span class="text-warning">not found</span>'],
-        ['Dimensions',       p.dimensions ? dimsStr : '<span class="text-warning">not found</span>'],
+        ['Raw weight field (Amazon)', rawWeightField],
+        ['Raw dimensions field (Amazon)', rawDimsField],
+        ['Parsed weight',     wVal != null ? `${parseFloat(wVal)} ${escHtml(wUnit || '')}` : '<span class="text-warning">not found</span>'],
+        ['Parsed dimensions', (dl != null && dw != null && dh != null && dUnit)
+            ? `L=${parseFloat(dl)} × W=${parseFloat(dw)} × H=${parseFloat(dh)} ${escHtml(dUnit)}`
+            : (p.dimensions ? dimsStr : '<span class="text-warning">not found</span>')],
+        ['Has exact measurements', hasExact ? '<span class="badge bg-success">true</span>' : '<span class="badge bg-secondary">false</span>'],
+        ['Measurements source', src ? `<span class="badge bg-info text-dark">${escHtml(src)}</span>` : '—'],
         ['Measurements Found', measFound ? '<span class="badge bg-success">Yes — real data</span>' : '<span class="badge bg-warning text-dark">No — fallback used</span>'],
         ['Shipping Source',  p.shipping_estimate_source
             ? `<span class="badge ${p.shipping_estimate_source === 'exact' ? 'bg-success' : 'bg-warning text-dark'}">${escHtml(p.shipping_estimate_source)}</span>`

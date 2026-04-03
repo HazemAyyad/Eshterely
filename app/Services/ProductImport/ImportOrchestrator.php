@@ -127,6 +127,25 @@ class ImportOrchestrator
         $product['measurements_found'] = $hasMeasurements;
         $product['shipping_estimate_source'] = $hasMeasurements ? 'exact' : 'fallback';
 
+        // Normalized measurement output (explicit, nullable; do not guess).
+        // Keep legacy keys for shipping engine compatibility.
+        $product['weight_value'] = is_numeric($product['weight']) ? (float) $product['weight'] : null;
+        $product['weight_unit'] = $product['weight_unit'] ?? null;
+        $product['dimensions_length'] = is_numeric($product['length'] ?? null) ? (float) $product['length'] : null;
+        $product['dimensions_width'] = is_numeric($product['width'] ?? null) ? (float) $product['width'] : null;
+        $product['dimensions_height'] = is_numeric($product['height'] ?? null) ? (float) $product['height'] : null;
+        $product['dimensions_unit'] = $product['dimension_unit'] ?? ($product['dimensions']['unit'] ?? null);
+
+        $product['has_exact_measurements'] = (bool) ($product['has_exact_measurements'] ?? false);
+        $product['measurements_source'] = $product['measurements_source'] ?? null;
+        $product['measurements_source_fields'] = $product['measurements_source_fields'] ?? null;
+
+        // If we have full numeric measurements but no explicit exact marker, keep conservative false.
+        // Exact measurements should only be marked true when explicitly provided by structured sources.
+        if ($product['has_exact_measurements'] === false && $hasMeasurements) {
+            $product['has_exact_measurements'] = false;
+        }
+
         if (! $hasMeasurements) {
             $warnings[] = 'Measurements missing — shipping estimate uses fallback defaults.';
         }

@@ -489,27 +489,26 @@ class StructuredProductImportService
         $weight = null;
         $weightUnit = null;
         $dimensions = null;
+        $measurementSources = [
+            'weight' => ['key' => null, 'raw' => null],
+            'dimensions' => ['key' => null, 'raw' => null],
+        ];
 
         if ($storeKey === 'amazon') {
             $info = is_array($rawResponse['product_information'] ?? null) ? $rawResponse['product_information'] : [];
 
-            // Weight: "Item Weight" key, e.g. "1.5 pounds" or "680 grams"
-            $weightRaw = $info['Item Weight'] ?? $info['item_weight'] ?? $rawResponse['weight'] ?? null;
-            if (is_string($weightRaw) && trim($weightRaw) !== '') {
-                [$weight, $weightUnit] = $this->parseWeightString($weightRaw);
+            $meas = $this->extractAmazonMeasurements($rawResponse, $info);
+            if (is_string($meas['weight_raw'] ?? null) && trim((string) $meas['weight_raw']) !== '') {
+                [$weight, $weightUnit] = $this->parseWeightString((string) $meas['weight_raw']);
+                if ($weight !== null && $weightUnit !== null) {
+                    $measurementSources['weight'] = ['key' => $meas['weight_key'] ?? null, 'raw' => (string) $meas['weight_raw']];
+                }
             }
-
-            // Dimensions: try multiple key variants ScraperAPI may return.
-            $dimRaw = $info['Package Dimensions']
-                ?? $info['Product Dimensions']
-                ?? $info['package_dimensions']
-                ?? $info['product_dimensions']
-                ?? $info['item_dimensions_d_x_w_x_h']
-                ?? $info['item_dimensions_l_x_w_x_h']
-                ?? $info['item_dimensions']
-                ?? null;
-            if (is_string($dimRaw) && trim($dimRaw) !== '') {
-                $dimensions = $this->parseDimensionString($dimRaw);
+            if (is_string($meas['dimensions_raw'] ?? null) && trim((string) $meas['dimensions_raw']) !== '') {
+                $dimensions = $this->parseDimensionString((string) $meas['dimensions_raw']);
+                if ($dimensions !== null) {
+                    $measurementSources['dimensions'] = ['key' => $meas['dimensions_key'] ?? null, 'raw' => (string) $meas['dimensions_raw']];
+                }
             }
         }
 
@@ -544,6 +543,18 @@ class StructuredProductImportService
             }
         }
 
+        $hasExactMeasurements = $weight !== null
+            && $dimensions !== null
+            && ($measurementSources['weight']['key'] ?? null) !== null
+            && ($measurementSources['dimensions']['key'] ?? null) !== null;
+
+        $measurementsSourceString = null;
+        if ($storeKey === 'amazon' && $hasExactMeasurements) {
+            $wk = (string) ($measurementSources['weight']['key'] ?? '');
+            $dk = (string) ($measurementSources['dimensions']['key'] ?? '');
+            $measurementsSourceString = trim('amazon_structured:' . $wk . '|' . $dk);
+        }
+
         return [
             'name' => $name,
             'price' => $price,
@@ -560,6 +571,15 @@ class StructuredProductImportService
             // Weight (flat — consumed by ProductToShippingInputMapper)
             'weight' => $weight,
             'weight_unit' => $weightUnit,
+            // Normalized measurement output (explicit; do not guess)
+            'weight_value' => $weight,
+            'dimensions_length' => $dimensions['length'] ?? null,
+            'dimensions_width' => $dimensions['width'] ?? null,
+            'dimensions_height' => $dimensions['height'] ?? null,
+            'dimensions_unit' => $dimensions['unit'] ?? null,
+            'has_exact_measurements' => $hasExactMeasurements,
+            'measurements_source' => $measurementsSourceString,
+            'measurements_source_fields' => $measurementSources,
             // Dimensions flat fields — consumed by ProductToShippingInputMapper
             'length' => $dimensions['length'] ?? null,
             'width' => $dimensions['width'] ?? null,
@@ -568,6 +588,108 @@ class StructuredProductImportService
             // Nested dimensions object — for API response display
             'dimensions' => $dimensions,
             'scraperapi_raw' => $rawResponse,
+        ];
+    }
+
+    /**
+     * Amazon structured responses may expose measurements under multiple equivalent keys.
+     * We search explicit known keys first, then fall back to scanning for likely keys.
+     *
+     * @param  array<string, mixed>  $rawResponse
+     * @param  array<string, mixed>  $productInformation
+     * @return array{weight_key: string|null, weight_raw: string|null, dimensions_key: string|null, dimensions_raw: string|null}
+     */
+    private function extractAmazonMeasurements(array $rawResponse, array $productInformation): array
+    {
+        $candidatesWeight = [
+            ['scope' => 'product_information', 'key' => 'Item Weight'],
+            ['scope' => 'product_information', 'key' => 'item_weight'],
+            ['scope' => 'product_information', 'key' => 'Item weight'],
+            ['scope' => 'product_information', 'key' => 'item weight'],
+            ['scope' => 'product_information', 'key' => 'item_weight_value'],
+            ['scope' => 'product_information', 'key' => 'item_weight'],
+            ['scope' => 'raw', 'key' => 'item_weight'],
+            ['scope' => 'raw', 'key' => 'weight'],
+        ];
+
+        $candidatesDims = [
+            ['scope' => 'product_information', 'key' => 'Product Dimensions'],
+            ['scope' => 'product_information', 'key' => 'Package Dimensions'],
+            ['scope' => 'product_information', 'key' => 'product_dimensions'],
+            ['scope' => 'product_information', 'key' => 'package_dimensions'],
+            ['scope' => 'product_information', 'key' => 'item_dimensions_d_x_w_x_h'],
+            ['scope' => 'product_information', 'key' => 'item_dimensions_l_x_w_x_h'],
+            ['scope' => 'product_information', 'key' => 'item_dimensions'],
+            ['scope' => 'raw', 'key' => 'product_dimensions'],
+            ['scope' => 'raw', 'key' => 'package_dimensions'],
+            ['scope' => 'raw', 'key' => 'dimensions'],
+        ];
+
+        $weightKey = null;
+        $weightRaw = null;
+        foreach ($candidatesWeight as $c) {
+            $v = $c['scope'] === 'product_information'
+                ? ($productInformation[$c['key']] ?? null)
+                : ($rawResponse[$c['key']] ?? null);
+            if (is_string($v) && trim($v) !== '') {
+                $parsed = $this->parseWeightString($v);
+                if ($parsed[0] !== null && $parsed[1] !== null) {
+                    $weightKey = $c['scope'] === 'product_information' ? ('product_information.' . $c['key']) : $c['key'];
+                    $weightRaw = $v;
+                    break;
+                }
+            }
+        }
+
+        if ($weightRaw === null) {
+            foreach ($productInformation as $k => $v) {
+                if (! is_string($v) || trim($v) === '') continue;
+                $kNorm = strtolower(str_replace([' ', '-', '_'], '', (string) $k));
+                if (! str_contains($kNorm, 'weight')) continue;
+                $parsed = $this->parseWeightString($v);
+                if ($parsed[0] !== null && $parsed[1] !== null) {
+                    $weightKey = 'product_information.' . (string) $k;
+                    $weightRaw = $v;
+                    break;
+                }
+            }
+        }
+
+        $dimsKey = null;
+        $dimsRaw = null;
+        foreach ($candidatesDims as $c) {
+            $v = $c['scope'] === 'product_information'
+                ? ($productInformation[$c['key']] ?? null)
+                : ($rawResponse[$c['key']] ?? null);
+            if (is_string($v) && trim($v) !== '') {
+                $parsed = $this->parseDimensionString($v);
+                if ($parsed !== null) {
+                    $dimsKey = $c['scope'] === 'product_information' ? ('product_information.' . $c['key']) : $c['key'];
+                    $dimsRaw = $v;
+                    break;
+                }
+            }
+        }
+
+        if ($dimsRaw === null) {
+            foreach ($productInformation as $k => $v) {
+                if (! is_string($v) || trim($v) === '') continue;
+                $kNorm = strtolower(str_replace([' ', '-', '_'], '', (string) $k));
+                if (! str_contains($kNorm, 'dimension')) continue;
+                $parsed = $this->parseDimensionString($v);
+                if ($parsed !== null) {
+                    $dimsKey = 'product_information.' . (string) $k;
+                    $dimsRaw = $v;
+                    break;
+                }
+            }
+        }
+
+        return [
+            'weight_key' => $weightKey,
+            'weight_raw' => $weightRaw,
+            'dimensions_key' => $dimsKey,
+            'dimensions_raw' => $dimsRaw,
         ];
     }
 

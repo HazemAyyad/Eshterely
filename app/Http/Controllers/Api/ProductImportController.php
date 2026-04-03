@@ -82,7 +82,9 @@ class ProductImportController extends Controller
             $product['shipping_estimate'] = [
                 'amount' => $amount,
                 'source' => ($product['shipping_estimate_source'] ?? 'fallback') === 'exact' ? 'exact' : 'fallback',
-                'note' => 'approximate',
+                'note' => ($product['shipping_estimate_source'] ?? 'fallback') === 'exact'
+                    ? 'exact measurements'
+                    : 'fallback defaults',
             ];
 
             $product['final_pricing'] = null;
