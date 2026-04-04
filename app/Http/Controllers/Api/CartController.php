@@ -135,6 +135,7 @@ class CartController extends Controller
 
     /**
      * Preview shipping for paste-link / webview before or without persisting a cart line.
+     * Uses the same [CartShippingEstimateService::quoteForUser] as POST /api/cart/items (Confirm Product + Cart).
      */
     public function estimateShipping(Request $request): JsonResponse
     {
