@@ -74,6 +74,15 @@ class CartController extends Controller
         // when product data is incomplete (estimated=true + missing_fields populated).
         $quote = $this->cartShippingEstimate->quoteForUser($request->user(), $validated, $qty, $destAddrId);
 
+        $useQuotePkg = $quote !== [];
+        $pkgFloat = static function (?array $q, string $key, $fallback): ?float {
+            if ($q === null || ! array_key_exists($key, $q) || $q[$key] === null || $q[$key] === '') {
+                return $fallback !== null && $fallback !== '' ? (float) $fallback : null;
+            }
+
+            return (float) $q[$key];
+        };
+
         $item = CartItem::create([
             'user_id' => $request->user()->id,
             'product_url' => $validated['url'],
@@ -88,12 +97,24 @@ class CartController extends Controller
             'country' => $validated['country'] ?? null,
             'source' => $validated['source'] ?? 'paste_link',
             'variation_text' => $validated['variation_text'] ?? null,
-            'weight' => $validated['weight'] ?? null,
-            'weight_unit' => $validated['weight_unit'] ?? null,
-            'length' => $validated['length'] ?? null,
-            'width' => $validated['width'] ?? null,
-            'height' => $validated['height'] ?? null,
-            'dimension_unit' => $validated['dimension_unit'] ?? null,
+            'weight' => $useQuotePkg
+                ? $pkgFloat($quote, 'package_weight', $validated['weight'] ?? null)
+                : (isset($validated['weight']) ? (float) $validated['weight'] : null),
+            'weight_unit' => $useQuotePkg
+                ? ($quote['package_weight_unit'] ?? $validated['weight_unit'] ?? null)
+                : ($validated['weight_unit'] ?? null),
+            'length' => $useQuotePkg
+                ? $pkgFloat($quote, 'package_length', $validated['length'] ?? null)
+                : (isset($validated['length']) ? (float) $validated['length'] : null),
+            'width' => $useQuotePkg
+                ? $pkgFloat($quote, 'package_width', $validated['width'] ?? null)
+                : (isset($validated['width']) ? (float) $validated['width'] : null),
+            'height' => $useQuotePkg
+                ? $pkgFloat($quote, 'package_height', $validated['height'] ?? null)
+                : (isset($validated['height']) ? (float) $validated['height'] : null),
+            'dimension_unit' => $useQuotePkg
+                ? ($quote['package_dimension_unit'] ?? $validated['dimension_unit'] ?? null)
+                : ($validated['dimension_unit'] ?? null),
             'shipping_cost' => $quote['amount'] ?? null,
             'shipping_snapshot' => $quote !== [] ? $quote : null,
             'estimated' => (bool) ($quote['estimated'] ?? false),

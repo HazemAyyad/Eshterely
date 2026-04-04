@@ -246,12 +246,23 @@ document.addEventListener('DOMContentLoaded', function() {
             id: 'ID', name: 'Product', product_url: 'URL', unit_price: 'Unit price', quantity: 'Qty', currency: 'Currency',
             store_name: 'Store', store_key: 'Store key', product_id: 'Product ID', country: 'Country', variation_text: 'Variation',
             weight: 'Weight', weight_unit: 'Weight unit', length: 'Length', width: 'Width', height: 'Height', dimension_unit: 'Dimension unit',
-            source: 'Source', review_status: 'Review status', shipping_cost: 'Shipping cost', shipping_destination: 'Ship to', shipping_basis: 'Shipping basis', created_at: 'Created'
+            source: 'Source', review_status: 'Review status', shipping_cost: 'Shipping cost', shipping_destination: 'Ship to', shipping_basis: 'Shipping basis', created_at: 'Created',
+            measurements_source: 'Measurements source', missing_fields: 'Missing fields', estimated_flag: 'Quote used fallbacks',
+            shipping_snapshot_excerpt: 'Shipping snapshot (basis)'
         };
         let html = '';
         for (const [k, v] of Object.entries(d)) {
             if (v === null || v === '') continue;
-            html += '<dt class="col-sm-4">' + (labels[k] || k) + '</dt><dd class="col-sm-8">' + (typeof v === 'string' && v.startsWith('http') ? '<a href="' + v + '" target="_blank">' + v + '</a>' : v) + '</dd>';
+            let display = v;
+            if (Array.isArray(v)) {
+                display = v.length ? v.join(', ') : '';
+                if (display === '') continue;
+            } else if (typeof v === 'object' && v !== null) {
+                display = '<pre class="small mb-0 text-wrap" style="max-height:12rem;overflow:auto">' + JSON.stringify(v, null, 2) + '</pre>';
+            } else if (typeof v === 'string' && v.startsWith('http')) {
+                display = '<a href="' + v + '" target="_blank">' + v + '</a>';
+            }
+            html += '<dt class="col-sm-4">' + (labels[k] || k) + '</dt><dd class="col-sm-8">' + display + '</dd>';
         }
         $('#detailsModalBody dl').html(html);
         new bootstrap.Modal('#detailsModal').show();

@@ -106,8 +106,19 @@ class CartReviewController extends Controller
         $wtLabel = e(__('admin.package_weight_label'));
         $dimLabel = e(__('admin.package_dims_label'));
 
+        $snap = is_array($item->shipping_snapshot) ? $item->shipping_snapshot : [];
+        $mSrc = isset($snap['measurements_source']) ? (string) $snap['measurements_source'] : null;
+        $srcBadge = '';
+        if ($mSrc === 'exact') {
+            $srcBadge = '<span class="badge bg-label-success ms-1">' . e(__('admin.measurements_imported_exact')) . '</span>';
+        } elseif ($mSrc === 'fallback') {
+            $srcBadge = '<span class="badge bg-label-warning ms-1">' . e(__('admin.measurements_fallback_defaults')) . '</span>';
+        } elseif ((bool) $item->estimated) {
+            $srcBadge = '<span class="badge bg-label-warning ms-1">' . e(__('admin.measurements_fallback_defaults')) . '</span>';
+        }
+
         return '<div class="small cart-review-package-col" style="min-width:10rem">'
-            . '<div class="mb-1">' . $wtLabel . ' ' . $weightLine . '</div>'
+            . '<div class="mb-1">' . $wtLabel . ' ' . $weightLine . $srcBadge . '</div>'
             . '<div class="mb-2">' . $dimLabel . ' ' . $dimsLine . '</div>'
             . '<button type="button" class="btn btn-sm btn-label-secondary btn-edit-package" data-save-url="' . $savePkgUrl . '" data-package="' . $pkgJson . '">'
             . '<i class="icon-base ti tabler-edit me-1"></i>' . e(__('admin.edit_package')) . '</button>'
@@ -116,6 +127,8 @@ class CartReviewController extends Controller
 
     private function itemDetailsForModal(CartItem $item): array
     {
+        $snap = is_array($item->shipping_snapshot) ? $item->shipping_snapshot : [];
+
         return [
             'id' => $item->id,
             'name' => $item->name,
@@ -140,6 +153,19 @@ class CartReviewController extends Controller
             'shipping_cost' => $item->shipping_cost,
             'shipping_basis' => strip_tags($this->formatShippingBasis($item)),
             'shipping_destination' => strip_tags($this->formatShippingDestination($item)),
+            'measurements_source' => $snap['measurements_source'] ?? null,
+            'missing_fields' => $item->missing_fields ?? [],
+            'estimated_flag' => (bool) $item->estimated,
+            'shipping_snapshot_excerpt' => [
+                'amount' => $snap['amount'] ?? null,
+                'currency' => $snap['currency'] ?? null,
+                'chargeable_weight' => $snap['chargeable_weight'] ?? null,
+                'measurements_source' => $snap['measurements_source'] ?? null,
+                'package_weight' => $snap['package_weight'] ?? null,
+                'package_length' => $snap['package_length'] ?? null,
+                'package_width' => $snap['package_width'] ?? null,
+                'package_height' => $snap['package_height'] ?? null,
+            ],
             'created_at' => $item->created_at?->format('Y-m-d H:i'),
         ];
     }
@@ -195,23 +221,33 @@ class CartReviewController extends Controller
         $missing = $item->missing_fields ?? [];
         $carrier = $item->carrier ?: ($snapshot['carrier'] ?? 'auto');
         $mode = $item->pricing_mode ?: ($snapshot['pricing_mode'] ?? 'default');
+        $mSrc = isset($snapshot['measurements_source']) ? (string) $snapshot['measurements_source'] : null;
 
         $parts = [];
         $parts[] = 'Carrier: ' . $carrier;
         $parts[] = 'Mode: ' . $mode;
+        if ($mSrc === 'exact') {
+            $parts[] = __('admin.measurements_imported_exact');
+        } elseif ($mSrc === 'fallback') {
+            $parts[] = __('admin.measurements_fallback_defaults');
+        }
         if ($estimated) {
-            $parts[] = 'Estimated based on fallback data';
+            $parts[] = 'Quote used fallback / incomplete inputs';
         }
         if (is_array($missing) && $missing !== []) {
             $parts[] = 'Missing: ' . implode(', ', $missing);
         }
         $tooltip = e(implode(' • ', $parts));
 
-        if ($estimated || (is_array($missing) && $missing !== [])) {
-            return '<span class="badge bg-label-warning text-warning" title="' . $tooltip . '"><i class="icon-base ti tabler-alert-circle"></i> Estimated</span>';
+        $warn = $estimated || (is_array($missing) && $missing !== []) || $mSrc === 'fallback';
+
+        if ($warn) {
+            return '<span class="badge bg-label-warning text-warning" title="' . $tooltip . '"><i class="icon-base ti tabler-alert-circle"></i> '
+                . e(__('admin.shipping_basis_estimated')) . '</span>';
         }
 
-        return '<span class="badge bg-label-success text-success" title="' . $tooltip . '"><i class="icon-base ti tabler-check"></i> Exact</span>';
+        return '<span class="badge bg-label-success text-success" title="' . $tooltip . '"><i class="icon-base ti tabler-check"></i> '
+            . e(__('admin.shipping_basis_exact')) . '</span>';
     }
 
     public function updatePackage(Request $request, int $id): JsonResponse

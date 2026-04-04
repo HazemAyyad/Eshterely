@@ -234,6 +234,10 @@ return [
     'package_updated' => 'Package details updated.',
     'package_modal_title' => 'Weight & dimensions',
     'package_save_hint' => 'Save, then use «Recalc shipping» in the table to update price from the engine.',
+    'measurements_imported_exact' => 'Imported (exact)',
+    'measurements_fallback_defaults' => 'Fallback defaults',
+    'shipping_basis_exact' => 'Exact',
+    'shipping_basis_estimated' => 'Estimated',
     'user_name' => 'User name',
 
     // Wallets

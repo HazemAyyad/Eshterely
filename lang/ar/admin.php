@@ -234,6 +234,10 @@ return [
     'package_updated' => 'تم تحديث بيانات الطرد.',
     'package_modal_title' => 'الوزن والأبعاد',
     'package_save_hint' => 'احفظ، ثم استخدم «إعادة حساب الشحن» في الجدول لتحديث السعر من المحرك.',
+    'measurements_imported_exact' => 'مستورد (دقيق)',
+    'measurements_fallback_defaults' => 'قيم افتراضية للتقدير',
+    'shipping_basis_exact' => 'دقيق',
+    'shipping_basis_estimated' => 'تقديري',
     'user_name' => 'اسم المستخدم',
 
     // Wallets

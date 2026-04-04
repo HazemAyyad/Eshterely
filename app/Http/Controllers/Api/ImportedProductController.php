@@ -51,6 +51,34 @@ class ImportedProductController extends Controller
         $shippingAmount = (float) ($shippingSnapshot['amount'] ?? 0);
         $needsReview = $reviewService->importedProductNeedsReview($importedProduct);
 
+        $shipSnap = is_array($importedProduct->shipping_quote_snapshot) ? $importedProduct->shipping_quote_snapshot : [];
+
+        $weight = $this->packageValue($importedProduct, 'weight');
+        if ($weight === null || (float) $weight <= 0) {
+            $weight = isset($shipSnap['package_weight']) ? (float) $shipSnap['package_weight'] : null;
+        }
+        $length = $this->packageValue($importedProduct, 'length');
+        if ($length === null || (float) $length <= 0) {
+            $length = isset($shipSnap['package_length']) ? (float) $shipSnap['package_length'] : null;
+        }
+        $width = $this->packageValue($importedProduct, 'width');
+        if ($width === null || (float) $width <= 0) {
+            $width = isset($shipSnap['package_width']) ? (float) $shipSnap['package_width'] : null;
+        }
+        $height = $this->packageValue($importedProduct, 'height');
+        if ($height === null || (float) $height <= 0) {
+            $height = isset($shipSnap['package_height']) ? (float) $shipSnap['package_height'] : null;
+        }
+
+        $weightUnit = $importedProduct->package_info['weight_unit'] ?? null;
+        if ($weightUnit === null || $weightUnit === '') {
+            $weightUnit = isset($shipSnap['package_weight_unit']) ? (string) $shipSnap['package_weight_unit'] : null;
+        }
+        $dimUnit = $importedProduct->package_info['dimension_unit'] ?? null;
+        if ($dimUnit === null || $dimUnit === '') {
+            $dimUnit = isset($shipSnap['package_dimension_unit']) ? (string) $shipSnap['package_dimension_unit'] : null;
+        }
+
         $cartItem = CartItem::create([
             'user_id' => $request->user()->id,
             'imported_product_id' => $importedProduct->id,
@@ -69,12 +97,12 @@ class ImportedProductController extends Controller
             'shipping_cost' => $shippingAmount > 0 ? $shippingAmount : null,
             'pricing_snapshot' => $importedProduct->final_pricing_snapshot,
             'shipping_snapshot' => $importedProduct->shipping_quote_snapshot,
-            'weight' => $this->packageValue($importedProduct, 'weight'),
-            'weight_unit' => $importedProduct->package_info['weight_unit'] ?? null,
-            'length' => $this->packageValue($importedProduct, 'length'),
-            'width' => $this->packageValue($importedProduct, 'width'),
-            'height' => $this->packageValue($importedProduct, 'height'),
-            'dimension_unit' => $importedProduct->package_info['dimension_unit'] ?? null,
+            'weight' => $weight,
+            'weight_unit' => $weightUnit,
+            'length' => $length,
+            'width' => $width,
+            'height' => $height,
+            'dimension_unit' => $dimUnit,
             'estimated' => $importedProduct->estimated,
             'missing_fields' => $importedProduct->missing_fields,
             'carrier' => $importedProduct->carrier,

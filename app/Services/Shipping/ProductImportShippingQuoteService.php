@@ -63,6 +63,8 @@ class ProductImportShippingQuoteService
             $notes[] = 'Quote is estimated: missing or incomplete ' . implode(', ', $missingFields);
         }
 
+        $measurementsSource = $estimated ? 'fallback' : 'exact';
+
         return [
             'carrier' => $result->carrier ?? 'auto',
             'pricing_mode' => $result->pricingMode ?? 'default',
@@ -76,6 +78,13 @@ class ProductImportShippingQuoteService
             'missing_fields' => $missingFields,
             'notes' => $notes,
             'calculation_breakdown' => $result->calculationBreakdown ?? [],
+            'measurements_source' => $measurementsSource,
+            'package_weight' => (float) ($input['weight'] ?? 0),
+            'package_weight_unit' => $input['weight_unit'] ?? null,
+            'package_length' => (float) ($input['length'] ?? 0),
+            'package_width' => (float) ($input['width'] ?? 0),
+            'package_height' => (float) ($input['height'] ?? 0),
+            'package_dimension_unit' => $input['dimension_unit'] ?? null,
         ];
     }
 }
