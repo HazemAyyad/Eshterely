@@ -349,7 +349,7 @@ class StructuredProductImportService
             return null;
         }
 
-        $apiUrl = 'https://api.scraperapi.com/structured/walmart/product?' . http_build_query([
+        $apiUrl = 'https://api.scraperapi.com/structured/walmart/product/v1?' . http_build_query([
             'api_key' => $apiKey,
             'product_id' => $productId,
             'country_code' => $countryCode,
@@ -357,18 +357,44 @@ class StructuredProductImportService
         ]);
 
         try {
+            Log::debug('Walmart structured: request', ['product_id' => $productId, 'tld' => $tld]);
             $response = Http::timeout(self::STRUCTURED_TIMEOUT)->get($apiUrl);
             if (! $response->successful()) {
+                Log::debug('Walmart structured: non-success', ['status' => $response->status()]);
+
                 return null;
             }
             $raw = $response->json();
             if (! is_array($raw)) {
                 return null;
             }
-            return $this->normalizeStructuredResult($raw, $url, 'walmart', 'walmart_structured_api');
-        } catch (\Throwable) {
+            $originalRaw = $raw;
+            $raw = $this->unwrapWalmartStructuredResponse($raw);
+            $normalized = $this->normalizeStructuredResult($raw, $url, 'walmart', 'walmart_structured_api');
+            $normalized['scraperapi_raw'] = $originalRaw;
+
+            return $normalized;
+        } catch (\Throwable $e) {
+            Log::debug('Walmart structured: exception', ['message' => $e->getMessage()]);
+
             return null;
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $raw
+     * @return array<string, mixed>
+     */
+    private function unwrapWalmartStructuredResponse(array $raw): array
+    {
+        if (isset($raw['product']) && is_array($raw['product'])) {
+            return $raw['product'];
+        }
+        if (isset($raw['data']) && is_array($raw['data'])) {
+            return $raw['data'];
+        }
+
+        return $raw;
     }
 
     /**
@@ -527,6 +553,7 @@ class StructuredProductImportService
             'dimensions' => ['key' => null, 'raw' => null],
         ];
         $measurementsSourceString = null;
+        $hasExactMeasurements = false;
 
         if ($storeKey === 'amazon') {
             $info = is_array($rawResponse['product_information'] ?? null) ? $rawResponse['product_information'] : [];
@@ -555,19 +582,14 @@ class StructuredProductImportService
         }
 
         if ($storeKey === 'walmart') {
-            $specs = is_array($rawResponse['specifications'] ?? null) ? $rawResponse['specifications'] : [];
-            foreach ($specs as $spec) {
-                if (! is_array($spec)) continue;
-                $label = strtolower(trim((string) ($spec['name'] ?? $spec['label'] ?? '')));
-                $value = trim((string) ($spec['value'] ?? ''));
-                if ($value === '') continue;
-                if (str_contains($label, 'weight')) {
-                    [$weight, $weightUnit] = $this->parseWeightString($value);
-                }
-                if (str_contains($label, 'dimension') || str_contains($label, 'size')) {
-                    $parsed = $this->parseDimensionString($value);
-                    if ($parsed !== null) $dimensions = $parsed;
-                }
+            $wm = $this->extractWalmartStructuredMeasurements($rawResponse);
+            $weight = $wm['weight'];
+            $weightUnit = $wm['weight_unit'];
+            $dimensions = $wm['dimensions'];
+            $measurementSources = $wm['measurement_sources'];
+            $hasExactMeasurements = $wm['has_exact_measurements'];
+            if ($wm['has_any_measurements']) {
+                $measurementsSourceString = 'walmart_structured';
             }
         }
 
@@ -577,6 +599,8 @@ class StructuredProductImportService
                 && $dimensions !== null
                 && ($measurementSources['weight']['key'] ?? null) !== null
                 && ($measurementSources['dimensions']['key'] ?? null) !== null;
+        } elseif ($storeKey === 'walmart') {
+            // $hasExactMeasurements already set from extractWalmartStructuredMeasurements
         } else {
             $hasExactMeasurements = $weight !== null
                 && $dimensions !== null
@@ -584,7 +608,7 @@ class StructuredProductImportService
                 && ($measurementSources['dimensions']['key'] ?? null) !== null;
         }
 
-        $measurementsSourceString = null;
+        $measurementsSourceString = $measurementsSourceString ?? null;
         if ($hasExactMeasurements && $storeKey === 'amazon') {
             $wk = (string) ($measurementSources['weight']['key'] ?? '');
             $dk = (string) ($measurementSources['dimensions']['key'] ?? '');
@@ -600,6 +624,14 @@ class StructuredProductImportService
                 'dimensions'    => $dimensions,
                 'has_exact'     => true,
                 'source_string' => $measurementsSourceString,
+            ]);
+        }
+        if ($storeKey === 'walmart' && ($measurementsSourceString ?? null) === 'walmart_structured') {
+            Log::debug('Walmart structured: normalized measurements', [
+                'matched_labels' => array_column($measurementSources['walmart_matched_labels'] ?? [], 'label'),
+                'weight'         => $weight,
+                'dimensions'     => $dimensions,
+                'has_exact'      => $hasExactMeasurements,
             ]);
         }
 
@@ -637,6 +669,212 @@ class StructuredProductImportService
             'dimensions' => $dimensions,
             'scraperapi_raw' => $rawResponse,
         ];
+    }
+
+    /**
+     * Walmart: merge specifications + product_highlights, then extract weight and dimensions (multiple shapes).
+     *
+     * @return array{
+     *   weight: float|null,
+     *   weight_unit: string|null,
+     *   dimensions: array<string, mixed>|null,
+     *   has_exact_measurements: bool,
+     *   has_any_measurements: bool,
+     *   measurement_sources: array<string, mixed>
+     * }
+     */
+    private function extractWalmartStructuredMeasurements(array $rawResponse): array
+    {
+        $map = $this->buildWalmartNormalizedLabelMap($rawResponse);
+        Log::debug('Walmart structured: merged label keys', ['labels' => array_keys($map)]);
+
+        $matched = [];
+        $weight = null;
+        $weightUnit = null;
+        $weightKey = null;
+        $weightRaw = null;
+
+        foreach (['item weight', 'weight'] as $want) {
+            if (! isset($map[$want])) {
+                continue;
+            }
+            $entry = $map[$want];
+            [$w, $wu] = $this->parseWeightString($entry['value']);
+            if ($w !== null && $wu !== null) {
+                $weight = $w;
+                $weightUnit = $wu;
+                $weightKey = $entry['label'];
+                $weightRaw = $entry['value'];
+                $matched[] = ['label' => $entry['label'], 'raw' => $entry['value']];
+                break;
+            }
+        }
+
+        $dimensions = null;
+        $dimsKey = null;
+        $dimsRaw = null;
+        $hasExact = false;
+
+        foreach (['assembled product dimensions', 'product dimensions', 'dimensions'] as $want) {
+            if (! isset($map[$want])) {
+                continue;
+            }
+            $entry = $map[$want];
+            $parsed = $this->parseDimensionString($entry['value']);
+            if ($parsed !== null) {
+                $dimensions = $parsed;
+                $dimsKey = $entry['label'];
+                $dimsRaw = $entry['value'];
+                $matched[] = ['label' => $entry['label'], 'raw' => $entry['value']];
+                $hasExact = true;
+                break;
+            }
+        }
+
+        if ($dimensions === null) {
+            $h = $this->pickWalmartSplitDimension($map, ['assembled product height', 'height']);
+            $wDim = $this->pickWalmartSplitDimension($map, ['assembled product width', 'width']);
+            $len = $this->pickWalmartSplitDimension($map, ['assembled product length', 'length']);
+            if ($len === null) {
+                $len = $this->pickWalmartSplitDimension($map, ['assembled product depth', 'depth']);
+            }
+
+            if ($h !== null && $wDim === null && $len === null) {
+                $dimensions = [
+                    'length' => null,
+                    'width' => null,
+                    'height' => $h['value'],
+                    'unit' => $h['unit'],
+                ];
+                $dimsKey = $h['label'];
+                $dimsRaw = $h['raw'];
+                $matched[] = ['label' => $h['label'], 'raw' => $h['raw']];
+                $hasExact = false;
+            } elseif ($h !== null || $wDim !== null || $len !== null) {
+                $lv = $len !== null ? $len['value'] : null;
+                $wv = $wDim !== null ? $wDim['value'] : null;
+                $hv = $h !== null ? $h['value'] : null;
+                $uL = $len !== null ? $len['unit'] : null;
+                $uW = $wDim !== null ? $wDim['unit'] : null;
+                $uH = $h !== null ? $h['unit'] : null;
+
+                $dimensions = [
+                    'length' => $lv,
+                    'width' => $wv,
+                    'height' => $hv,
+                    'unit' => null,
+                ];
+
+                $parts = [];
+                foreach ([$len, $wDim, $h] as $part) {
+                    if ($part !== null) {
+                        $parts[] = ['label' => $part['label'], 'raw' => $part['raw']];
+                    }
+                }
+                foreach ($parts as $p) {
+                    $matched[] = ['label' => $p['label'], 'raw' => $p['raw']];
+                }
+                if ($parts !== []) {
+                    $dimsKey = implode('|', array_column($parts, 'label'));
+                    $dimsRaw = implode('; ', array_map(static fn ($p) => $p['label'] . ': ' . $p['raw'], $parts));
+                }
+
+                if ($lv !== null && $wv !== null && $hv !== null && $uL !== null && $uL === $uW && $uL === $uH) {
+                    $dimensions['unit'] = $uL;
+                    $hasExact = true;
+                } else {
+                    $uniq = array_unique(array_values(array_filter([$uL, $uW, $uH], static fn ($x) => $x !== null)));
+                    if (count($uniq) === 1) {
+                        $dimensions['unit'] = $uniq[0];
+                    } elseif ($h !== null) {
+                        $dimensions['unit'] = $h['unit'];
+                    } elseif ($wDim !== null) {
+                        $dimensions['unit'] = $wDim['unit'];
+                    } elseif ($len !== null) {
+                        $dimensions['unit'] = $len['unit'];
+                    }
+                    $hasExact = false;
+                }
+            }
+        }
+
+        $hasAny = $weight !== null
+            || ($dimensions !== null && (
+                ($dimensions['length'] ?? null) !== null
+                || ($dimensions['width'] ?? null) !== null
+                || ($dimensions['height'] ?? null) !== null
+            ));
+
+        $measurementSources = [
+            'weight' => $weightKey !== null ? ['key' => $weightKey, 'raw' => (string) $weightRaw] : ['key' => null, 'raw' => null],
+            'dimensions' => ['key' => $dimsKey, 'raw' => $dimsRaw],
+            'walmart_matched_labels' => $matched,
+        ];
+
+        return [
+            'weight' => $weight,
+            'weight_unit' => $weightUnit,
+            'dimensions' => $dimensions,
+            'has_exact_measurements' => $hasExact,
+            'has_any_measurements' => $hasAny,
+            'measurement_sources' => $measurementSources,
+        ];
+    }
+
+    /**
+     * @return array<string, array{label: string, value: string}>
+     */
+    private function buildWalmartNormalizedLabelMap(array $rawResponse): array
+    {
+        $map = [];
+        $lists = [
+            is_array($rawResponse['specifications'] ?? null) ? $rawResponse['specifications'] : [],
+            is_array($rawResponse['product_highlights'] ?? null) ? $rawResponse['product_highlights'] : [],
+        ];
+        foreach ($lists as $list) {
+            foreach ($list as $spec) {
+                if (! is_array($spec)) {
+                    continue;
+                }
+                $labelRaw = (string) ($spec['name'] ?? $spec['label'] ?? '');
+                $value = trim((string) ($spec['value'] ?? ''));
+                if ($value === '') {
+                    continue;
+                }
+                $norm = $this->normalizeEbayItemSpecificLabel($labelRaw);
+                if ($norm === '') {
+                    continue;
+                }
+                $map[$norm] = ['label' => $labelRaw, 'value' => $value];
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param  array<string, array{label: string, value: string}>  $map
+     * @param  array<int, string>  $normLabels
+     * @return array{value: float, unit: string, label: string, raw: string}|null
+     */
+    private function pickWalmartSplitDimension(array $map, array $normLabels): ?array
+    {
+        foreach ($normLabels as $want) {
+            if (! isset($map[$want])) {
+                continue;
+            }
+            $parsed = $this->parseEbaySingleDimensionValue($map[$want]['value']);
+            if ($parsed !== null) {
+                return [
+                    'value' => $parsed['value'],
+                    'unit' => $parsed['unit'],
+                    'label' => $map[$want]['label'],
+                    'raw' => $map[$want]['value'],
+                ];
+            }
+        }
+
+        return null;
     }
 
     /**

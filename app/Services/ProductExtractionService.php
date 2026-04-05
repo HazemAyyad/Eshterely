@@ -429,34 +429,38 @@ class ProductExtractionService
             $merged['name'] = $structName;
         }
 
-        $measurementFields = [
-            'weight',
-            'weight_unit',
-            'weight_value',
-            'length',
-            'width',
-            'height',
-            'dimensions_length',
-            'dimensions_width',
-            'dimensions_height',
-            'dimensions_unit',
-            'dimension_unit',
-            'dimensions',
-            'has_exact_measurements',
-            'measurements_source',
-            'measurements_source_fields',
-        ];
-        foreach ($measurementFields as $field) {
-            if (! array_key_exists($field, $structured)) {
-                continue;
-            }
-            $incoming = $structured[$field];
-            if ($this->isEmptyStructuredMeasurementValue($incoming, $field)) {
-                continue;
-            }
-            $current = $merged[$field] ?? null;
-            if ($this->shouldSupplementMeasurement($current, $incoming, $field)) {
-                $merged[$field] = $incoming;
+        if ($storeKeyLower === 'walmart') {
+            $this->mergeWalmartHtmlWithStructuredMeasurements($merged, $structured);
+        } else {
+            $measurementFields = [
+                'weight',
+                'weight_unit',
+                'weight_value',
+                'length',
+                'width',
+                'height',
+                'dimensions_length',
+                'dimensions_width',
+                'dimensions_height',
+                'dimensions_unit',
+                'dimension_unit',
+                'dimensions',
+                'has_exact_measurements',
+                'measurements_source',
+                'measurements_source_fields',
+            ];
+            foreach ($measurementFields as $field) {
+                if (! array_key_exists($field, $structured)) {
+                    continue;
+                }
+                $incoming = $structured[$field];
+                if ($this->isEmptyStructuredMeasurementValue($incoming, $field)) {
+                    continue;
+                }
+                $current = $merged[$field] ?? null;
+                if ($this->shouldSupplementMeasurement($current, $incoming, $field)) {
+                    $merged[$field] = $incoming;
+                }
             }
         }
 
@@ -477,8 +481,97 @@ class ProductExtractionService
                 'has_exact'    => $merged['has_exact_measurements'] ?? null,
             ]);
         }
+        if ($storeKeyLower === 'walmart') {
+            Log::debug('Walmart extraction: merged HTML + structured measurements', [
+                'weight'    => $merged['weight'] ?? null,
+                'length'    => $merged['length'] ?? null,
+                'width'     => $merged['width'] ?? null,
+                'height'    => $merged['height'] ?? null,
+                'has_exact' => $merged['has_exact_measurements'] ?? null,
+            ]);
+        }
 
         return $merged;
+    }
+
+    /**
+     * Walmart: fill only missing measurement fields; never replace a valid HTML value with null/empty structured data.
+     *
+     * @param  array<string, mixed>  $merged
+     * @param  array<string, mixed>  $structured
+     */
+    private function mergeWalmartHtmlWithStructuredMeasurements(array &$merged, array $structured): void
+    {
+        foreach (['weight', 'weight_unit', 'weight_value'] as $field) {
+            if (! array_key_exists($field, $structured)) {
+                continue;
+            }
+            $incoming = $structured[$field];
+            if ($this->isEmptyStructuredMeasurementValue($incoming, $field)) {
+                continue;
+            }
+            $current = $merged[$field] ?? null;
+            if ($this->shouldSupplementMeasurement($current, $incoming, $field)) {
+                $merged[$field] = $incoming;
+            }
+        }
+
+        foreach (['length', 'width', 'height', 'dimensions_length', 'dimensions_width', 'dimensions_height', 'dimensions_unit', 'dimension_unit'] as $field) {
+            if (! array_key_exists($field, $structured)) {
+                continue;
+            }
+            $incoming = $structured[$field];
+            if ($this->isWalmartStructuredDimensionValueEmpty($incoming)) {
+                continue;
+            }
+            $current = $merged[$field] ?? null;
+            if ($this->isWalmartStructuredDimensionValueEmpty($current)) {
+                $merged[$field] = $incoming;
+            }
+        }
+
+        if (isset($structured['dimensions']) && is_array($structured['dimensions'])) {
+            $base = isset($merged['dimensions']) && is_array($merged['dimensions']) ? $merged['dimensions'] : [];
+            foreach (['length', 'width', 'height', 'unit'] as $dk) {
+                if (! array_key_exists($dk, $structured['dimensions'])) {
+                    continue;
+                }
+                $incoming = $structured['dimensions'][$dk];
+                if ($this->isWalmartStructuredDimensionValueEmpty($incoming)) {
+                    continue;
+                }
+                if ($this->isWalmartStructuredDimensionValueEmpty($base[$dk] ?? null)) {
+                    $base[$dk] = $incoming;
+                }
+            }
+            $merged['dimensions'] = $base;
+        }
+
+        foreach (['has_exact_measurements', 'measurements_source', 'measurements_source_fields'] as $field) {
+            if (! array_key_exists($field, $structured)) {
+                continue;
+            }
+            $incoming = $structured[$field];
+            if ($this->isEmptyStructuredMeasurementValue($incoming, $field)) {
+                continue;
+            }
+            $current = $merged[$field] ?? null;
+            if ($this->shouldSupplementMeasurement($current, $incoming, $field)) {
+                $merged[$field] = $incoming;
+            }
+        }
+    }
+
+    private function isWalmartStructuredDimensionValueEmpty(mixed $value): bool
+    {
+        if ($value === null || $value === '') {
+            return true;
+        }
+        if (is_numeric($value) && (float) $value <= 0) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
