@@ -121,21 +121,45 @@ class StructuredProductImportService
     }
 
     /**
-     * Extract Walmart product ID from URL (e.g. /ip/5253396052 or /ip/Product-Name/123456).
+     * Extract Walmart product ID from URL (e.g. /ip/5253396052 or /ip/Product-Name/123456?query=...).
      */
     public function extractWalmartProductId(string $url): ?string
     {
+        return $this->extractWalmartProductIdFromUrl($url);
+    }
+
+    /**
+     * Parse path only (ignore query string). Prefer /ip/[optional-slug/]numericId at end of path.
+     */
+    private function extractWalmartProductIdFromUrl(string $url): ?string
+    {
         $path = parse_url($url, PHP_URL_PATH);
-        if ($path === null || $path === '') {
+        if (! is_string($path) || $path === '') {
+            Log::debug('Walmart product ID extraction', [
+                'url'        => $url,
+                'path'       => null,
+                'product_id' => null,
+            ]);
+
             return null;
         }
-        if (preg_match('#/ip/(?:[^/]+/)?(\d+)#', $path, $m)) {
-            return $m[1];
+
+        $path = rtrim($path, '/');
+
+        $productId = null;
+        if (preg_match('~\/ip\/(?:[^\/]+\/)?(\d+)$~', $path, $m)) {
+            $productId = $m[1];
+        } elseif (preg_match('~\/(\d+)$~', $path, $m)) {
+            $productId = $m[1];
         }
-        if (preg_match('#/ip/([A-Z0-9]+)#i', $path, $m)) {
-            return $m[1];
-        }
-        return null;
+
+        Log::debug('Walmart product ID extraction', [
+            'url'        => $url,
+            'path'       => $path,
+            'product_id' => $productId,
+        ]);
+
+        return $productId;
     }
 
     /**
