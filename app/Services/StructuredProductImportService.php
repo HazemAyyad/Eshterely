@@ -275,7 +275,7 @@ class StructuredProductImportService
             return null;
         }
 
-        $apiUrl = 'https://api.scraperapi.com/structured/ebay/product?' . http_build_query([
+        $apiUrl = 'https://api.scraperapi.com/structured/ebay/product/v1?' . http_build_query([
             'api_key' => $apiKey,
             'product_id' => $productId,
             'country_code' => $countryCode,
@@ -285,16 +285,49 @@ class StructuredProductImportService
         try {
             $response = Http::timeout(self::STRUCTURED_TIMEOUT)->get($apiUrl);
             if (! $response->successful()) {
+                Log::debug('eBay structured API: non-success status', [
+                    'product_id' => $productId,
+                    'status'       => $response->status(),
+                ]);
+
                 return null;
             }
             $raw = $response->json();
             if (! is_array($raw)) {
                 return null;
             }
-            return $this->normalizeStructuredResult($raw, $url, 'ebay', 'ebay_structured_api');
-        } catch (\Throwable) {
+            $originalRaw = $raw;
+            $raw = $this->unwrapEbayStructuredResponse($raw);
+            $normalized = $this->normalizeStructuredResult($raw, $url, 'ebay', 'ebay_structured_api');
+            $normalized['scraperapi_raw'] = $originalRaw;
+
+            return $normalized;
+        } catch (\Throwable $e) {
+            Log::debug('eBay structured API: exception', [
+                'product_id' => $productId,
+                'message'    => $e->getMessage(),
+            ]);
+
             return null;
         }
+    }
+
+    /**
+     * Unwrap ScraperAPI eBay response if nested under 'product' or 'data'.
+     *
+     * @param  array<string, mixed>  $raw
+     * @return array<string, mixed>
+     */
+    private function unwrapEbayStructuredResponse(array $raw): array
+    {
+        if (isset($raw['product']) && is_array($raw['product'])) {
+            return $raw['product'];
+        }
+        if (isset($raw['data']) && is_array($raw['data'])) {
+            return $raw['data'];
+        }
+
+        return $raw;
     }
 
     /**
@@ -493,6 +526,7 @@ class StructuredProductImportService
             'weight' => ['key' => null, 'raw' => null],
             'dimensions' => ['key' => null, 'raw' => null],
         ];
+        $measurementsSourceString = null;
 
         if ($storeKey === 'amazon') {
             $info = is_array($rawResponse['product_information'] ?? null) ? $rawResponse['product_information'] : [];
@@ -513,17 +547,11 @@ class StructuredProductImportService
         }
 
         if ($storeKey === 'ebay') {
-            // eBay item_specifics may contain "Weight", "Item Width", etc.
-            $specs = is_array($rawResponse['item_specifics'] ?? null) ? $rawResponse['item_specifics'] : [];
-            foreach ($specs as $spec) {
-                if (! is_array($spec)) continue;
-                $label = strtolower(trim((string) ($spec['label'] ?? $spec['name'] ?? '')));
-                $value = trim((string) ($spec['value'] ?? ''));
-                if ($value === '') continue;
-                if (in_array($label, ['weight', 'item weight', 'net weight'], true)) {
-                    [$weight, $weightUnit] = $this->parseWeightString($value);
-                }
-            }
+            $ebayMeas = $this->extractEbayItemSpecificsMeasurements($rawResponse);
+            $weight = $ebayMeas['weight'];
+            $weightUnit = $ebayMeas['weight_unit'];
+            $dimensions = $ebayMeas['dimensions'];
+            $measurementSources = $ebayMeas['measurement_sources'];
         }
 
         if ($storeKey === 'walmart') {
@@ -543,16 +571,36 @@ class StructuredProductImportService
             }
         }
 
-        $hasExactMeasurements = $weight !== null
-            && $dimensions !== null
-            && ($measurementSources['weight']['key'] ?? null) !== null
-            && ($measurementSources['dimensions']['key'] ?? null) !== null;
+        if ($storeKey === 'ebay') {
+            $hasExactMeasurements = $weight !== null
+                && $weightUnit !== null
+                && $dimensions !== null
+                && ($measurementSources['weight']['key'] ?? null) !== null
+                && ($measurementSources['dimensions']['key'] ?? null) !== null;
+        } else {
+            $hasExactMeasurements = $weight !== null
+                && $dimensions !== null
+                && ($measurementSources['weight']['key'] ?? null) !== null
+                && ($measurementSources['dimensions']['key'] ?? null) !== null;
+        }
 
         $measurementsSourceString = null;
-        if ($storeKey === 'amazon' && $hasExactMeasurements) {
+        if ($hasExactMeasurements && $storeKey === 'amazon') {
             $wk = (string) ($measurementSources['weight']['key'] ?? '');
             $dk = (string) ($measurementSources['dimensions']['key'] ?? '');
             $measurementsSourceString = trim('amazon_structured:' . $wk . '|' . $dk);
+        }
+        if ($hasExactMeasurements && $storeKey === 'ebay') {
+            $wk = (string) ($measurementSources['weight']['key'] ?? '');
+            $dk = (string) ($measurementSources['dimensions']['key'] ?? '');
+            $measurementsSourceString = trim('ebay_structured:' . $wk . '|' . $dk);
+            Log::debug('eBay structured: normalized measurements', [
+                'weight'        => $weight,
+                'weight_unit'   => $weightUnit,
+                'dimensions'    => $dimensions,
+                'has_exact'     => true,
+                'source_string' => $measurementsSourceString,
+            ]);
         }
 
         return [
@@ -589,6 +637,203 @@ class StructuredProductImportService
             'dimensions' => $dimensions,
             'scraperapi_raw' => $rawResponse,
         ];
+    }
+
+    /**
+     * Parse eBay structured item_specifics for weight and dimensions (case-insensitive labels, trimmed).
+     *
+     * @param  array<string, mixed>  $rawResponse
+     * @return array{
+     *   weight: float|null,
+     *   weight_unit: string|null,
+     *   dimensions: array{length: float, width: float, height: float, unit: string}|null,
+     *   measurement_sources: array<string, mixed>
+     * }
+     */
+    private function extractEbayItemSpecificsMeasurements(array $rawResponse): array
+    {
+        $measurementSources = [
+            'weight' => ['key' => null, 'raw' => null],
+            'dimensions' => ['key' => null, 'raw' => null],
+            'ebay_matched_labels' => [],
+        ];
+
+        $specs = is_array($rawResponse['item_specifics'] ?? null) ? $rawResponse['item_specifics'] : [];
+        $rows = [];
+        foreach ($specs as $spec) {
+            if (! is_array($spec)) {
+                continue;
+            }
+            $labelRaw = (string) ($spec['label'] ?? $spec['name'] ?? '');
+            $value = trim((string) ($spec['value'] ?? ''));
+            if ($value === '') {
+                continue;
+            }
+            $norm = $this->normalizeEbayItemSpecificLabel($labelRaw);
+            if ($norm === '') {
+                continue;
+            }
+            $rows[] = ['norm' => $norm, 'label' => $labelRaw, 'value' => $value];
+        }
+
+        $matchedForLog = [];
+
+        $weight = null;
+        $weightUnit = null;
+        foreach (['item weight', 'net weight', 'weight', 'shipping weight'] as $want) {
+            foreach ($rows as $row) {
+                if ($row['norm'] !== $want) {
+                    continue;
+                }
+                [$w, $wu] = $this->parseWeightString($row['value']);
+                if ($w !== null && $wu !== null) {
+                    $weight = $w;
+                    $weightUnit = $wu;
+                    $measurementSources['weight'] = ['key' => $row['label'], 'raw' => $row['value']];
+                    $matchedForLog[] = ['label' => $row['label'], 'raw' => $row['value']];
+                    break 2;
+                }
+            }
+        }
+
+        $dimensions = null;
+
+        foreach (['item dimensions', 'product dimensions', 'dimensions'] as $want) {
+            foreach ($rows as $row) {
+                if ($row['norm'] !== $want) {
+                    continue;
+                }
+                $parsed = $this->parseDimensionString($row['value']);
+                if ($parsed !== null) {
+                    $dimensions = $parsed;
+                    $measurementSources['dimensions'] = ['key' => $row['label'], 'raw' => $row['value']];
+                    $matchedForLog[] = ['label' => $row['label'], 'raw' => $row['value']];
+                    break 2;
+                }
+            }
+        }
+
+        if ($dimensions === null) {
+            $h = $this->pickEbaySingleDimension($rows, ['item height', 'height']);
+            $wDim = $this->pickEbaySingleDimension($rows, ['item width', 'width']);
+            $len = $this->pickEbaySingleDimension($rows, ['item length', 'length']);
+            if ($len === null) {
+                $len = $this->pickEbaySingleDimension($rows, ['item depth', 'depth']);
+            }
+            if ($h !== null && $wDim !== null && $len !== null) {
+                $units = [$h['unit'], $wDim['unit'], $len['unit']];
+                if (count(array_unique($units)) === 1) {
+                    $unit = $h['unit'];
+                    $dimensions = [
+                        'length' => $len['value'],
+                        'width' => $wDim['value'],
+                        'height' => $h['value'],
+                        'unit' => $unit,
+                    ];
+                    $dimsKey = $h['label'] . '|' . $wDim['label'] . '|' . $len['label'];
+                    $dimsRaw = sprintf(
+                        '%s: %s; %s: %s; %s: %s',
+                        $len['label'],
+                        $len['raw'],
+                        $wDim['label'],
+                        $wDim['raw'],
+                        $h['label'],
+                        $h['raw']
+                    );
+                    $measurementSources['dimensions'] = ['key' => $dimsKey, 'raw' => $dimsRaw];
+                    foreach ([$len, $wDim, $h] as $part) {
+                        $matchedForLog[] = ['label' => $part['label'], 'raw' => $part['raw']];
+                    }
+                }
+            }
+        }
+
+        $measurementSources['ebay_matched_labels'] = $matchedForLog;
+
+        Log::debug('eBay structured: item_specifics measurement extraction', [
+            'matched_labels' => array_column($matchedForLog, 'label'),
+            'weight'         => $weight,
+            'weight_unit'    => $weightUnit,
+            'dimensions'     => $dimensions,
+        ]);
+
+        return [
+            'weight' => $weight,
+            'weight_unit' => $weightUnit,
+            'dimensions' => $dimensions,
+            'measurement_sources' => $measurementSources,
+        ];
+    }
+
+    private function normalizeEbayItemSpecificLabel(string $label): string
+    {
+        $s = preg_replace('/\s+/u', ' ', trim($label));
+
+        return strtolower($s);
+    }
+
+    /**
+     * @param  array<int, array{norm: string, label: string, value: string}>  $rows
+     * @param  array<int, string>  $normLabels
+     * @return array{value: float, unit: string, label: string, raw: string}|null
+     */
+    private function pickEbaySingleDimension(array $rows, array $normLabels): ?array
+    {
+        foreach ($normLabels as $want) {
+            foreach ($rows as $row) {
+                if ($row['norm'] !== $want) {
+                    continue;
+                }
+                $parsed = $this->parseEbaySingleDimensionValue($row['value']);
+                if ($parsed !== null) {
+                    return [
+                        'value' => $parsed['value'],
+                        'unit' => $parsed['unit'],
+                        'label' => $row['label'],
+                        'raw' => $row['value'],
+                    ];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{value: float, unit: string}|null
+     */
+    private function parseEbaySingleDimensionValue(string $raw): ?array
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return null;
+        }
+        $raw = rtrim($raw, '.');
+        if (preg_match('/^([\d.,]+)\s*"\s*$/u', $raw, $m)) {
+            $v = (float) str_replace(',', '', $m[1]);
+
+            return $v > 0 ? ['value' => $v, 'unit' => 'in'] : null;
+        }
+        if (! preg_match('/^([\d.,]+)\s*(.+)$/u', $raw, $m)) {
+            return null;
+        }
+        $v = (float) str_replace(',', '', $m[1]);
+        if ($v <= 0) {
+            return null;
+        }
+        $rest = strtolower(trim($m[2]));
+        $rest = rtrim($rest, '.');
+        $unit = match (true) {
+            preg_match('/^(?:"|inches|inch|in)\b/u', $rest) === 1 => 'in',
+            preg_match('/^(?:cm|centimeters?)\b/u', $rest) === 1 => 'cm',
+            preg_match('/^(?:mm|millimeters?)\b/u', $rest) === 1 => 'mm',
+            default => null,
+        };
+        if ($unit === null) {
+            return null;
+        }
+
+        return ['value' => $v, 'unit' => $unit];
     }
 
     /**

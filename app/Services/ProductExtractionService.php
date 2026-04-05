@@ -168,7 +168,16 @@ class ProductExtractionService
         // HTML pipeline first (free). Only call structured when result is incomplete.
         $htmlResult = $this->runHtmlOnlyPipeline($html, $url, $storeKey);
 
-        if (! $hasStructuredKey || $this->isCompleteResult($htmlResult)) {
+        $htmlComplete = $this->isCompleteResult($htmlResult, $storeKeyLower);
+        if ($storeKeyLower === 'ebay') {
+            Log::debug('eBay extraction: HTML completeness', [
+                'html_considered_complete' => $htmlComplete,
+                'has_measurements'         => $this->hasUsableProductMeasurements($htmlResult),
+                'extraction_source'        => $htmlResult['extraction_source'] ?? null,
+            ]);
+        }
+
+        if (! $hasStructuredKey || $htmlComplete) {
             Log::debug('Product extraction: HTML pipeline sufficient', [
                 'store'  => $storeKeyLower,
                 'source' => $htmlResult['extraction_source'] ?? null,
@@ -180,13 +189,14 @@ class ProductExtractionService
         // HTML result is incomplete: try ScraperAPI structured as supplement.
         $structured = null;
         if ($storeKeyLower === 'ebay') {
+            Log::debug('eBay extraction: attempting ScraperAPI structured supplement', ['url' => $url]);
             $structured = $this->structuredImportService->extractEbayStructured($url);
         } elseif ($storeKeyLower === 'walmart') {
             $structured = $this->structuredImportService->extractWalmartStructured($url);
         }
 
         if ($this->isStructuredResultAcceptable($structured)) {
-            return $this->mergeHtmlWithStructured($htmlResult, $structured);
+            return $this->mergeHtmlWithStructured($htmlResult, $structured, $storeKeyLower);
         }
 
         return $htmlResult;
@@ -333,8 +343,9 @@ class ProductExtractionService
     /**
      * Result is complete when name + price > 0 + image are ALL present.
      * Used to decide whether to skip the paid ScraperAPI call.
+     * eBay: also requires usable weight + dimensions so structured API can supplement when only core fields exist.
      */
-    private function isCompleteResult(?array $data): bool
+    private function isCompleteResult(?array $data, string $storeKeyLower = ''): bool
     {
         if ($data === null || ! is_array($data)) {
             return false;
@@ -343,7 +354,48 @@ class ProductExtractionService
         $price = (float) ($data['price'] ?? 0);
         $image = trim((string) ($data['image_url'] ?? ''));
 
-        return $name !== '' && $name !== 'Product' && $price > 0 && $image !== '';
+        $base = $name !== '' && $name !== 'Product' && $price > 0 && $image !== '';
+        if (! $base) {
+            return false;
+        }
+
+        if ($storeKeyLower === 'ebay') {
+            return $this->hasUsableProductMeasurements($data);
+        }
+
+        return true;
+    }
+
+    /**
+     * True when weight + L×W×H + unit are all present (HTML pipeline rarely fills these for eBay).
+     */
+    private function hasUsableProductMeasurements(array $data): bool
+    {
+        $w = $data['weight'] ?? null;
+        $wu = $data['weight_unit'] ?? null;
+        if ($w === null || $w === '' || ! is_numeric($w) || (float) $w <= 0) {
+            return false;
+        }
+        if ($wu === null || trim((string) $wu) === '') {
+            return false;
+        }
+
+        $l = $data['length'] ?? $data['dimensions_length'] ?? null;
+        $width = $data['width'] ?? $data['dimensions_width'] ?? null;
+        $h = $data['height'] ?? $data['dimensions_height'] ?? null;
+        if ($l === null || $width === null || $h === null) {
+            return false;
+        }
+        if (! is_numeric($l) || ! is_numeric($width) || ! is_numeric($h)) {
+            return false;
+        }
+        if ((float) $l <= 0 || (float) $width <= 0 || (float) $h <= 0) {
+            return false;
+        }
+
+        $du = $data['dimension_unit'] ?? $data['dimensions_unit'] ?? null;
+
+        return $du !== null && trim((string) $du) !== '';
     }
 
     /**
@@ -355,7 +407,7 @@ class ProductExtractionService
      * @param  array<string, mixed>  $structured
      * @return array<string, mixed>
      */
-    private function mergeHtmlWithStructured(array $htmlResult, array $structured): array
+    private function mergeHtmlWithStructured(array $htmlResult, array $structured, string $storeKeyLower = ''): array
     {
         $merged = $htmlResult;
 
@@ -377,19 +429,106 @@ class ProductExtractionService
             $merged['name'] = $structName;
         }
 
-        // Weight, dimensions, variations: only available from structured.
-        foreach (['weight', 'weight_unit', 'length', 'width', 'height', 'dimension_unit', 'dimensions'] as $field) {
-            if (! empty($structured[$field])) {
-                $merged[$field] = $structured[$field];
+        $measurementFields = [
+            'weight',
+            'weight_unit',
+            'weight_value',
+            'length',
+            'width',
+            'height',
+            'dimensions_length',
+            'dimensions_width',
+            'dimensions_height',
+            'dimensions_unit',
+            'dimension_unit',
+            'dimensions',
+            'has_exact_measurements',
+            'measurements_source',
+            'measurements_source_fields',
+        ];
+        foreach ($measurementFields as $field) {
+            if (! array_key_exists($field, $structured)) {
+                continue;
+            }
+            $incoming = $structured[$field];
+            if ($this->isEmptyStructuredMeasurementValue($incoming, $field)) {
+                continue;
+            }
+            $current = $merged[$field] ?? null;
+            if ($this->shouldSupplementMeasurement($current, $incoming, $field)) {
+                $merged[$field] = $incoming;
             }
         }
+
         if (! empty($structured['scraperapi_raw'])) {
             $merged['scraperapi_raw'] = $structured['scraperapi_raw'];
         }
 
         $merged['extraction_source'] = 'html_structured_merged';
 
+        if ($storeKeyLower === 'ebay') {
+            Log::debug('eBay extraction: merged HTML + structured measurements', [
+                'weight'       => $merged['weight'] ?? null,
+                'weight_unit'  => $merged['weight_unit'] ?? null,
+                'length'       => $merged['length'] ?? null,
+                'width'        => $merged['width'] ?? null,
+                'height'       => $merged['height'] ?? null,
+                'dim_unit'     => $merged['dimensions_unit'] ?? $merged['dimension_unit'] ?? null,
+                'has_exact'    => $merged['has_exact_measurements'] ?? null,
+            ]);
+        }
+
         return $merged;
+    }
+
+    /**
+     * @param  mixed  $value
+     */
+    private function isEmptyStructuredMeasurementValue(mixed $value, string $field): bool
+    {
+        if ($value === null) {
+            return true;
+        }
+        if ($field === 'has_exact_measurements') {
+            return false;
+        }
+        if ($field === 'measurements_source_fields' || $field === 'dimensions') {
+            return $value === [] || $value === '';
+        }
+        if (is_string($value)) {
+            return trim($value) === '';
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  mixed  $current
+     * @param  mixed  $incoming
+     */
+    private function shouldSupplementMeasurement(mixed $current, mixed $incoming, string $field): bool
+    {
+        if ($field === 'has_exact_measurements') {
+            return $incoming === true && $current !== true;
+        }
+        if ($field === 'measurements_source' || $field === 'measurements_source_fields') {
+            if ($this->isEmptyStructuredMeasurementValue($incoming, $field)) {
+                return false;
+            }
+            if ($current === null || $current === '' || ($field === 'measurements_source_fields' && is_array($current) && $current === [])) {
+                return true;
+            }
+
+            return false;
+        }
+        if ($current === null || $current === '') {
+            return true;
+        }
+        if (is_numeric($current) && (float) $current <= 0 && is_numeric($incoming) && (float) $incoming > 0) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
