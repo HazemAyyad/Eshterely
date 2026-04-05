@@ -95,6 +95,22 @@ class ImportOrchestrator
             }
         }
 
+        if ($storeKeyLower === 'walmart' && ! empty(config('services.product_import.scraperapi_key'))) {
+            $src = (string) ($product['extraction_source'] ?? '');
+            $walmartStructured = in_array($src, ['walmart_structured_api', 'html_structured_merged'], true);
+            $attempts[] = [
+                'provider' => 'scraperapi_structured_walmart',
+                'stage' => 'scraperapi',
+                'success' => $walmartStructured,
+                'note' => $walmartStructured
+                    ? 'Structured API used (primary or merged with HTML)'
+                    : 'Not used (HTML considered complete without measurements, no key, or API failed)',
+            ];
+            if ($walmartStructured && ! empty($product['scraperapi_raw'])) {
+                $debug['scraperapi_raw'] = $product['scraperapi_raw'];
+            }
+        }
+
         // 5) AI fallback parser (only if we still look incomplete)
         $needsAi = $this->needsAiFallback($product);
         if ($needsAi) {

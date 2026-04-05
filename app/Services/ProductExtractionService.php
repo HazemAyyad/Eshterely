@@ -176,6 +176,13 @@ class ProductExtractionService
                 'extraction_source'        => $htmlResult['extraction_source'] ?? null,
             ]);
         }
+        if ($storeKeyLower === 'walmart') {
+            Log::debug('Walmart extraction: HTML completeness', [
+                'html_considered_complete' => $htmlComplete,
+                'has_measurements'         => $this->hasUsableProductMeasurements($htmlResult),
+                'extraction_source'        => $htmlResult['extraction_source'] ?? null,
+            ]);
+        }
 
         if (! $hasStructuredKey || $htmlComplete) {
             Log::debug('Product extraction: HTML pipeline sufficient', [
@@ -192,6 +199,7 @@ class ProductExtractionService
             Log::debug('eBay extraction: attempting ScraperAPI structured supplement', ['url' => $url]);
             $structured = $this->structuredImportService->extractEbayStructured($url);
         } elseif ($storeKeyLower === 'walmart') {
+            Log::debug('Walmart extraction: attempting ScraperAPI structured supplement', ['url' => $url]);
             $structured = $this->structuredImportService->extractWalmartStructured($url);
         }
 
@@ -343,7 +351,7 @@ class ProductExtractionService
     /**
      * Result is complete when name + price > 0 + image are ALL present.
      * Used to decide whether to skip the paid ScraperAPI call.
-     * eBay: also requires usable weight + dimensions so structured API can supplement when only core fields exist.
+     * eBay / Walmart: also requires usable weight + dimensions so structured API can supplement when only core fields exist.
      */
     private function isCompleteResult(?array $data, string $storeKeyLower = ''): bool
     {
@@ -359,7 +367,7 @@ class ProductExtractionService
             return false;
         }
 
-        if ($storeKeyLower === 'ebay') {
+        if ($storeKeyLower === 'ebay' || $storeKeyLower === 'walmart') {
             return $this->hasUsableProductMeasurements($data);
         }
 

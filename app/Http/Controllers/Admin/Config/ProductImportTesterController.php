@@ -44,6 +44,13 @@ class ProductImportTesterController extends Controller
         // Store resolution debug
         $asin     = $storeKey === 'amazon' ? $structuredService->extractAmazonAsin($url) : null;
         $tld      = $storeKey === 'amazon' ? $structuredService->extractAmazonTld($url) : null;
+        $walmartProductId = $storeKey === 'walmart' ? $structuredService->extractWalmartProductId($url) : null;
+
+        Log::debug('ProductImportTester: request', [
+            'url'                 => $url,
+            'store_key'           => $storeKey,
+            'walmart_product_id'  => $walmartProductId,
+        ]);
 
         $timing           = ['started_at' => microtime(true)];
         $providerAttempts = [];
@@ -58,6 +65,16 @@ class ProductImportTesterController extends Controller
 
             $product = $import['product'];
             $debug = $import['debug'];
+
+            $extractionSource = (string) ($product['extraction_source'] ?? '');
+            $walmartStructuredUsed = $storeKey === 'walmart'
+                && in_array($extractionSource, ['walmart_structured_api', 'html_structured_merged'], true);
+            Log::debug('ProductImportTester: import complete', [
+                'url'                      => $url,
+                'store_key'                => $storeKey,
+                'extraction_source'        => $extractionSource,
+                'walmart_structured_used'  => $storeKey === 'walmart' ? $walmartStructuredUsed : null,
+            ]);
 
             // Provider attempts from orchestrator (ordered)
             $providerAttempts = $debug['provider_attempts'] ?? [];
@@ -134,7 +151,7 @@ class ProductImportTesterController extends Controller
 
             return response()->json([
                 'ok'               => true,
-                'store_resolution' => $this->buildStoreResolution($url, $storeKey, $asin, $tld),
+                'store_resolution' => $this->buildStoreResolution($url, $storeKey, $asin, $tld, $walmartProductId),
                 'provider_attempts'=> $providerAttempts,
                 'timing'           => [
                     'fetch_ms'    => null,
@@ -154,7 +171,7 @@ class ProductImportTesterController extends Controller
             return response()->json([
                 'ok'               => false,
                 'error'            => $e->getMessage(),
-                'store_resolution' => $this->buildStoreResolution($url, $storeKey, $asin, $tld),
+                'store_resolution' => $this->buildStoreResolution($url, $storeKey, $asin, $tld, $walmartProductId),
                 'provider_attempts'=> $providerAttempts,
                 'trace'            => config('app.debug')
                     ? collect(explode("\n", $e->getTraceAsString()))->take(10)->values()
@@ -166,7 +183,7 @@ class ProductImportTesterController extends Controller
     /**
      * Build the store resolution debug block.
      */
-    private function buildStoreResolution(string $url, string $storeKey, ?string $asin, ?string $tld): array
+    private function buildStoreResolution(string $url, string $storeKey, ?string $asin, ?string $tld, ?string $walmartProductId = null): array
     {
         $hasKey = ! empty(config('services.product_import.scraperapi_key'));
 
@@ -175,6 +192,7 @@ class ProductImportTesterController extends Controller
             'store_key'      => $storeKey,
             'asin'           => $asin,
             'amazon_tld'     => $tld,
+            'walmart_product_id' => $walmartProductId,
             'primary_provider' => match ($storeKey) {
                 'amazon'     => $hasKey ? 'scraperapi_structured' : 'html_pipeline',
                 'aliexpress' => 'scraperapi_rendered',
@@ -182,6 +200,7 @@ class ProductImportTesterController extends Controller
                 default      => 'html_pipeline',
             },
             'scraperapi_key_configured' => $hasKey,
+            'featured_stores_config_loaded' => is_array(config('featured-stores.stores')),
         ];
     }
 }

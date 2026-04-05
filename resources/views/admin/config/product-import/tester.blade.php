@@ -19,7 +19,7 @@
                     <div class="row g-2 align-items-end">
                         <div class="col-12 col-md-5">
                             <label class="form-label small fw-semibold mb-1">Product URL <span class="text-danger">*</span></label>
-                            <input type="url" id="input-url" class="form-control font-monospace" placeholder="https://www.amazon.com/dp/..." required>
+                            <input type="url" id="input-url" class="form-control font-monospace" placeholder="https://www.amazon.com/dp/… أو walmart.com/ip/…" required>
                         </div>
                         <div class="col-6 col-md-2">
                             <label class="form-label small fw-semibold mb-1">Strategy</label>
@@ -529,8 +529,10 @@ function renderStoreResolution(sr) {
         ['Detected Store',       sr.store_key ? `<strong>${escHtml(sr.store_key)}</strong>` : '<span class="text-warning">generic</span>'],
         ['ASIN (Amazon)',        sr.asin ? `<span class="badge bg-dark font-monospace">${escHtml(sr.asin)}</span>` : '<span class="text-muted">n/a</span>'],
         ['Amazon TLD',           sr.amazon_tld ? escHtml(sr.amazon_tld) : '<span class="text-muted">n/a</span>'],
+        ['Walmart Product ID',   sr.walmart_product_id ? `<span class="badge bg-dark font-monospace">${escHtml(sr.walmart_product_id)}</span>` : '<span class="text-muted">n/a</span>'],
         ['Primary Provider',     sr.primary_provider ? `<span class="badge bg-info text-dark">${escHtml(sr.primary_provider)}</span>` : '—'],
         ['ScraperAPI Key',       hasKey ? '<span class="badge bg-success">Configured</span>' : '<span class="badge bg-danger">Not configured</span>'],
+        ['config/featured-stores', sr.featured_stores_config_loaded ? '<span class="badge bg-success">loaded</span>' : '<span class="badge bg-secondary">not loaded</span>'],
     ]);
     document.getElementById('result-tabs').classList.remove('d-none');
 }
