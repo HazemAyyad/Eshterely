@@ -168,6 +168,26 @@ class ProductExtractionService
         // HTML pipeline first (free). Only call structured when result is incomplete.
         $htmlResult = $this->runHtmlOnlyPipeline($html, $url, $storeKey);
 
+        $walmartHtmlBlocked = false;
+        $walmartProtectionMarker = null;
+        if ($storeKeyLower === 'walmart') {
+            $walmartProtectionMarker = $this->detectWalmartProtectionMarker($html, $htmlResult);
+            if ($walmartProtectionMarker !== null) {
+                $walmartHtmlBlocked = true;
+                $htmlResult = $this->normalizeResult(
+                    ['name' => 'Product', 'price' => 0.0, 'currency' => 'USD', 'image_url' => null],
+                    $url,
+                    $storeKey,
+                    'walmart_challenge_html'
+                );
+            }
+            Log::debug('Walmart extraction: challenge HTML gate', [
+                'walmart_html_blocked'        => $walmartHtmlBlocked,
+                'matched_block_marker'        => $walmartProtectionMarker,
+                'structured_fallback_forced'  => $walmartHtmlBlocked && $hasStructuredKey,
+            ]);
+        }
+
         $htmlComplete = $this->isCompleteResult($htmlResult, $storeKeyLower);
         if ($storeKeyLower === 'ebay') {
             Log::debug('eBay extraction: HTML completeness', [
@@ -190,6 +210,11 @@ class ProductExtractionService
                 'source' => $htmlResult['extraction_source'] ?? null,
             ]);
 
+            if ($storeKeyLower === 'walmart' && $walmartHtmlBlocked) {
+                $htmlResult['walmart_html_blocked'] = true;
+                $htmlResult['failure_reason'] = 'Walmart challenge page detected; ScraperAPI key not configured — structured fallback unavailable.';
+            }
+
             return $htmlResult;
         }
 
@@ -207,7 +232,59 @@ class ProductExtractionService
             return $this->mergeHtmlWithStructured($htmlResult, $structured, $storeKeyLower);
         }
 
+        if ($storeKeyLower === 'walmart' && $walmartHtmlBlocked) {
+            $htmlResult['walmart_html_blocked'] = true;
+            $htmlResult['failure_reason'] = 'Walmart served a bot/challenge page; structured API did not return usable product data.';
+        }
+
         return $htmlResult;
+    }
+
+    /**
+     * Detect Walmart bot wall / challenge HTML or poisoned title from the HTML pipeline.
+     *
+     * @param  array<string, mixed>  $pipelineResult
+     */
+    private function detectWalmartProtectionMarker(?string $html, array $pipelineResult): ?string
+    {
+        $needles = [
+            'robot or human',
+            'verify your identity',
+            'press & hold',
+            'press and hold',
+            'access denied',
+            'verify you are human',
+            'are you a robot',
+            'cf-challenge',
+            'hcaptcha',
+            'g-recaptcha',
+            'recaptcha',
+            'captcha__',
+            'perimeterx',
+            'px-captcha',
+            'datadome',
+            'robot check',
+            'automated access',
+            'pardon our interruption',
+            'sorry, we just need to make sure you\'re not a robot',
+        ];
+        $haystacks = [];
+        if ($html !== null && $html !== '') {
+            $haystacks[] = strtolower($html);
+        }
+        $name = strtolower(trim((string) ($pipelineResult['name'] ?? '')));
+        if ($name !== '') {
+            $haystacks[] = $name;
+        }
+        foreach ($haystacks as $hay) {
+            foreach ($needles as $n) {
+                if (str_contains($hay, $n)) {
+                    return $n;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
