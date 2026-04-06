@@ -18,6 +18,7 @@ use App\Services\Shipping\ShippingPricingConfigService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class CheckoutController extends Controller
@@ -56,7 +57,8 @@ class CheckoutController extends Controller
     public function review(Request $request): JsonResponse
     {
         $promoCode = $this->normalizePromoCode($request->input('promo_code', $request->query('promo_code')));
-        $summary = $this->buildCheckoutSummary($request, $promoCode, true);
+        // No automatic wallet application in review — client uses checkout_payment_mode + explicit confirm selection.
+        $summary = $this->buildCheckoutSummary($request, $promoCode, false);
 
         return response()->json($this->reviewResponsePayload($summary));
     }
@@ -64,8 +66,8 @@ class CheckoutController extends Controller
     public function confirm(Request $request): JsonResponse
     {
         $promoCode = $this->normalizePromoCode($request->input('promo_code'));
-        $useWallet = $request->boolean('use_wallet_balance', true);
-        $summary = $this->buildCheckoutSummary($request, $promoCode, $useWallet);
+        $summary = $this->buildCheckoutSummary($request, $promoCode, false);
+        $mode = $this->getCheckoutPaymentMode();
 
         if ($summary['checkout_items']->isEmpty()) {
             $message = $summary['items']->isEmpty()
@@ -89,7 +91,7 @@ class CheckoutController extends Controller
         }
 
         try {
-            $result = DB::transaction(function () use ($request, $summary, $promoCode, $useWallet) {
+            $result = DB::transaction(function () use ($request, $summary, $promoCode, $mode) {
                 $lockedEvaluation = null;
                 if ($promoCode !== '') {
                     $lockedEvaluation = $this->promoService->evaluate($promoCode, $request->user(), $summary['base_total'], true);
@@ -100,8 +102,13 @@ class CheckoutController extends Controller
 
                 $promoDiscount = $lockedEvaluation['discount_amount'] ?? $summary['promo_discount_amount'];
                 $totalAfterPromo = round(max(0, $summary['base_total'] - $promoDiscount), 2);
-                $walletApplied = $useWallet ? round(min($summary['wallet_balance'], $totalAfterPromo), 2) : 0.0;
-                $amountDueNow = round(max(0, $totalAfterPromo - $walletApplied), 2);
+                $resolved = $this->resolveCheckoutPaymentAmounts($request, $mode, $totalAfterPromo, (float) $summary['wallet_balance']);
+                if (isset($resolved['error'])) {
+                    return ['checkout_error' => $resolved];
+                }
+
+                $walletApplied = round((float) $resolved['wallet_applied'], 2);
+                $amountDueNow = round((float) $resolved['amount_due_now'], 2);
                 $needsReview = $summary['needs_review'];
                 $estimated = $summary['estimated'];
                 $status = ($needsReview || $estimated) ? Order::STATUS_UNDER_REVIEW : ($amountDueNow > 0 ? Order::STATUS_PENDING_PAYMENT : Order::STATUS_PAID);
@@ -192,7 +199,7 @@ class CheckoutController extends Controller
                             'status' => 'applied',
                             'metadata' => [
                                 'promo_code' => $promoCode,
-                                'wallet_enabled' => $useWallet,
+                                'wallet_enabled' => $walletApplied > 0.00001,
                             ],
                         ]
                     );
@@ -225,6 +232,28 @@ class CheckoutController extends Controller
             return response()->json([
                 'message' => $e->getMessage(),
                 'errors' => [],
+                'status' => 422,
+            ], 422);
+        }
+
+        if (isset($result['checkout_error'])) {
+            $err = $result['checkout_error'];
+            if (($err['error'] ?? '') === 'insufficient_wallet_balance') {
+                return response()->json([
+                    'message' => 'Insufficient wallet balance.',
+                    'error_code' => 'insufficient_wallet_balance',
+                    'payment_method' => 'wallet',
+                    'wallet_balance' => $err['wallet_balance'],
+                    'payable_now_total' => $err['payable_now_total'],
+                    'required_top_up_amount' => $err['required_top_up_amount'],
+                    'suggested_top_up_amount' => $err['suggested_top_up_amount'],
+                    'status' => 422,
+                ], 422);
+            }
+
+            return response()->json([
+                'message' => $err['message'] ?? 'Checkout cannot be completed.',
+                'error_code' => $err['error'] ?? 'checkout_error',
                 'status' => 422,
             ], 422);
         }
@@ -334,8 +363,14 @@ class CheckoutController extends Controller
 
         $totalAfterPromo = round(max(0, $baseTotal - $promoDiscountAmount), 2);
         $walletBalance = (float) $wallet->available_balance;
-        $walletApplied = $useWallet ? round(min($walletBalance, $totalAfterPromo), 2) : 0.0;
-        $amountDueNow = round(max(0, $totalAfterPromo - $walletApplied), 2);
+        if ($useWallet) {
+            $walletApplied = round(min($walletBalance, $totalAfterPromo), 2);
+            $amountDueNow = round(max(0, $totalAfterPromo - $walletApplied), 2);
+        } else {
+            // Review / explicit payment selection: do not assume wallet is applied.
+            $walletApplied = 0.0;
+            $amountDueNow = $totalAfterPromo;
+        }
         $shipments = $this->buildShipmentsPayload($checkoutItems);
 
         return [
@@ -518,11 +553,22 @@ class CheckoutController extends Controller
     {
         $promoEvaluation = $summary['promo_evaluation'];
         $total = $summary['total_after_promo'];
+        $mode = $this->getCheckoutPaymentMode();
+        $modePayload = $this->buildCheckoutPaymentModePayload($mode, $summary);
 
         return [
             'shipping_address_short' => $summary['default_address'] ? $this->shortAddress($summary['default_address']) : '',
             'consolidation_savings' => '$0.00',
-            'wallet_balance_enabled' => true,
+            'wallet_balance_enabled' => $modePayload['wallet_enabled_for_checkout'],
+            'checkout_payment_mode' => $modePayload['checkout_payment_mode'],
+            'wallet_enabled_for_checkout' => $modePayload['wallet_enabled_for_checkout'],
+            'gateway_enabled_for_checkout' => $modePayload['gateway_enabled_for_checkout'],
+            'allowed_payment_methods' => $modePayload['allowed_payment_methods'],
+            'wallet_shortfall' => $modePayload['wallet_shortfall'],
+            'wallet_can_pay_now' => $modePayload['wallet_can_pay_now'],
+            'top_up_required' => $modePayload['top_up_required'],
+            'required_top_up_amount' => $modePayload['required_top_up_amount'],
+            'suggested_top_up_amount' => $modePayload['suggested_top_up_amount'],
             'wallet_balance' => $this->formatMoney($summary['wallet_balance'], $summary['currency']),
             'subtotal' => $this->formatMoney($summary['subtotal'], $summary['currency']),
             'service_fee' => $this->formatMoney($summary['app_fee_total'], $summary['currency']),
@@ -545,12 +591,21 @@ class CheckoutController extends Controller
                 'shipping' => round($summary['shipping'], 2),
                 'shipping_estimate_amount' => round($summary['shipping'], 2),
                 'shipping_payable_now' => 0,
-                'payable_now_total' => round($summary['subtotal'] + $summary['app_fee_total'], 2),
+                'payable_now_total' => round((float) $total, 2),
                 'discounts' => round($summary['promo_discount_amount'], 2),
                 'wallet_balance' => round($summary['wallet_balance'], 2),
                 'wallet_applied_amount' => round($summary['wallet_applied_amount'], 2),
                 'amount_due_now' => round($summary['amount_due_now'], 2),
                 'total' => round($total, 2),
+                'checkout_payment_mode' => $modePayload['checkout_payment_mode'],
+                'wallet_enabled_for_checkout' => $modePayload['wallet_enabled_for_checkout'],
+                'gateway_enabled_for_checkout' => $modePayload['gateway_enabled_for_checkout'],
+                'allowed_payment_methods' => $modePayload['allowed_payment_methods'],
+                'wallet_shortfall' => $modePayload['wallet_shortfall'],
+                'wallet_can_pay_now' => $modePayload['wallet_can_pay_now'],
+                'top_up_required' => $modePayload['top_up_required'],
+                'required_top_up_amount' => $modePayload['required_top_up_amount'],
+                'suggested_top_up_amount' => $modePayload['suggested_top_up_amount'],
                 'estimated' => $summary['estimated'],
                 'needs_review' => $summary['needs_review'],
                 'shipping_estimated' => $summary['shipping_has_unknown'],
@@ -565,6 +620,122 @@ class CheckoutController extends Controller
                 ),
             ],
         ];
+    }
+
+    private function getCheckoutPaymentMode(): string
+    {
+        if (! Schema::hasTable('payment_gateway_settings')) {
+            return 'gateway_only';
+        }
+        if (! Schema::hasColumn('payment_gateway_settings', 'checkout_payment_mode')) {
+            return 'gateway_only';
+        }
+        $row = DB::table('payment_gateway_settings')->first();
+        if ($row === null) {
+            return 'gateway_only';
+        }
+        if (! isset($row->checkout_payment_mode)) {
+            return 'gateway_only';
+        }
+        $m = strtolower(trim((string) $row->checkout_payment_mode));
+        $allowed = ['wallet_only', 'gateway_only', 'wallet_and_gateway'];
+
+        return in_array($m, $allowed, true) ? $m : 'gateway_only';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildCheckoutPaymentModePayload(string $mode, array $summary): array
+    {
+        $payable = round((float) $summary['total_after_promo'], 2);
+        $walletBalance = round((float) $summary['wallet_balance'], 2);
+        $shortfall = round(max(0, $payable - $walletBalance), 2);
+        $walletEnabled = in_array($mode, ['wallet_only', 'wallet_and_gateway'], true);
+        $gatewayEnabled = in_array($mode, ['gateway_only', 'wallet_and_gateway'], true);
+        $allowed = [];
+        if ($walletEnabled) {
+            $allowed[] = 'wallet';
+        }
+        if ($gatewayEnabled) {
+            $allowed[] = 'gateway';
+        }
+        $walletCanPayNow = $payable <= 0.00001 || $walletBalance + 0.00001 >= $payable;
+        $topUpRequired = $mode === 'wallet_only' && ! $walletCanPayNow && $payable > 0.00001;
+
+        return [
+            'checkout_payment_mode' => $mode,
+            'wallet_enabled_for_checkout' => $walletEnabled,
+            'gateway_enabled_for_checkout' => $gatewayEnabled,
+            'allowed_payment_methods' => $allowed,
+            'wallet_shortfall' => $shortfall,
+            'wallet_can_pay_now' => $walletCanPayNow,
+            'top_up_required' => $topUpRequired,
+            'required_top_up_amount' => $shortfall > 0.00001 ? $shortfall : 0.0,
+            'suggested_top_up_amount' => $shortfall > 0.00001 ? $shortfall : 0.0,
+        ];
+    }
+
+    /**
+     * @return array<string, float|string|bool|null>
+     */
+    private function resolveCheckoutPaymentAmounts(Request $request, string $mode, float $totalAfterPromo, float $walletBalance): array
+    {
+        $totalAfterPromo = round(max(0, $totalAfterPromo), 2);
+        $walletBalance = round($walletBalance, 2);
+        $explicit = $request->input('payment_method');
+        if (is_string($explicit) && trim($explicit) !== '') {
+            $m = strtolower(trim($explicit));
+            if (! in_array($m, ['wallet', 'gateway'], true)) {
+                return ['error' => 'invalid_payment_method', 'message' => 'Invalid payment_method. Use wallet or gateway.'];
+            }
+            if ($mode === 'gateway_only' && $m === 'wallet') {
+                return ['error' => 'wallet_not_allowed', 'message' => 'Wallet checkout is disabled.'];
+            }
+            if ($mode === 'wallet_only' && $m === 'gateway') {
+                return ['error' => 'gateway_not_allowed', 'message' => 'Card checkout is disabled for this store.'];
+            }
+            if ($m === 'wallet') {
+                $shortfall = round(max(0, $totalAfterPromo - $walletBalance), 2);
+                if ($shortfall > 0.00001) {
+                    return [
+                        'error' => 'insufficient_wallet_balance',
+                        'wallet_balance' => $walletBalance,
+                        'payable_now_total' => $totalAfterPromo,
+                        'required_top_up_amount' => $shortfall,
+                        'suggested_top_up_amount' => $shortfall,
+                    ];
+                }
+
+                return ['wallet_applied' => $totalAfterPromo, 'amount_due_now' => 0.0];
+            }
+
+            return ['wallet_applied' => 0.0, 'amount_due_now' => $totalAfterPromo];
+        }
+
+        if ($mode === 'gateway_only') {
+            return ['wallet_applied' => 0.0, 'amount_due_now' => $totalAfterPromo];
+        }
+        if ($mode === 'wallet_only') {
+            $shortfall = round(max(0, $totalAfterPromo - $walletBalance), 2);
+            if ($shortfall > 0.00001) {
+                return [
+                    'error' => 'insufficient_wallet_balance',
+                    'wallet_balance' => $walletBalance,
+                    'payable_now_total' => $totalAfterPromo,
+                    'required_top_up_amount' => $shortfall,
+                    'suggested_top_up_amount' => $shortfall,
+                ];
+            }
+
+            return ['wallet_applied' => $totalAfterPromo, 'amount_due_now' => 0.0];
+        }
+
+        $useWallet = $request->boolean('use_wallet_balance', true);
+        $walletApplied = $useWallet ? round(min($walletBalance, $totalAfterPromo), 2) : 0.0;
+        $amountDueNow = round(max(0, $totalAfterPromo - $walletApplied), 2);
+
+        return ['wallet_applied' => $walletApplied, 'amount_due_now' => $amountDueNow];
     }
 
     private function promoResponsePayload(array $evaluation, float $baseAmount): array

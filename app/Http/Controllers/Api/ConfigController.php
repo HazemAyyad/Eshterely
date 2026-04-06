@@ -82,8 +82,15 @@ class ConfigController extends Controller
             ],
         ];
 
+        $checkoutPaymentMode = 'gateway_only';
         if (Schema::hasTable('payment_gateway_settings')) {
             $pg = DB::table('payment_gateway_settings')->first();
+            if ($pg && isset($pg->checkout_payment_mode)) {
+                $m = strtolower(trim((string) $pg->checkout_payment_mode));
+                if (in_array($m, ['wallet_only', 'gateway_only', 'wallet_and_gateway'], true)) {
+                    $checkoutPaymentMode = $m;
+                }
+            }
             if ($pg) {
                 $enabled = [];
                 if ((bool) ($pg->square_enabled ?? true)) {
@@ -196,6 +203,7 @@ class ConfigController extends Controller
             'app_name' => $appName,
             'app_icon_url' => $appIconUrl,
             'payment_gateways' => $paymentGateways,
+            'checkout_payment_mode' => $checkoutPaymentMode,
         ]);
     }
 }

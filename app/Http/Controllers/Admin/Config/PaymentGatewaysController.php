@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Admin\Config;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,6 +20,9 @@ class PaymentGatewaysController extends Controller
         }
 
         $values = [
+            'checkout_payment_mode' => (is_object($row) && isset($row->checkout_payment_mode))
+                ? (string) $row->checkout_payment_mode
+                : 'gateway_only',
             'default_gateway' => $row->default_gateway ?? 'square',
             'square_enabled' => (bool) ($row->square_enabled ?? true),
             'square_environment' => $row->square_environment ?? 'sandbox',
@@ -47,7 +49,7 @@ class PaymentGatewaysController extends Controller
             return redirect()->back()->with('error', __('admin.error'));
         }
 
-        $validated = $request->validate([
+        $rules = [
             'default_gateway' => 'required|in:square,stripe',
 
             'square_enabled' => 'nullable|boolean',
@@ -64,7 +66,11 @@ class PaymentGatewaysController extends Controller
             'stripe_publishable_key' => 'nullable|string|max:200',
             'stripe_secret_key' => 'nullable|string',
             'stripe_webhook_secret' => 'nullable|string',
-        ]);
+        ];
+        if (Schema::hasColumn('payment_gateway_settings', 'checkout_payment_mode')) {
+            $rules['checkout_payment_mode'] = 'required|in:wallet_only,gateway_only,wallet_and_gateway';
+        }
+        $validated = $request->validate($rules);
 
         $existing = DB::table('payment_gateway_settings')->first();
         $wasEmpty = $existing === null;
@@ -97,6 +103,9 @@ class PaymentGatewaysController extends Controller
             'stripe_webhook_secret' => $maybeKeep($validated['stripe_webhook_secret'] ?? null, $existing->stripe_webhook_secret ?? null),
             'updated_at' => $now,
         ];
+        if (Schema::hasColumn('payment_gateway_settings', 'checkout_payment_mode')) {
+            $data['checkout_payment_mode'] = $validated['checkout_payment_mode'];
+        }
 
         if ($wasEmpty) {
             $data['created_at'] = $now;

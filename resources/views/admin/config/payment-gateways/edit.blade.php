@@ -26,6 +26,24 @@
 
                 <div class="row g-4">
                     <div class="col-12">
+                        <label class="form-label">Checkout payment mode</label>
+                        <select name="checkout_payment_mode" class="form-select">
+                            <option value="wallet_only" {{ old('checkout_payment_mode', $values['checkout_payment_mode'] ?? 'gateway_only') === 'wallet_only' ? 'selected' : '' }}>
+                                Wallet only
+                            </option>
+                            <option value="gateway_only" {{ old('checkout_payment_mode', $values['checkout_payment_mode'] ?? 'gateway_only') === 'gateway_only' ? 'selected' : '' }}>
+                                Payment gateway only (card)
+                            </option>
+                            <option value="wallet_and_gateway" {{ old('checkout_payment_mode', $values['checkout_payment_mode'] ?? 'gateway_only') === 'wallet_and_gateway' ? 'selected' : '' }}>
+                                Wallet and payment gateway (user chooses)
+                            </option>
+                        </select>
+                        <small class="text-muted d-block mt-1">
+                            Controls whether checkout can use the wallet, card, or both. Wallet orders require sufficient balance (no automatic split with card).
+                        </small>
+                    </div>
+
+                    <div class="col-12">
                         <label class="form-label">Default Gateway</label>
                         <select name="default_gateway" class="form-select">
                             <option value="square" {{ old('default_gateway', $values['default_gateway'] ?? 'square') === 'square' ? 'selected' : '' }}>
