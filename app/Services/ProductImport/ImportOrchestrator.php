@@ -98,13 +98,29 @@ class ImportOrchestrator
         if ($storeKeyLower === 'walmart' && ! empty(config('services.product_import.scraperapi_key'))) {
             $src = (string) ($product['extraction_source'] ?? '');
             $walmartStructured = in_array($src, ['walmart_structured_api', 'html_structured_merged'], true);
+            $meta = $product['walmart_structured_meta'] ?? null;
+            $note = 'legacy: unknown structured state';
+            if (is_array($meta) && isset($meta['attempt'])) {
+                $attempt = (string) $meta['attempt'];
+                $note = match ($attempt) {
+                    'structured_succeeded' => 'structured_succeeded — ScraperAPI Walmart structured accepted (merged or primary)',
+                    'structured_not_called' => 'structured_not_called — ' . (string) ($meta['reason'] ?? 'unspecified'),
+                    'structured_attempted_and_failed' => 'structured_attempted_and_failed — '
+                        . (string) (($meta['diagnostics']['failure_phase'] ?? null) ?? ($meta['rejection_reason'] ?? 'see logs')),
+                    'structured_attempted_but_rejected' => 'structured_attempted_but_rejected — '
+                        . (string) ($meta['rejection_reason'] ?? 'see logs'),
+                    default => $attempt,
+                };
+            } elseif ($walmartStructured) {
+                $note = 'structured_succeeded — extraction_source indicates structured (no meta on product)';
+            } else {
+                $note = 'structured_not_called or failed — no walmart_structured_meta (legacy path)';
+            }
             $attempts[] = [
                 'provider' => 'scraperapi_structured_walmart',
                 'stage' => 'scraperapi',
                 'success' => $walmartStructured,
-                'note' => $walmartStructured
-                    ? 'Structured API used (primary or merged with HTML)'
-                    : 'Not used (HTML considered complete without measurements, no key, or API failed)',
+                'note' => $note,
             ];
             if ($walmartStructured && ! empty($product['scraperapi_raw'])) {
                 $debug['scraperapi_raw'] = $product['scraperapi_raw'];
@@ -173,6 +189,10 @@ class ImportOrchestrator
             'measurements_found' => $hasMeasurements,
             'shipping_source' => $product['shipping_estimate_source'],
         ]);
+
+        if ($storeKeyLower === 'walmart') {
+            $debug['walmart_structured_meta'] = $product['walmart_structured_meta'] ?? null;
+        }
 
         return ['product' => $product, 'debug' => $debug];
     }

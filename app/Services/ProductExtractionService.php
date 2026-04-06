@@ -127,13 +127,15 @@ class ProductExtractionService
         if ($storeKeyLower === 'amazon') {
             if ($hasStructuredKey) {
                 $structured = $this->structuredImportService->extractAmazonStructured($url);
+                $acc = $this->evaluateStructuredResultAcceptability($structured);
                 Log::debug('Amazon structured API result', [
-                    'url'        => $url,
-                    'acceptable' => $this->isStructuredResultAcceptable($structured),
-                    'name'       => $structured['name'] ?? null,
-                    'price'      => $structured['price'] ?? null,
+                    'url'            => $url,
+                    'acceptable'     => $acc['acceptable'],
+                    'accept_reason'  => $acc['reason'],
+                    'name'           => $structured['name'] ?? null,
+                    'price'          => $structured['price'] ?? null,
                 ]);
-                if ($this->isStructuredResultAcceptable($structured)) {
+                if ($acc['acceptable']) {
                     return $structured;
                 }
                 // Structured failed — fall back to HTML pipeline if HTML was fetched.
@@ -204,13 +206,33 @@ class ProductExtractionService
             ]);
         }
 
-        if (! $hasStructuredKey || $htmlComplete) {
+        // When challenge HTML was detected, always attempt structured (if key exists), even if HTML were ever marked "complete".
+        $walmartStructuredForced = $storeKeyLower === 'walmart' && $walmartHtmlBlocked && $hasStructuredKey;
+        $skipStructuredSupplement = ! $hasStructuredKey || ($htmlComplete && ! $walmartStructuredForced);
+
+        if ($skipStructuredSupplement) {
             Log::debug('Product extraction: HTML pipeline sufficient', [
-                'store'  => $storeKeyLower,
-                'source' => $htmlResult['extraction_source'] ?? null,
+                'store'                      => $storeKeyLower,
+                'source'                     => $htmlResult['extraction_source'] ?? null,
+                'skip_structured_supplement' => true,
+                'walmart_structured_forced'  => $walmartStructuredForced,
             ]);
 
-            if ($storeKeyLower === 'walmart' && $walmartHtmlBlocked) {
+            if ($storeKeyLower === 'walmart') {
+                if (! $hasStructuredKey) {
+                    $htmlResult['walmart_structured_meta'] = [
+                        'attempt' => 'structured_not_called',
+                        'reason' => 'no_scraperapi_key',
+                    ];
+                } else {
+                    $htmlResult['walmart_structured_meta'] = [
+                        'attempt' => 'structured_not_called',
+                        'reason' => 'html_pipeline_complete',
+                    ];
+                }
+            }
+
+            if ($storeKeyLower === 'walmart' && $walmartHtmlBlocked && ! $hasStructuredKey) {
                 $htmlResult['walmart_html_blocked'] = true;
                 $htmlResult['failure_reason'] = 'Walmart challenge page detected; ScraperAPI key not configured — structured fallback unavailable.';
             }
@@ -220,21 +242,77 @@ class ProductExtractionService
 
         // HTML result is incomplete: try ScraperAPI structured as supplement.
         $structured = null;
+        $walmartDiagnostics = null;
         if ($storeKeyLower === 'ebay') {
             Log::debug('eBay extraction: attempting ScraperAPI structured supplement', ['url' => $url]);
             $structured = $this->structuredImportService->extractEbayStructured($url);
         } elseif ($storeKeyLower === 'walmart') {
             Log::debug('Walmart extraction: attempting ScraperAPI structured supplement', ['url' => $url]);
-            $structured = $this->structuredImportService->extractWalmartStructured($url);
+            $wm = $this->structuredImportService->extractWalmartStructuredWithDiagnostics($url);
+            $structured = $wm['normalized'];
+            $walmartDiagnostics = $wm['diagnostics'] ?? [];
         }
 
-        if ($this->isStructuredResultAcceptable($structured)) {
-            return $this->mergeHtmlWithStructured($htmlResult, $structured, $storeKeyLower);
+        $structuredEval = $this->evaluateStructuredResultAcceptability($structured);
+        if ($storeKeyLower === 'walmart' && is_array($walmartDiagnostics)) {
+            Log::debug('Walmart structured: execution summary', [
+                'structured_called'            => (bool) ($walmartDiagnostics['structured_called'] ?? false),
+                'endpoint'                     => $walmartDiagnostics['endpoint'] ?? null,
+                'product_id'                   => $walmartDiagnostics['product_id'] ?? null,
+                'http_status'                  => $walmartDiagnostics['http_status'] ?? null,
+                'raw_payload_exists'           => (bool) ($walmartDiagnostics['raw_payload_exists'] ?? false),
+                'top_level_keys'               => $walmartDiagnostics['top_level_keys'] ?? [],
+                'normalized_preview'           => $walmartDiagnostics['normalized_preview'] ?? null,
+                'failure_phase'                => $walmartDiagnostics['failure_phase'] ?? null,
+                'acceptable_structured_result' => $structuredEval['acceptable'],
+                'rejection_reason'             => $structuredEval['acceptable'] ? null : ($structuredEval['reason'] ?? null),
+            ]);
+        }
+        if ($storeKeyLower === 'amazon') {
+            Log::debug('structured_acceptance', [
+                'store' => 'amazon',
+                'acceptable' => $structuredEval['acceptable'],
+                'reason' => $structuredEval['reason'] ?? null,
+            ]);
+        }
+
+        if ($structuredEval['acceptable']) {
+            $merged = $this->mergeHtmlWithStructured($htmlResult, $structured, $storeKeyLower);
+            if ($storeKeyLower === 'walmart') {
+                $merged['walmart_structured_meta'] = [
+                    'attempt' => 'structured_succeeded',
+                    'acceptable_structured_result' => true,
+                    'acceptance_reason' => $structuredEval['reason'] ?? null,
+                    'diagnostics' => $walmartDiagnostics,
+                ];
+            }
+
+            return $merged;
+        }
+
+        if ($storeKeyLower === 'walmart') {
+            $attempt = $structured === null ? 'structured_attempted_and_failed' : 'structured_attempted_but_rejected';
+            $htmlResult['walmart_structured_meta'] = [
+                'attempt' => $attempt,
+                'acceptable_structured_result' => false,
+                'rejection_reason' => $structuredEval['reason'] ?? null,
+                'diagnostics' => $walmartDiagnostics,
+            ];
         }
 
         if ($storeKeyLower === 'walmart' && $walmartHtmlBlocked) {
             $htmlResult['walmart_html_blocked'] = true;
-            $htmlResult['failure_reason'] = 'Walmart served a bot/challenge page; structured API did not return usable product data.';
+            if ($structured === null) {
+                $phase = is_array($walmartDiagnostics) ? ($walmartDiagnostics['failure_phase'] ?? 'unknown') : 'unknown';
+                $httpSt = is_array($walmartDiagnostics) ? ($walmartDiagnostics['http_status'] ?? null) : null;
+                $htmlResult['failure_reason'] = 'Walmart served a bot/challenge page; structured API did not return usable product data '
+                    . '(phase=' . $phase
+                    . ($httpSt !== null ? ', http_status=' . $httpSt : '')
+                    . ').';
+            } else {
+                $htmlResult['failure_reason'] = 'Walmart served a bot/challenge page; structured response failed validation '
+                    . '(' . ($structuredEval['reason'] ?? 'unknown') . ').';
+            }
         }
 
         return $htmlResult;
@@ -289,30 +367,28 @@ class ProductExtractionService
 
     /**
      * Structured result is acceptable when we got a non-null response with scraperapi_raw and expected source.
-     * Rejects placeholder names like "Product". For Amazon, also accept when raw has real name/title or images.
+     * Rejects placeholder names like "Product". Amazon/Walmart: also accept when raw JSON has real title or images.
+     *
+     * @return array{acceptable: bool, reason: string}
      */
-    private function isStructuredResultAcceptable(?array $structured): bool
+    private function evaluateStructuredResultAcceptability(?array $structured): array
     {
         if ($structured === null || ! is_array($structured)) {
-            Log::debug('Amazon structured acceptance', ['result' => 'rejected', 'reason' => 'null_or_not_array']);
-            return false;
+            return ['acceptable' => false, 'reason' => 'null_or_not_array'];
         }
         $source = $structured['extraction_source'] ?? '';
         $validSources = ['amazon_structured_api', 'ebay_structured_api', 'walmart_structured_api'];
         if (! in_array($source, $validSources, true)) {
-            Log::debug('Amazon structured acceptance', ['result' => 'rejected', 'reason' => 'invalid_source', 'source' => $source]);
-            return false;
+            return ['acceptable' => false, 'reason' => 'invalid_source:' . $source];
         }
         $raw = $structured['scraperapi_raw'] ?? null;
         if (! is_array($raw) || $raw === []) {
-            Log::debug('Amazon structured acceptance', ['result' => 'rejected', 'reason' => 'missing_or_empty_scraperapi_raw']);
-            return false;
+            return ['acceptable' => false, 'reason' => 'missing_or_empty_scraperapi_raw'];
         }
         $name = trim((string) ($structured['name'] ?? ''));
         $isPlaceholder = strtolower($name) === 'product';
         if ($name !== '' && ! $isPlaceholder) {
-            Log::debug('Amazon structured acceptance', ['result' => 'accepted', 'reason' => 'valid_name', 'name_preview' => substr($name, 0, 50)]);
-            return true;
+            return ['acceptable' => true, 'reason' => 'valid_name'];
         }
         if ($source === 'amazon_structured_api') {
             $rawName = trim((string) ($raw['name'] ?? $raw['title'] ?? ''));
@@ -320,12 +396,18 @@ class ProductExtractionService
             $rawImages = $raw['images'] ?? $raw['high_res_images'] ?? [];
             $hasImages = is_array($rawImages) && ! empty($rawImages);
             if (($rawName !== '' && ! $rawIsPlaceholder) || $hasImages) {
-                Log::debug('Amazon structured acceptance', ['result' => 'accepted', 'reason' => 'amazon_raw_name_or_images']);
-                return true;
+                return ['acceptable' => true, 'reason' => 'amazon_raw_name_or_images'];
             }
         }
-        Log::debug('Amazon structured acceptance', ['result' => 'rejected', 'reason' => 'placeholder_or_empty_name', 'name' => $name]);
-        return false;
+        if ($source === 'walmart_structured_api') {
+            if ($this->structuredImportService->walmartStructuredRawHasIdentitySignals($raw)) {
+                return ['acceptable' => true, 'reason' => 'walmart_raw_identity_signals'];
+            }
+
+            return ['acceptable' => false, 'reason' => 'placeholder_name_no_walmart_identity_in_raw'];
+        }
+
+        return ['acceptable' => false, 'reason' => 'placeholder_or_empty_name'];
     }
 
     /**
@@ -515,6 +597,25 @@ class ProductExtractionService
         }
 
         if ($storeKeyLower === 'walmart') {
+            $mergedName = trim((string) ($merged['name'] ?? ''));
+            if ($mergedName === '' || strtolower($mergedName) === 'product') {
+                $raw = $structured['scraperapi_raw'] ?? null;
+                if (is_array($raw)) {
+                    $picked = $this->structuredImportService->pickWalmartDisplayTitleFromRaw($raw);
+                    if ($picked !== null && $picked !== '') {
+                        $merged['name'] = $picked;
+                    }
+                }
+            }
+            if (empty(trim((string) ($merged['image_url'] ?? '')))) {
+                $raw = $structured['scraperapi_raw'] ?? null;
+                if (is_array($raw)) {
+                    $img = $this->structuredImportService->pickWalmartFirstProductImageFromRaw($raw);
+                    if ($img !== null) {
+                        $merged['image_url'] = $img;
+                    }
+                }
+            }
             $this->mergeWalmartHtmlWithStructuredMeasurements($merged, $structured);
         } else {
             $measurementFields = [

@@ -361,17 +361,49 @@ class StructuredProductImportService
      */
     public function extractWalmartStructured(string $url): ?array
     {
+        return $this->extractWalmartStructuredWithDiagnostics($url)['normalized'];
+    }
+
+    /**
+     * Same as extractWalmartStructured but returns HTTP/parse diagnostics for logging and tester notes.
+     *
+     * @return array{
+     *   normalized: array<string, mixed>|null,
+     *   diagnostics: array<string, mixed>
+     * }
+     */
+    public function extractWalmartStructuredWithDiagnostics(string $url): array
+    {
+        $baseDiag = [
+            'structured_called' => false,
+            'endpoint' => 'https://api.scraperapi.com/structured/walmart/product/v1',
+            'product_id' => null,
+            'http_status' => null,
+            'raw_payload_exists' => false,
+            'top_level_keys' => [],
+            'normalized_preview' => null,
+            'failure_phase' => null,
+            'exception_message' => null,
+        ];
+
         $productId = $this->extractWalmartProductId($url);
         if ($productId === null) {
-            return null;
+            $baseDiag['failure_phase'] = 'no_product_id';
+
+            return ['normalized' => null, 'diagnostics' => $baseDiag];
         }
+        $baseDiag['product_id'] = $productId;
 
         $tld = $this->walmartTldFromUrl($url);
         $countryCode = $tld === 'ca' ? 'ca' : 'us';
         $apiKey = config('services.product_import.scraperapi_key');
         if (empty($apiKey)) {
-            return null;
+            $baseDiag['failure_phase'] = 'no_api_key';
+
+            return ['normalized' => null, 'diagnostics' => $baseDiag];
         }
+
+        $baseDiag['structured_called'] = true;
 
         $apiUrl = 'https://api.scraperapi.com/structured/walmart/product/v1?' . http_build_query([
             'api_key' => $apiKey,
@@ -383,26 +415,141 @@ class StructuredProductImportService
         try {
             Log::debug('Walmart structured: request', ['product_id' => $productId, 'tld' => $tld]);
             $response = Http::timeout(self::STRUCTURED_TIMEOUT)->get($apiUrl);
+            $baseDiag['http_status'] = $response->status();
             if (! $response->successful()) {
-                Log::debug('Walmart structured: non-success', ['status' => $response->status()]);
+                $baseDiag['failure_phase'] = 'http_error';
+                Log::debug('Walmart structured: diagnostics (HTTP error)', $baseDiag);
 
-                return null;
+                return ['normalized' => null, 'diagnostics' => $baseDiag];
             }
             $raw = $response->json();
             if (! is_array($raw)) {
-                return null;
+                $baseDiag['failure_phase'] = 'invalid_json';
+                Log::debug('Walmart structured: diagnostics (invalid JSON body)', $baseDiag);
+
+                return ['normalized' => null, 'diagnostics' => $baseDiag];
             }
+            $baseDiag['raw_payload_exists'] = true;
+            $baseDiag['top_level_keys'] = array_slice(array_keys($raw), 0, 40);
+
             $originalRaw = $raw;
             $raw = $this->unwrapWalmartStructuredResponse($raw);
             $normalized = $this->normalizeStructuredResult($raw, $url, 'walmart', 'walmart_structured_api');
             $normalized['scraperapi_raw'] = $originalRaw;
 
-            return $normalized;
-        } catch (\Throwable $e) {
-            Log::debug('Walmart structured: exception', ['message' => $e->getMessage()]);
+            $baseDiag['normalized_preview'] = [
+                'name' => $normalized['name'] ?? null,
+                'price' => $normalized['price'] ?? null,
+                'currency' => $normalized['currency'] ?? null,
+                'has_image_url' => ! empty(trim((string) ($normalized['image_url'] ?? ''))),
+                'weight' => $normalized['weight'] ?? null,
+                'dimensions_length' => $normalized['dimensions_length'] ?? null,
+            ];
+            Log::debug('Walmart structured: diagnostics (success path)', $baseDiag);
 
-            return null;
+            return ['normalized' => $normalized, 'diagnostics' => $baseDiag];
+        } catch (\Throwable $e) {
+            $baseDiag['failure_phase'] = 'exception';
+            $baseDiag['exception_message'] = $e->getMessage();
+            Log::debug('Walmart structured: exception', ['message' => $e->getMessage(), 'diagnostics' => $baseDiag]);
+
+            return ['normalized' => null, 'diagnostics' => $baseDiag];
         }
+    }
+
+    /**
+     * Whether ScraperAPI Walmart JSON (full or nested) contains a real title or at least one image URL.
+     * Used to accept structured results when normalized name is still the placeholder.
+     */
+    public function walmartStructuredRawHasIdentitySignals(array $raw): bool
+    {
+        $title = $this->pickWalmartTitleFromRawResponse($raw);
+        if ($title !== null && trim($title) !== '' && strtolower(trim($title)) !== 'product') {
+            return true;
+        }
+
+        return $this->pickWalmartFirstImageUrlFromRaw($raw) !== null;
+    }
+
+    /** Public wrapper for merge step when normalized fields are still placeholders. */
+    public function pickWalmartDisplayTitleFromRaw(array $raw): ?string
+    {
+        return $this->pickWalmartTitleFromRawResponse($raw);
+    }
+
+    /** Public wrapper for merge step when normalized image_url is empty. */
+    public function pickWalmartFirstProductImageFromRaw(array $raw): ?string
+    {
+        return $this->pickWalmartFirstImageUrlFromRaw($raw);
+    }
+
+    /**
+     * @param  array<string, mixed>  $raw
+     */
+    private function pickWalmartFirstImageUrlFromRaw(array $raw): ?string
+    {
+        foreach (['main_image', 'primary_image', 'image', 'hero_image'] as $k) {
+            if (isset($raw[$k]) && is_string($raw[$k]) && filter_var($raw[$k], FILTER_VALIDATE_URL)) {
+                return $raw[$k];
+            }
+        }
+        foreach (['images', 'image_urls', 'thumbnails', 'all_images', 'imageInfo'] as $k) {
+            $v = $raw[$k] ?? null;
+            if (! is_array($v) || $v === []) {
+                continue;
+            }
+            $first = reset($v);
+            if (is_string($first) && filter_var($first, FILTER_VALIDATE_URL)) {
+                return $first;
+            }
+            if (is_array($first) && isset($first['url']) && is_string($first['url']) && filter_var($first['url'], FILTER_VALIDATE_URL)) {
+                return $first['url'];
+            }
+        }
+        foreach (['product', 'data', 'item', 'payload'] as $nest) {
+            if (isset($raw[$nest]) && is_array($raw[$nest])) {
+                $nested = $this->pickWalmartFirstImageUrlFromRaw($raw[$nest]);
+                if ($nested !== null) {
+                    return $nested;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $raw
+     */
+    private function pickWalmartTitleFromRawResponse(array $raw): ?string
+    {
+        $directKeys = ['name', 'title', 'product_title', 'product_name', 'item_name', 'productTitle', 'short_description'];
+        foreach ($directKeys as $k) {
+            if (! isset($raw[$k])) {
+                continue;
+            }
+            $s = trim((string) $raw[$k]);
+            if ($s !== '' && strtolower($s) !== 'product') {
+                return $s;
+            }
+        }
+        foreach (['product', 'data', 'item', 'payload'] as $nest) {
+            if (! isset($raw[$nest]) || ! is_array($raw[$nest])) {
+                continue;
+            }
+            $sub = $raw[$nest];
+            foreach (['name', 'title', 'product_title', 'product_name'] as $k) {
+                if (! isset($sub[$k])) {
+                    continue;
+                }
+                $s = trim((string) $sub[$k]);
+                if ($s !== '' && strtolower($s) !== 'product') {
+                    return $s;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -539,16 +686,32 @@ class StructuredProductImportService
         }
 
         if ($storeKey === 'walmart') {
-            $name = (string) ($rawResponse['name'] ?? $rawResponse['title'] ?? 'Product');
-            $name = trim($name);
-            if ($name === '') {
-                $name = 'Product';
+            $pickedTitle = $this->pickWalmartTitleFromRawResponse($rawResponse);
+            if ($pickedTitle !== null) {
+                $name = $pickedTitle;
+            } else {
+                $name = (string) ($rawResponse['name'] ?? $rawResponse['title'] ?? 'Product');
+                $name = trim($name);
+                if ($name === '') {
+                    $name = 'Product';
+                }
             }
             if (isset($rawResponse['current_price']) && is_numeric($rawResponse['current_price'])) {
                 $price = (float) $rawResponse['current_price'];
             }
-            if ($price === 0.0 && isset($rawResponse['price']) && is_numeric($rawResponse['price'])) {
-                $price = (float) $rawResponse['price'];
+            if ($price === 0.0 && isset($rawResponse['list_price']) && is_numeric($rawResponse['list_price'])) {
+                $price = (float) $rawResponse['list_price'];
+            }
+            if ($price === 0.0 && isset($rawResponse['sale_price']) && is_numeric($rawResponse['sale_price'])) {
+                $price = (float) $rawResponse['sale_price'];
+            }
+            if ($price === 0.0 && isset($rawResponse['price'])) {
+                $pv = $rawResponse['price'];
+                if (is_numeric($pv)) {
+                    $price = (float) $pv;
+                } elseif (is_string($pv) && preg_match('/[\d,]+\.?\d*/', $pv, $m)) {
+                    $price = (float) str_replace(',', '', $m[0]);
+                }
             }
             if (isset($rawResponse['currency']) && is_string($rawResponse['currency'])) {
                 $currency = $rawResponse['currency'];
@@ -558,6 +721,9 @@ class StructuredProductImportService
             }
             if ($imageUrl === null && isset($rawResponse['images'][0]) && is_string($rawResponse['images'][0])) {
                 $imageUrl = $rawResponse['images'][0];
+            }
+            if ($imageUrl === null) {
+                $imageUrl = $this->pickWalmartFirstImageUrlFromRaw($rawResponse);
             }
         }
 
