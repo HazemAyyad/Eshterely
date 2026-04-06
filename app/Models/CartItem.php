@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Shipping\ShippingPricingConfigService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -74,5 +75,47 @@ class CartItem extends Model
     public function isAttachedToDraft(): bool
     {
         return $this->draft_order_id !== null;
+    }
+
+    public function lineSubtotal(): float
+    {
+        return round((float) $this->unit_price * (int) $this->quantity, 2);
+    }
+
+    /**
+     * App fee percent for this line: snapshot at add-to-cart, else current admin default.
+     */
+    public function resolvedAppFeePercent(): float
+    {
+        $snap = $this->pricing_snapshot ?? [];
+        if (is_array($snap) && isset($snap['app_fee_percent']) && is_numeric($snap['app_fee_percent'])) {
+            return max(0.0, (float) $snap['app_fee_percent']);
+        }
+
+        return app(ShippingPricingConfigService::class)->appFeePercent();
+    }
+
+    public function appFeeAmount(): float
+    {
+        $line = $this->lineSubtotal();
+        $pct = $this->resolvedAppFeePercent();
+
+        return round($line * ($pct / 100.0), 2);
+    }
+
+    /** Product + app fee for this line (shipping not included). */
+    public function payableNowTotal(): float
+    {
+        return round($this->lineSubtotal() + $this->appFeeAmount(), 2);
+    }
+
+    /** Display-only shipping estimate for the full line (uses stored per-unit shipping_cost × quantity). */
+    public function shippingEstimateLineAmount(): ?float
+    {
+        if ($this->shipping_cost === null) {
+            return null;
+        }
+
+        return round((float) $this->shipping_cost * (int) $this->quantity, 2);
     }
 }

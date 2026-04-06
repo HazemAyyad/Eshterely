@@ -138,7 +138,7 @@ class CheckoutController extends Controller
                 ]);
 
                 $this->createOrderShipmentsAndItems($order, $summary['checkout_items']);
-                $this->persistPriceLines($order, $summary['currency'], $summary['subtotal'], $summary['shipping'], $promoDiscount, $walletApplied, $totalAfterPromo, $amountDueNow);
+                $this->persistPriceLines($order, $summary['currency'], $summary['subtotal'], $summary['app_fee_total'], $summary['shipping'], $promoDiscount, $walletApplied, $totalAfterPromo, $amountDueNow);
 
                 if ($walletApplied > 0) {
                     $wallet = Wallet::whereKey($summary['wallet']->id)->lockForUpdate()->first();
@@ -208,6 +208,7 @@ class CheckoutController extends Controller
                     'order_number' => $orderNumber,
                     'currency' => $summary['currency'],
                     'subtotal' => $summary['subtotal'],
+                    'app_fee_total' => $summary['app_fee_total'],
                     'shipping' => $summary['shipping'],
                     'promo_discount' => $promoDiscount,
                     'wallet_balance' => $summary['wallet_balance'],
@@ -240,7 +241,12 @@ class CheckoutController extends Controller
             'total' => $this->formatMoney($result['total']),
             'pricing' => [
                 'subtotal' => round($result['subtotal'], 2),
+                'app_fee_amount' => round($result['app_fee_total'] ?? 0.0, 2),
+                'app_fee_total' => round($result['app_fee_total'] ?? 0.0, 2),
                 'shipping' => round($result['shipping'], 2),
+                'shipping_estimate_amount' => round($result['shipping'], 2),
+                'shipping_payable_now' => 0,
+                'payable_now_total' => round((float) $result['subtotal'] + (float) ($result['app_fee_total'] ?? 0.0), 2),
                 'discounts' => round($result['promo_discount'], 2),
                 'wallet_balance' => round($result['wallet_balance'], 2),
                 'wallet_applied_amount' => round($result['wallet_applied_amount'], 2),
@@ -250,21 +256,23 @@ class CheckoutController extends Controller
                 'needs_review' => $result['needs_review'],
                 'shipping_estimated' => $result['shipping_estimated'],
                 'breakdown' => $this->buildBreakdown(
-                    $result['subtotal'],
-                    $result['shipping'],
-                    $result['promo_discount'],
-                    $result['wallet_applied_amount'],
-                    $result['total'],
-                    $result['amount_due_now']
+                    (float) $result['subtotal'],
+                    (float) ($result['app_fee_total'] ?? 0.0),
+                    (float) $result['shipping'],
+                    (float) $result['promo_discount'],
+                    (float) $result['wallet_applied_amount'],
+                    (float) $result['total'],
+                    (float) $result['amount_due_now']
                 ),
             ],
             'payment_required' => $result['status'] === Order::STATUS_PENDING_PAYMENT && $result['amount_due_now'] > 0,
             'price_lines' => $this->buildPriceLines(
                 $result['currency'],
-                $result['subtotal'],
-                $result['shipping'],
-                $result['promo_discount'],
-                $result['wallet_applied_amount']
+                (float) $result['subtotal'],
+                (float) ($result['app_fee_total'] ?? 0.0),
+                (float) $result['shipping'],
+                (float) $result['promo_discount'],
+                (float) $result['wallet_applied_amount']
             ),
         ], 201);
     }
@@ -301,11 +309,13 @@ class CheckoutController extends Controller
         }
 
         $subtotal = (float) $checkoutItems->sum(fn ($i) => (float) $i->unit_price * (int) $i->quantity);
-        $shippingKnown = (float) $checkoutItems->sum(fn ($i) => $i->shipping_cost !== null ? (float) $i->shipping_cost * (int) $i->quantity : 0.0);
+        $appFeeTotal = (float) $checkoutItems->sum(fn (CartItem $i) => $i->appFeeAmount());
+        // Shipping sum is for display / estimates only — not added to amount due at checkout.
+        $shippingEstimateTotal = (float) $checkoutItems->sum(fn ($i) => $i->shipping_cost !== null ? (float) $i->shipping_cost * (int) $i->quantity : 0.0);
         $shippingHasUnknown = $checkoutItems->contains(fn ($i) => $i->shipping_cost === null);
         $needsReview = $checkoutItems->contains(fn ($i) => (bool) $i->needs_review);
         $estimated = $shippingHasUnknown || $checkoutItems->contains(fn ($i) => (bool) $i->estimated);
-        $baseTotal = round($subtotal + $shippingKnown, 2);
+        $baseTotal = round($subtotal + $appFeeTotal, 2);
 
         $promoEvaluation = [
             'valid' => false,
@@ -335,7 +345,8 @@ class CheckoutController extends Controller
             'wallet' => $wallet,
             'currency' => $currency,
             'subtotal' => round($subtotal, 2),
-            'shipping' => round($shippingKnown, 2),
+            'app_fee_total' => round($appFeeTotal, 2),
+            'shipping' => round($shippingEstimateTotal, 2),
             'shipping_has_unknown' => $shippingHasUnknown,
             'needs_review' => $needsReview,
             'estimated' => $estimated,
@@ -347,7 +358,7 @@ class CheckoutController extends Controller
             'wallet_applied_amount' => $walletApplied,
             'amount_due_now' => $amountDueNow,
             'shipments' => $shipments,
-            'price_lines' => $this->buildPriceLines($currency, $subtotal, $shippingKnown, $promoDiscountAmount, $walletApplied),
+            'price_lines' => $this->buildPriceLines($currency, $subtotal, $appFeeTotal, $shippingEstimateTotal, $promoDiscountAmount, $walletApplied),
         ];
     }
 
@@ -401,7 +412,7 @@ class CheckoutController extends Controller
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function buildPriceLines(string $currency, float $subtotal, float $shipping, float $promoDiscount, float $walletApplied): array
+    private function buildPriceLines(string $currency, float $subtotal, float $appFeeTotal, float $shippingEstimate, float $promoDiscount, float $walletApplied): array
     {
         $lines = [
             [
@@ -410,8 +421,13 @@ class CheckoutController extends Controller
                 'is_discount' => false,
             ],
             [
-                'label' => 'Shipping',
-                'amount' => $this->formatMoney($shipping, $currency),
+                'label' => 'Service fee',
+                'amount' => $this->formatMoney($appFeeTotal, $currency),
+                'is_discount' => false,
+            ],
+            [
+                'label' => 'Shipping (estimate)',
+                'amount' => $this->formatMoney($shippingEstimate, $currency),
                 'is_discount' => false,
             ],
         ];
@@ -435,9 +451,9 @@ class CheckoutController extends Controller
         return $lines;
     }
 
-    private function persistPriceLines(Order $order, string $currency, float $subtotal, float $shipping, float $promoDiscount, float $walletApplied, float $totalAfterPromo, float $amountDueNow): void
+    private function persistPriceLines(Order $order, string $currency, float $subtotal, float $appFeeTotal, float $shippingEstimate, float $promoDiscount, float $walletApplied, float $totalAfterPromo, float $amountDueNow): void
     {
-        $rows = $this->buildPriceLines($currency, $subtotal, $shipping, $promoDiscount, $walletApplied);
+        $rows = $this->buildPriceLines($currency, $subtotal, $appFeeTotal, $shippingEstimate, $promoDiscount, $walletApplied);
         foreach ($rows as $row) {
             DB::table('order_price_lines')->insert([
                 'order_id' => $order->id,
@@ -509,6 +525,7 @@ class CheckoutController extends Controller
             'wallet_balance_enabled' => true,
             'wallet_balance' => $this->formatMoney($summary['wallet_balance'], $summary['currency']),
             'subtotal' => $this->formatMoney($summary['subtotal'], $summary['currency']),
+            'service_fee' => $this->formatMoney($summary['app_fee_total'], $summary['currency']),
             'shipping' => $this->formatMoney($summary['shipping'], $summary['currency']),
             'insurance' => '$0.00',
             'promo_code' => $promoEvaluation['code'],
@@ -523,7 +540,12 @@ class CheckoutController extends Controller
             'currency' => $summary['currency'],
             'pricing' => [
                 'subtotal' => round($summary['subtotal'], 2),
+                'app_fee_amount' => round($summary['app_fee_total'], 2),
+                'app_fee_total' => round($summary['app_fee_total'], 2),
                 'shipping' => round($summary['shipping'], 2),
+                'shipping_estimate_amount' => round($summary['shipping'], 2),
+                'shipping_payable_now' => 0,
+                'payable_now_total' => round($summary['subtotal'] + $summary['app_fee_total'], 2),
                 'discounts' => round($summary['promo_discount_amount'], 2),
                 'wallet_balance' => round($summary['wallet_balance'], 2),
                 'wallet_applied_amount' => round($summary['wallet_applied_amount'], 2),
@@ -533,12 +555,13 @@ class CheckoutController extends Controller
                 'needs_review' => $summary['needs_review'],
                 'shipping_estimated' => $summary['shipping_has_unknown'],
                 'breakdown' => $this->buildBreakdown(
-                    $summary['subtotal'],
-                    $summary['shipping'],
-                    $summary['promo_discount_amount'],
-                    $summary['wallet_applied_amount'],
-                    $total,
-                    $summary['amount_due_now']
+                    (float) $summary['subtotal'],
+                    (float) $summary['app_fee_total'],
+                    (float) $summary['shipping'],
+                    (float) $summary['promo_discount_amount'],
+                    (float) $summary['wallet_applied_amount'],
+                    (float) $total,
+                    (float) $summary['amount_due_now']
                 ),
             ],
         ];
@@ -560,11 +583,12 @@ class CheckoutController extends Controller
         ];
     }
 
-    private function buildBreakdown(float $subtotal, float $shipping, float $promoDiscount, float $walletApplied, float $total, float $amountDueNow): array
+    private function buildBreakdown(float $subtotal, float $appFee, float $shippingEstimate, float $promoDiscount, float $walletApplied, float $total, float $amountDueNow): array
     {
         $rows = [
             ['key' => 'subtotal', 'label' => 'Subtotal', 'amount' => round($subtotal, 2)],
-            ['key' => 'shipping', 'label' => 'Shipping', 'amount' => round($shipping, 2)],
+            ['key' => 'app_fee', 'label' => 'Service fee', 'amount' => round($appFee, 2)],
+            ['key' => 'shipping', 'label' => 'Shipping (estimate)', 'amount' => round($shippingEstimate, 2)],
         ];
 
         if ($promoDiscount > 0) {

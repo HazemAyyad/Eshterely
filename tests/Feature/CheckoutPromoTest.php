@@ -99,8 +99,9 @@ class CheckoutPromoTest extends TestCase
         $review->assertOk();
         $review->assertJsonPath('promo_valid', true);
         $review->assertJsonPath('promo_code', 'SAVE10');
-        $this->assertEqualsWithDelta(12.0, (float) $review->json('promo_discount_amount'), 0.01);
-        $this->assertEqualsWithDelta(88.0, (float) $review->json('amount_due_now'), 0.01);
+        // Base = product 100 + app fee 0 = 100; promo 10% = 10; after promo 90; wallet 20 → due 70
+        $this->assertEqualsWithDelta(10.0, (float) $review->json('promo_discount_amount'), 0.01);
+        $this->assertEqualsWithDelta(70.0, (float) $review->json('amount_due_now'), 0.01);
 
         $confirm = $this->postJson('/api/checkout/confirm', [
             'use_wallet_balance' => true,
@@ -108,16 +109,16 @@ class CheckoutPromoTest extends TestCase
         ]);
 
         $confirm->assertStatus(201);
-        $this->assertEqualsWithDelta(108.0, (float) $confirm->json('pricing.total'), 0.01);
-        $this->assertEqualsWithDelta(12.0, (float) $confirm->json('pricing.discounts'), 0.01);
+        $this->assertEqualsWithDelta(90.0, (float) $confirm->json('pricing.total'), 0.01);
+        $this->assertEqualsWithDelta(10.0, (float) $confirm->json('pricing.discounts'), 0.01);
         $this->assertEqualsWithDelta(20.0, (float) $confirm->json('pricing.wallet_applied_amount'), 0.01);
-        $this->assertEqualsWithDelta(88.0, (float) $confirm->json('pricing.amount_due_now'), 0.01);
+        $this->assertEqualsWithDelta(70.0, (float) $confirm->json('pricing.amount_due_now'), 0.01);
 
         $order = Order::findOrFail($confirm->json('order_id'));
         $this->assertSame('SAVE10', $order->promo_code);
-        $this->assertEqualsWithDelta(12.0, (float) $order->promo_discount_amount, 0.01);
+        $this->assertEqualsWithDelta(10.0, (float) $order->promo_discount_amount, 0.01);
         $this->assertEqualsWithDelta(20.0, (float) $order->wallet_applied_amount, 0.01);
-        $this->assertEqualsWithDelta(88.0, (float) $order->amount_due_now, 0.01);
+        $this->assertEqualsWithDelta(70.0, (float) $order->amount_due_now, 0.01);
 
         $this->assertDatabaseHas('promo_redemptions', [
             'order_id' => $order->id,
@@ -172,7 +173,7 @@ class CheckoutPromoTest extends TestCase
         $confirm->assertStatus(201);
         $order = Order::findOrFail($confirm->json('order_id'));
         $this->assertSame(Order::STATUS_PENDING_PAYMENT, $order->status);
-        $this->assertEqualsWithDelta(88.0, (float) $order->amount_due_now, 0.01);
+        $this->assertEqualsWithDelta(70.0, (float) $order->amount_due_now, 0.01);
 
         $checkoutUrl = 'https://square.example/checkout';
         $this->mock(SquareService::class, function ($mock) use ($checkoutUrl) {
@@ -191,6 +192,6 @@ class CheckoutPromoTest extends TestCase
 
         $createdPayment = Payment::where('order_id', $order->id)->latest('id')->first();
         $this->assertNotNull($createdPayment);
-        $this->assertEqualsWithDelta(88.0, (float) $createdPayment->amount, 0.01);
+        $this->assertEqualsWithDelta(70.0, (float) $createdPayment->amount, 0.01);
     }
 }

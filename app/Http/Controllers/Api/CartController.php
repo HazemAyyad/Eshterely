@@ -9,6 +9,7 @@ use App\Models\CartItem;
 use App\Services\CartItemReviewService;
 use App\Services\DraftOrderService;
 use App\Services\Shipping\CartShippingEstimateService;
+use App\Services\Shipping\ShippingPricingConfigService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,6 +21,7 @@ class CartController extends Controller
     public function __construct(
         private CartShippingEstimateService $cartShippingEstimate,
         private CartItemReviewService $reviewService,
+        private ShippingPricingConfigService $shippingPricingConfig,
     ) {}
 
     /**
@@ -73,6 +75,11 @@ class CartController extends Controller
         // This uses the same config-driven shipping engine and may use fallback defaults
         // when product data is incomplete (estimated=true + missing_fields populated).
         $quote = $this->cartShippingEstimate->quoteForUser($request->user(), $validated, $qty, $destAddrId);
+
+        $lineSubtotal = round((float) $validated['price'] * $qty, 2);
+        $appFeePct = $this->shippingPricingConfig->appFeePercent();
+        $appFeeAmount = round($lineSubtotal * ($appFeePct / 100.0), 2);
+        $payableNowTotal = round($lineSubtotal + $appFeeAmount, 2);
 
         $useQuotePkg = $quote !== [];
         $pkgFloat = static function (?array $q, string $key, $fallback): ?float {
@@ -129,6 +136,13 @@ class CartController extends Controller
                 null
             ),
             'review_status' => CartItem::REVIEW_STATUS_REVIEWED,
+            'pricing_snapshot' => [
+                'app_fee_percent' => $appFeePct,
+                'line_subtotal' => $lineSubtotal,
+                'app_fee_amount' => $appFeeAmount,
+                'payable_now_total' => $payableNowTotal,
+                'shipping_payable_now' => 0,
+            ],
         ]);
 
         return response()->json((new CartItemResource($item))->toArray($request), 201);

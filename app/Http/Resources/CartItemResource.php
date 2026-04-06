@@ -62,6 +62,14 @@ class CartItemResource extends JsonResource
             'label' => $snap['destination_label'] ?? null,
         ];
 
+        // Pay-now breakdown (product + app fee only; shipping is display-only).
+        $data['line_subtotal'] = $item->lineSubtotal();
+        $data['app_fee_percent'] = $item->resolvedAppFeePercent();
+        $data['app_fee_amount'] = $item->appFeeAmount();
+        $data['shipping_estimate_amount'] = $item->shippingEstimateLineAmount();
+        $data['shipping_payable_now'] = 0;
+        $data['payable_now_total'] = $item->payableNowTotal();
+
         return $data;
     }
 }

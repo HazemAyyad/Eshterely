@@ -53,13 +53,18 @@ class CheckoutWalletBreakdownTest extends TestCase
             'estimated' => false,
         ]);
 
-        // subtotal=40, shipping=10, total=50, wallet_applied=30, due=20
+        // subtotal=40, app fee=0, payable base=40; shipping=10 is estimate-only (not in total); wallet_applied=30, due=10
         $res = $this->getJson('/api/checkout/review');
         $res->assertOk();
-        $res->assertJsonPath('pricing.total', 50);
+        $res->assertJsonPath('pricing.subtotal', 40);
+        $res->assertJsonPath('pricing.app_fee_total', 0);
+        $res->assertJsonPath('pricing.shipping_estimate_amount', 10);
+        $res->assertJsonPath('pricing.payable_now_total', 40);
+        $res->assertJsonPath('pricing.shipping_payable_now', 0);
+        $res->assertJsonPath('pricing.total', 40);
         $res->assertJsonPath('pricing.wallet_balance', 30);
         $res->assertJsonPath('pricing.wallet_applied_amount', 30);
-        $res->assertJsonPath('pricing.amount_due_now', 20);
+        $res->assertJsonPath('pricing.amount_due_now', 10);
         $res->assertJsonPath('pricing.estimated', false);
     }
 }
