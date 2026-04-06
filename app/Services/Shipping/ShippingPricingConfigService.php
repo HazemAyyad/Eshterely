@@ -36,6 +36,9 @@ class ShippingPricingConfigService
     public const KEY_SHIPPING_DEFAULT_DIMENSION_UNIT = 'shipping_default_dimension_unit';
     public const KEY_ORDER_NUMBER_PREFIX = 'order_number_prefix';
 
+    /** Percent of product line subtotal charged as app/service fee at import & add-to-cart (not shipping). */
+    public const KEY_APP_FEE_PERCENT = 'app_fee_percent';
+
     public const ROUNDING_UP_500G = 'up_to_500g';
     public const ROUNDING_NEAREST_KG = 'nearest_kg';
     public const ROUNDING_NONE = 'none';
@@ -271,6 +274,20 @@ class ShippingPricingConfigService
     }
 
     /**
+     * App fee percent applied to product subtotal (import preview / pay-now breakdown). Not shipping.
+     */
+    public function appFeePercent(): float
+    {
+        $v = ShippingSetting::getValue(self::KEY_APP_FEE_PERCENT);
+        if ($v === null || $v === '') {
+            return 0.0;
+        }
+        $f = (float) $v;
+
+        return max(0.0, $f);
+    }
+
+    /**
      * Snapshot of config values used for a quote (for transparency; avoid exposing sensitive data).
      */
     public function snapshotForQuote(): array
@@ -320,6 +337,7 @@ class ShippingPricingConfigService
             self::KEY_PLATFORM_MARKUP_PERCENT,
             self::KEY_MINIMUM_ORDER_FEE,
             self::KEY_MINIMUM_ORDER_THRESHOLD,
+            self::KEY_APP_FEE_PERCENT,
             self::KEY_SHIPPING_DEFAULT_WEIGHT,
             self::KEY_SHIPPING_DEFAULT_WEIGHT_UNIT,
             self::KEY_SHIPPING_DEFAULT_LENGTH,

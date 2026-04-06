@@ -282,6 +282,8 @@ return [
     'shipping_default_dimension_unit' => 'Default dimension unit',
     'order_number_prefix' => 'Order number prefix',
     'order_number_prefix_help' => 'Used for new orders only. Example: ZY, ESH, APP.',
+    'app_fee_percent' => 'App service fee %',
+    'app_fee_percent_help' => 'Percentage of product subtotal charged at add-to-cart (not shipping). Displayed on import/confirm; 0 = disabled.',
 
     // App config (menu)
     'app_config' => 'App (API) Settings',

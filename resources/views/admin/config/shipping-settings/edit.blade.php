@@ -115,6 +115,11 @@
                     <input type="text" name="order_number_prefix" class="form-control" value="{{ old('order_number_prefix', $values['order_number_prefix'] ?? 'ZY') }}" placeholder="ZY" maxlength="20">
                     <small class="text-muted">{{ __('admin.order_number_prefix_help') }}</small>
                 </div>
+                <div class="col-md-6">
+                    <label class="form-label">{{ __('admin.app_fee_percent') }}</label>
+                    <input type="text" name="app_fee_percent" class="form-control" value="{{ old('app_fee_percent', $values['app_fee_percent'] ?? '0') }}" placeholder="0">
+                    <small class="text-muted">{{ __('admin.app_fee_percent_help') }}</small>
+                </div>
             </div>
             <div class="mt-4">
                 <button type="submit" class="btn btn-primary">{{ __('admin.save') }}</button>

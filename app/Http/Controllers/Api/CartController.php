@@ -128,6 +128,7 @@ class CartController extends Controller
                 $quote,
                 null
             ),
+            'review_status' => CartItem::REVIEW_STATUS_REVIEWED,
         ]);
 
         return response()->json((new CartItemResource($item))->toArray($request), 201);

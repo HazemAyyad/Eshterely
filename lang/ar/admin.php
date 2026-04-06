@@ -279,6 +279,8 @@ return [
     'shipping_default_dimension_unit' => 'وحدة الأبعاد الافتراضية',
     'order_number_prefix' => 'بادئة رقم الطلب',
     'order_number_prefix_help' => 'تُطبّق على الطلبات الجديدة فقط. مثال: ZY أو ESH أو APP.',
+    'app_fee_percent' => 'رسوم الخدمة % للتطبيق',
+    'app_fee_percent_help' => 'نسبة من مجموع المنتج تُحتسب عند الإضافة للسلة (لا تشمل الشحن). تظهر في الاستيراد/التأكيد؛ 0 = معطّل.',
     'no_tickets' => 'لا توجد تذاكر',
 
     // App config (menu)

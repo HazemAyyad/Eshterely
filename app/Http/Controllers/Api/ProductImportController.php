@@ -10,6 +10,7 @@ use App\Services\ProductImport\ImportOrchestrator;
 use App\Services\ProductImport\StoreResolver;
 use App\Services\Shipping\FinalProductPricingService;
 use App\Services\Shipping\ProductImportShippingQuoteService;
+use App\Services\Shipping\ShippingPricingConfigService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -30,6 +31,7 @@ class ProductImportController extends Controller
         FinalProductPricingService $finalPricingService,
         ImportAttemptOrchestrator $orchestrator,
         ImportOrchestrator $importOrchestrator,
+        ShippingPricingConfigService $shippingPricingConfig,
     ): JsonResponse {
         $validated = $request->validate([
             'url' => 'required|url',
@@ -142,6 +144,14 @@ class ProductImportController extends Controller
                         : null,
                 ])),
             ];
+
+            // Pay-now totals: product subtotal + admin app fee only (shipping is display-only at this stage).
+            $appFeePercent = $shippingPricingConfig->appFeePercent();
+            $appFeeAmount = round($lineSubtotal * ($appFeePercent / 100.0), 2);
+            $product['app_fee_percent'] = $appFeePercent;
+            $product['app_fee_amount'] = $appFeeAmount;
+            $product['payable_now_total'] = round($lineSubtotal + $appFeeAmount, 2);
+            $product['shipping_payable_now'] = 0;
 
             // --- Shipping review fields ---
             // shipping_review_required = true when weight/dimensions are missing (estimated quote)
