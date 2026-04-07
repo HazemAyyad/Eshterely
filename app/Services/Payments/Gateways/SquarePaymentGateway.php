@@ -49,6 +49,18 @@ class SquarePaymentGateway implements PaymentGatewayInterface
         ];
     }
 
+    public function createShipmentShippingCheckoutSession(Payment $payment): array
+    {
+        $result = $this->squareService->createShipmentShippingCheckoutSession($payment);
+
+        return [
+            'checkout_url' => $result['checkout_url'],
+            'provider_payment_id' => $result['square_payment_id'] ?? null,
+            'provider_order_id' => $result['square_order_id'] ?? null,
+            'provider' => 'square',
+        ];
+    }
+
     public function handleWebhook(Request $request): Response
     {
         $rawBody = $request->getContent();

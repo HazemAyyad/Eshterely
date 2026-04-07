@@ -158,6 +158,70 @@ class SquareService
         ];
     }
 
+    /**
+     * Square Payment Link for outbound shipment (Payment has shipment_id, order_id null).
+     *
+     * @return array{checkout_url: string, square_payment_id: string|null, square_order_id: string|null}
+     */
+    public function createShipmentShippingCheckoutSession(Payment $payment): array
+    {
+        $idempotencyKey = $payment->idempotency_key ?? $payment->reference;
+        if (strlen($idempotencyKey) > 192) {
+            $idempotencyKey = substr($idempotencyKey, 0, 192);
+        }
+
+        $currency = $payment->currency ?: 'USD';
+        $amountMinor = (int) round((float) $payment->amount * 100);
+
+        $money = new Money();
+        $money->setAmount($amountMinor);
+        $money->setCurrency($currency);
+
+        $lineItem = new OrderLineItem('1');
+        $lineItem->setName('Shipping & fees');
+        $lineItem->setBasePriceMoney($money);
+
+        $squareOrder = new SquareOrder($this->locationId);
+        $squareOrder->setLineItems([$lineItem]);
+        $squareOrder->setReferenceId((string) $payment->reference);
+
+        $request = new CreatePaymentLinkRequest();
+        $request->setIdempotencyKey($idempotencyKey);
+        $request->setOrder($squareOrder);
+        $request->setDescription('Shipment shipping '.$payment->reference);
+
+        $client = $this->buildClient();
+        $apiResponse = $client->getCheckoutApi()->createPaymentLink($request);
+
+        if (! $apiResponse->isSuccess()) {
+            $result = $apiResponse->getResult();
+            $errors = null;
+            if (is_object($result) && method_exists($result, 'getErrors')) {
+                $errors = $result->getErrors();
+            } elseif (is_array($result)) {
+                $errors = $result['errors'] ?? $result['error'] ?? null;
+            }
+            $message = $errors ? json_encode($errors) : 'Square API error';
+            Log::warning('Square createPaymentLink failed (shipment)', ['payment_id' => $payment->id, 'errors' => $errors]);
+            throw new \RuntimeException('Square checkout failed: '.$message);
+        }
+
+        $result = $apiResponse->getResult();
+        $paymentLink = $result->getPaymentLink();
+        $checkoutUrl = $paymentLink ? $paymentLink->getUrl() : null;
+        $squareOrderId = $paymentLink ? $paymentLink->getOrderId() : null;
+
+        if (! $checkoutUrl) {
+            throw new \RuntimeException('Square did not return a checkout URL.');
+        }
+
+        return [
+            'checkout_url' => $checkoutUrl,
+            'square_payment_id' => null,
+            'square_order_id' => $squareOrderId,
+        ];
+    }
+
     protected function buildClient(): \Square\Legacy\SquareClient
     {
         $env = strtolower($this->environment) === 'sandbox' ? Environment::SANDBOX : Environment::PRODUCTION;

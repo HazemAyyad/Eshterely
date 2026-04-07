@@ -127,6 +127,53 @@ class StripePaymentGateway implements PaymentGatewayInterface
         ];
     }
 
+    public function createShipmentShippingCheckoutSession(Payment $payment): array
+    {
+        Stripe::setApiKey($this->secretKey);
+
+        $currency = $payment->currency ?: ($this->currencyDefault ?: 'USD');
+        $amountMinor = (int) round(((float) $payment->amount) * 100);
+
+        $successUrl = config('app.url').'/payment/stripe/success?session_id={CHECKOUT_SESSION_ID}';
+        $cancelUrl = config('app.url').'/payment/stripe/cancel?session_id={CHECKOUT_SESSION_ID}';
+
+        $session = StripeCheckoutSession::create([
+            'mode' => 'payment',
+            'success_url' => $successUrl,
+            'cancel_url' => $cancelUrl,
+            'line_items' => [
+                [
+                    'quantity' => 1,
+                    'price_data' => [
+                        'currency' => strtoupper((string) $currency),
+                        'unit_amount' => $amountMinor,
+                        'product_data' => [
+                            'name' => 'Shipping & fees',
+                        ],
+                    ],
+                ],
+            ],
+            'metadata' => [
+                'payment_reference' => $payment->reference,
+                'payment_id' => (string) $payment->id,
+                'shipment_id' => (string) ($payment->shipment_id ?? ''),
+                'payment_type' => 'shipment_shipping',
+            ],
+        ]);
+
+        if (empty($session->url)) {
+            Log::warning('Stripe checkout session has no URL (shipment)', ['payment_id' => $payment->id]);
+            throw new \RuntimeException('Stripe did not return a checkout URL.');
+        }
+
+        return [
+            'checkout_url' => $session->url,
+            'provider_payment_id' => (string) $session->id,
+            'provider_order_id' => (string) ($payment->shipment_id ?? ''),
+            'provider' => 'stripe',
+        ];
+    }
+
     public function handleWebhook(Request $request): Response
     {
         $rawBody = $request->getContent();

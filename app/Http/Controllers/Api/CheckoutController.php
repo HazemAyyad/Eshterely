@@ -528,6 +528,7 @@ class CheckoutController extends Controller
                     'sku' => $i->product_id ? (string) $i->product_id : null,
                     'price' => (float) $i->unit_price,
                     'quantity' => (int) $i->quantity,
+                    'fulfillment_status' => OrderLineItem::FULFILLMENT_PAID,
                     'image_url' => $i->image_url,
                     'product_snapshot' => [
                         'title' => $i->name,

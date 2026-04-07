@@ -40,6 +40,18 @@ interface PaymentGatewayInterface
     public function createWalletTopUpCheckoutSession(WalletTopUpPayment $topUp): array;
 
     /**
+     * Hosted checkout for outbound shipment shipping payment (order_id null on Payment).
+     *
+     * @return array{
+     *   checkout_url: string,
+     *   provider_payment_id: string|null,
+     *   provider_order_id: string|null,
+     *   provider: string
+     * }
+     */
+    public function createShipmentShippingCheckoutSession(Payment $payment): array;
+
+    /**
      * Verify signature (if needed) and update payment/order/top-up state.
      */
     public function handleWebhook(Request $request): Response;

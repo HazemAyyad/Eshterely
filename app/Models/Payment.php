@@ -14,6 +14,7 @@ class Payment extends Model
     protected $fillable = [
         'user_id',
         'order_id',
+        'shipment_id',
         'provider',
         'currency',
         'amount',
@@ -46,6 +47,11 @@ class Payment extends Model
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
+    }
+
+    public function shipment(): BelongsTo
+    {
+        return $this->belongsTo(Shipment::class);
     }
 
     public function attempts(): HasMany

@@ -24,6 +24,8 @@ use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\SupportController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WalletController;
+use App\Http\Controllers\Admin\WarehouseReceivingController;
+use App\Http\Controllers\Admin\OutboundShipmentController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('login', [AdminAuthController::class, 'showLogin'])->name('login');
@@ -99,6 +101,11 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
     Route::patch('orders/{order}/shipments/{shipment}', [OrderController::class, 'updateShipment'])->name('orders.shipments.update');
     Route::post('orders/{order}/shipments/{shipment}/events', [OrderController::class, 'addShipmentEvent'])->name('orders.shipments.events.store');
     Route::patch('orders/{order}/shipments/{shipment}/delivered', [OrderController::class, 'markShipmentDelivered'])->name('orders.shipments.delivered');
+
+    // Outbound shipments (user warehouse → second payment)
+    Route::post('warehouse/order-line-items/{orderLineItem}/receive', [WarehouseReceivingController::class, 'store'])->name('warehouse.receive');
+    Route::post('shipments/{shipment}/pack', [OutboundShipmentController::class, 'pack'])->name('outbound-shipments.pack');
+    Route::post('shipments/{shipment}/ship', [OutboundShipmentController::class, 'ship'])->name('outbound-shipments.ship');
 
     // Cart Review
     Route::get('cart-review/data', [CartReviewController::class, 'data'])->name('cart-review.data');
