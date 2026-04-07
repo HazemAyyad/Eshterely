@@ -29,11 +29,20 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
         clearValidationErrors();
         const btn = form.querySelector('button[type="submit"]');
-        btn.disabled = true;
+        if (btn) btn.disabled = true;
+        // Never use form.action / form.method when the form may contain inputs named "action" or "method"
+        // — those shadow the properties and break fetch (URL becomes "[object HTMLInputElement]").
+        const actionUrl = form.getAttribute('action');
+        const httpMethod = (form.getAttribute('method') || 'get').toUpperCase();
+        if (!actionUrl) {
+            if (btn) btn.disabled = false;
+            Swal.fire({ icon: 'error', title: 'Missing form action' });
+            return;
+        }
         Swal.fire({ title: @json(__('admin.loading')), allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-        fetch(form.action, {
-            method: form.method,
+        fetch(actionUrl, {
+            method: httpMethod,
             headers: {
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                 'Accept': 'application/json',
@@ -43,7 +52,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }).then(r => r.json().then(data => ({ ok: r.ok, data, status: r.status })))
           .then(({ ok, data, status }) => {
             Swal.close();
-            btn.disabled = false;
+            if (btn) btn.disabled = false;
             if (ok && data.success) {
                 Swal.fire({ icon: 'success', title: data.message }).then(() => window.location.href = redirectUrl);
             } else if (status === 422 && data.errors) {
@@ -51,7 +60,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 Swal.fire({ icon: 'error', title: data.message || @json(__('admin.error')) });
             }
-        }).catch(() => { Swal.close(); btn.disabled = false; Swal.fire({ icon: 'error', title: @json(__('admin.error')) }); });
+        }).catch(() => { Swal.close(); if (btn) btn.disabled = false; Swal.fire({ icon: 'error', title: @json(__('admin.error')) }); });
     });
     });
 });
