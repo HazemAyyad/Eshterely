@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Shipment;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 /**
@@ -15,7 +16,7 @@ class OutboundShipmentController extends Controller
     /**
      * POST /admin/outbound-shipments/{shipment}/pack
      */
-    public function pack(Request $request, Shipment $shipment): JsonResponse
+    public function pack(Request $request, Shipment $shipment): JsonResponse|RedirectResponse
     {
         $validated = $request->validate([
             'final_weight' => 'required|numeric|min:0',
@@ -26,7 +27,10 @@ class OutboundShipmentController extends Controller
         ]);
 
         if (! in_array($shipment->status, [Shipment::STATUS_PAID, Shipment::STATUS_PACKED], true)) {
-            return response()->json(['message' => 'Shipment must be paid before packing.', 'status' => 422], 422);
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['message' => 'Shipment must be paid before packing.', 'status' => 422], 422);
+            }
+            return redirect()->back()->with('error', 'Shipment must be paid before packing.');
         }
 
         $shipment->update([
@@ -38,21 +42,40 @@ class OutboundShipmentController extends Controller
             'status' => Shipment::STATUS_PACKED,
         ]);
 
-        return response()->json(['success' => true, 'shipment' => $this->serialize($shipment->fresh())]);
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => __('admin.success'),
+                'shipment' => $this->serialize($shipment->fresh()),
+            ]);
+        }
+
+        return redirect()
+            ->route('admin.shipments.show', $shipment)
+            ->with('success', __('admin.shipment_packed'));
     }
 
     /**
      * POST /admin/outbound-shipments/{shipment}/ship
      */
-    public function ship(Request $request, Shipment $shipment): JsonResponse
+    public function ship(Request $request, Shipment $shipment): JsonResponse|RedirectResponse
     {
         $validated = $request->validate([
             'carrier' => 'required|string|max:80',
             'tracking_number' => 'required|string|max:255',
+            'dispatch_note' => 'nullable|string|max:1000',
         ]);
 
         if ($shipment->status !== Shipment::STATUS_PACKED) {
-            return response()->json(['message' => 'Shipment must be packed before dispatch.', 'status' => 422], 422);
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['message' => 'Shipment must be packed before dispatch.', 'status' => 422], 422);
+            }
+            return redirect()->back()->with('error', 'Shipment must be packed before dispatch.');
+        }
+
+        $breakdown = $shipment->pricing_breakdown ?? [];
+        if (array_key_exists('dispatch_note', $validated) && $validated['dispatch_note'] !== null && $validated['dispatch_note'] !== '') {
+            $breakdown['admin_dispatch_note'] = $validated['dispatch_note'];
         }
 
         $shipment->update([
@@ -60,9 +83,20 @@ class OutboundShipmentController extends Controller
             'tracking_number' => $validated['tracking_number'],
             'status' => Shipment::STATUS_SHIPPED,
             'dispatched_at' => now(),
+            'pricing_breakdown' => $breakdown,
         ]);
 
-        return response()->json(['success' => true, 'shipment' => $this->serialize($shipment->fresh())]);
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => __('admin.success'),
+                'shipment' => $this->serialize($shipment->fresh()),
+            ]);
+        }
+
+        return redirect()
+            ->route('admin.shipments.show', $shipment)
+            ->with('success', __('admin.shipment_dispatched'));
     }
 
     private function serialize(Shipment $s): array

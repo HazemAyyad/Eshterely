@@ -16,6 +16,21 @@
     </div>
 @endif
 
+<div class="alert alert-light border shadow-sm mb-4">
+    <div class="d-flex flex-wrap gap-3 align-items-center justify-content-between">
+        <div>
+            <strong>{{ __('admin.ops_flow_title') }}</strong>
+            <span class="text-muted ms-1">{{ __('admin.ops_flow_body') }}</span>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{{ route('admin.warehouse.index') }}" class="btn btn-sm btn-outline-primary">{{ __('admin.menu_warehouse_ops') }}</a>
+            <a href="{{ route('admin.shipments.index') }}" class="btn btn-sm btn-outline-primary">{{ __('admin.menu_shipments_ops') }}</a>
+        </div>
+    </div>
+</div>
+
+@include('admin.orders.partials.procurement-line-items')
+
 <div class="row g-4">
     <div class="col-md-6">
         <div class="card border-0 shadow-sm">

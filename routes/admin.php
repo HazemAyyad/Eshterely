@@ -26,6 +26,9 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WalletController;
 use App\Http\Controllers\Admin\WarehouseReceivingController;
 use App\Http\Controllers\Admin\OutboundShipmentController;
+use App\Http\Controllers\Admin\OrderLineItemProcurementController;
+use App\Http\Controllers\Admin\WarehouseQueueController;
+use App\Http\Controllers\Admin\OutboundShipmentsAdminController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('login', [AdminAuthController::class, 'showLogin'])->name('login');
@@ -102,7 +105,21 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
     Route::post('orders/{order}/shipments/{shipment}/events', [OrderController::class, 'addShipmentEvent'])->name('orders.shipments.events.store');
     Route::patch('orders/{order}/shipments/{shipment}/delivered', [OrderController::class, 'markShipmentDelivered'])->name('orders.shipments.delivered');
 
-    // Outbound shipments (user warehouse → second payment)
+    Route::patch('order-line-items/{orderLineItem}/procurement', [OrderLineItemProcurementController::class, 'update'])->name('order-line-items.procurement');
+
+    // Warehouse receiving queue (operations)
+    Route::get('warehouse/data', [WarehouseQueueController::class, 'data'])->name('warehouse.data');
+    Route::get('warehouse/order-line-items/{orderLineItem}/receive', [WarehouseQueueController::class, 'receiveForm'])->name('warehouse.receive-form');
+    Route::get('warehouse', [WarehouseQueueController::class, 'index'])->name('warehouse.index');
+
+    // Outbound shipments admin (pack / ship — customer shipments)
+    Route::get('shipments/data', [OutboundShipmentsAdminController::class, 'data'])->name('shipments.data');
+    Route::get('shipments/{shipment}/pack', [OutboundShipmentsAdminController::class, 'packForm'])->name('shipments.pack-form');
+    Route::get('shipments/{shipment}/ship', [OutboundShipmentsAdminController::class, 'shipForm'])->name('shipments.ship-form');
+    Route::get('shipments/{shipment}', [OutboundShipmentsAdminController::class, 'show'])->name('shipments.show');
+    Route::get('shipments', [OutboundShipmentsAdminController::class, 'index'])->name('shipments.index');
+
+    // Outbound shipments (user warehouse → second payment) — POST handlers (API + admin forms)
     Route::post('warehouse/order-line-items/{orderLineItem}/receive', [WarehouseReceivingController::class, 'store'])->name('warehouse.receive');
     Route::post('shipments/{shipment}/pack', [OutboundShipmentController::class, 'pack'])->name('outbound-shipments.pack');
     Route::post('shipments/{shipment}/ship', [OutboundShipmentController::class, 'ship'])->name('outbound-shipments.ship');

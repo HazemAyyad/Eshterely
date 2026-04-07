@@ -18,6 +18,7 @@ use App\Services\Shipping\Contracts\ShippingZoneRepositoryInterface;
 use App\Services\Shipping\ShippingQuoteService;
 use App\Services\Shipping\VolumetricWeightCalculator;
 use App\View\Composers\AdminBrandingComposer;
+use App\View\Composers\AdminMenuCountsComposer;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\View;
@@ -102,5 +103,7 @@ class AppServiceProvider extends ServiceProvider
             ],
             AdminBrandingComposer::class
         );
+
+        View::composer('layouts.admin.partials.menu', AdminMenuCountsComposer::class);
     }
 }

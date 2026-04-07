@@ -3,7 +3,8 @@
 @section('title', __('admin.orders_list'))
 
 @section('content')
-<h4 class="py-4 mb-4">{{ __('admin.orders_list') }}</h4>
+<h4 class="py-4 mb-2">{{ __('admin.orders_list') }}</h4>
+<p class="text-muted mb-4">{{ __('admin.orders_list_procurement_hint') }}</p>
 
 <div class="card border-0 shadow-sm">
     <div class="card-header">

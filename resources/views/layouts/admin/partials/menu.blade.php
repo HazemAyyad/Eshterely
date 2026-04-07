@@ -11,10 +11,40 @@
     </div>
     <div class="menu-inner-shadow"></div>
     <ul class="menu-inner py-1">
+        @php
+            $adminMenuCounts = $adminMenuCounts ?? ['orders_procurement' => 0, 'warehouse_queue' => 0, 'shipments_ops' => 0];
+        @endphp
         <li class="menu-item {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}">
             <a href="{{ route('admin.dashboard') }}" class="menu-link">
                 <i class="menu-icon icon-base ti tabler-smart-home"></i>
                 <div>{{ __('admin.dashboard') }}</div>
+            </a>
+        </li>
+        <li class="menu-item {{ request()->routeIs('admin.orders*') ? 'active' : '' }}">
+            <a href="{{ route('admin.orders.index') }}" class="menu-link">
+                <i class="menu-icon icon-base ti tabler-shopping-cart"></i>
+                <div>{{ __('admin.orders') }}</div>
+                @if(($adminMenuCounts['orders_procurement'] ?? 0) > 0)
+                    <span class="badge rounded-pill bg-warning ms-auto">{{ $adminMenuCounts['orders_procurement'] }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="menu-item {{ request()->routeIs('admin.warehouse*') ? 'active' : '' }}">
+            <a href="{{ route('admin.warehouse.index') }}" class="menu-link">
+                <i class="menu-icon icon-base ti tabler-building-warehouse"></i>
+                <div>{{ __('admin.menu_warehouse_ops') }}</div>
+                @if(($adminMenuCounts['warehouse_queue'] ?? 0) > 0)
+                    <span class="badge rounded-pill bg-primary ms-auto">{{ $adminMenuCounts['warehouse_queue'] }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="menu-item {{ request()->routeIs('admin.shipments*') ? 'active' : '' }}">
+            <a href="{{ route('admin.shipments.index') }}" class="menu-link">
+                <i class="menu-icon icon-base ti tabler-truck-delivery"></i>
+                <div>{{ __('admin.shipments_ops_title') }}</div>
+                @if(($adminMenuCounts['shipments_ops'] ?? 0) > 0)
+                    <span class="badge rounded-pill bg-info ms-auto">{{ $adminMenuCounts['shipments_ops'] }}</span>
+                @endif
             </a>
         </li>
         <li class="menu-item {{ request()->routeIs('admin.config.*') ? 'active open' : '' }}">
@@ -90,7 +120,7 @@
                 </li>
             </ul>
         </li>
-        <li class="menu-item {{ request()->routeIs('admin.users*', 'admin.orders*', 'admin.cart-review*', 'admin.wallets*', 'admin.support*') ? 'active open' : '' }}">
+        <li class="menu-item {{ request()->routeIs('admin.users*', 'admin.cart-review*', 'admin.wallets*', 'admin.support*') ? 'active open' : '' }}">
             <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon icon-base ti tabler-users"></i>
                 <div>{{ __('admin.management') }}</div>
@@ -99,11 +129,6 @@
                 <li class="menu-item {{ request()->routeIs('admin.users*') ? 'active' : '' }}">
                     <a href="{{ route('admin.users.index') }}" class="menu-link">
                         <div>{{ __('admin.users') }}</div>
-                    </a>
-                </li>
-                <li class="menu-item {{ request()->routeIs('admin.orders*') ? 'active' : '' }}">
-                    <a href="{{ route('admin.orders.index') }}" class="menu-link">
-                        <div>{{ __('admin.orders') }}</div>
                     </a>
                 </li>
                 <li class="menu-item {{ request()->routeIs('admin.cart-review*') ? 'active' : '' }}">

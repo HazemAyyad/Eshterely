@@ -7,6 +7,7 @@ use App\Models\OrderLineItem;
 use App\Models\WarehouseReceipt;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -15,8 +16,15 @@ class WarehouseReceivingController extends Controller
     /**
      * POST /admin/warehouse/order-line-items/{orderLineItem}/receive
      */
-    public function store(Request $request, OrderLineItem $orderLineItem): JsonResponse
+    public function store(Request $request, OrderLineItem $orderLineItem): JsonResponse|RedirectResponse
     {
+        if ($request->filled('images_text') && ! $request->has('images')) {
+            $lines = preg_split('/\r\n|\r|\n/', (string) $request->input('images_text', ''));
+            $request->merge([
+                'images' => array_values(array_filter(array_map('trim', $lines))),
+            ]);
+        }
+
         $validated = $request->validate([
             'received_at' => 'nullable|date',
             'received_weight' => 'nullable|numeric|min:0',
@@ -50,10 +58,19 @@ class WarehouseReceivingController extends Controller
             ]);
         });
 
-        return response()->json([
+        $payload = [
             'success' => true,
+            'message' => __('admin.success'),
             'order_line_item_id' => (string) $orderLineItem->id,
             'fulfillment_status' => OrderLineItem::FULFILLMENT_ARRIVED_AT_WAREHOUSE,
-        ]);
+        ];
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json($payload);
+        }
+
+        return redirect()
+            ->route('admin.warehouse.index')
+            ->with('success', __('admin.warehouse_item_received'));
     }
 }
