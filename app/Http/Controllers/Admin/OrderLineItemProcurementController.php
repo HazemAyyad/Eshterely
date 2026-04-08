@@ -29,10 +29,14 @@ class OrderLineItemProcurementController extends Controller
         }
 
         $validated = $request->validate([
+            // `procurement_action` avoids clashing with HTML form `action` URL (see admin ajax-submit-form).
+            'procurement_action' => 'nullable|string|in:mark_purchased,mark_in_transit',
             'action' => 'nullable|string|in:mark_purchased,mark_in_transit',
             'store_tracking' => 'nullable|string|max:255',
             'purchase_notes' => 'nullable|string|max:2000',
         ]);
+
+        $procurementAction = $validated['procurement_action'] ?? $validated['action'] ?? null;
 
         $meta = $orderLineItem->review_metadata ?? [];
         if ($request->has('store_tracking')) {
@@ -44,8 +48,8 @@ class OrderLineItemProcurementController extends Controller
 
         $status = (string) $orderLineItem->fulfillment_status;
 
-        if (! empty($validated['action'])) {
-            if ($validated['action'] === 'mark_purchased') {
+        if (! empty($procurementAction)) {
+            if ($procurementAction === 'mark_purchased') {
                 if (! in_array($status, [
                     OrderLineItem::FULFILLMENT_PAID,
                     OrderLineItem::FULFILLMENT_REVIEWED,
@@ -58,7 +62,7 @@ class OrderLineItemProcurementController extends Controller
                 }
                 $status = OrderLineItem::FULFILLMENT_PURCHASED;
             }
-            if ($validated['action'] === 'mark_in_transit') {
+            if ($procurementAction === 'mark_in_transit') {
                 if (! in_array($status, [
                     OrderLineItem::FULFILLMENT_PAID,
                     OrderLineItem::FULFILLMENT_REVIEWED,

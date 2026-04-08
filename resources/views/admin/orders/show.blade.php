@@ -29,6 +29,8 @@
     </div>
 </div>
 
+@include('admin.orders.partials.fulfillment-summary')
+@include('admin.orders.partials.fulfillment-stage-strip')
 @include('admin.orders.partials.procurement-line-items')
 
 <div class="row g-4">
@@ -173,8 +175,13 @@
     </div>
 </div>
 
+<div class="mt-5 mb-2">
+    <h5 class="mb-1">{{ __('admin.checkout_shipments_section_title') }}</h5>
+    <p class="text-muted small mb-0">{{ __('admin.checkout_shipments_section_help') }}</p>
+</div>
+
 @foreach($order->shipments as $shipment)
-<div class="card mt-4">
+<div class="card mt-3">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h5 class="mb-0">{{ __('admin.shipment') }} {{ $shipment->country_label ?? $shipment->country_code }}</h5>
         <div class="d-flex gap-1 flex-wrap">

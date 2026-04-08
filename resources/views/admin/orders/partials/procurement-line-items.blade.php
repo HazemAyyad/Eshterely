@@ -5,21 +5,25 @@
 
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <h5 class="mb-0">{{ __('admin.procurement_line_items') }}</h5>
-        <div class="small text-muted">{{ __('admin.procurement_line_items_help') }}</div>
+        <div>
+            <h5 class="mb-0">{{ __('admin.procurement_line_items') }}</h5>
+            <p class="small text-muted mb-0">{{ __('admin.procurement_line_items_help_v2') }}</p>
+        </div>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-sm table-hover mb-0">
+            <table class="table table-sm table-hover mb-0 align-middle">
                 <thead class="table-light">
                     <tr>
-                        <th>{{ __('admin.product') }}</th>
+                        <th style="min-width:140px">{{ __('admin.product') }}</th>
                         <th>{{ __('admin.store') }}</th>
-                        <th>{{ __('admin.qty') }}</th>
-                        <th>{{ __('admin.procurement_status') }}</th>
-                        <th>{{ __('admin.store_tracking') }}</th>
-                        <th>{{ __('admin.purchase_notes') }}</th>
-                        <th style="min-width:220px">{{ __('admin.actions') }}</th>
+                        <th class="text-center">{{ __('admin.qty') }}</th>
+                        <th style="min-width:120px">{{ __('admin.procurement_status') }}</th>
+                        <th style="min-width:100px">{{ __('admin.store_tracking') }}</th>
+                        <th style="min-width:100px">{{ __('admin.purchase_notes') }}</th>
+                        <th style="min-width:130px">{{ __('admin.wh_receive_status_col') }}</th>
+                        <th style="min-width:160px">{{ __('admin.outbound_shipments_col') }}</th>
+                        <th style="min-width:240px">{{ __('admin.actions') }}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -32,14 +36,51 @@
                                 OrderLineItem::FULFILLMENT_PURCHASED,
                                 OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE,
                             ], true);
+                            $receipt = $li->latestWarehouseReceipt;
                         @endphp
                         <tr>
-                            <td>{{ Str::limit($li->name, 48) }}</td>
+                            <td>{{ Str::limit($li->name, 56) }}</td>
                             <td>{{ $li->store_name ?? '—' }}</td>
-                            <td>{{ $li->quantity }}</td>
+                            <td class="text-center">{{ $li->quantity }}</td>
                             <td><span class="badge bg-{{ $p['badge'] }}">{{ $p['label'] }}</span></td>
-                            <td class="small">{{ $tracking !== '' ? Str::limit($tracking, 32) : '—' }}</td>
+                            <td class="small">{{ $tracking !== '' ? Str::limit($tracking, 36) : '—' }}</td>
                             <td class="small">{{ $notes !== '' ? Str::limit($notes, 40) : '—' }}</td>
+                            <td class="small">
+                                @if($receipt)
+                                    <span class="badge bg-success">{{ __('admin.wh_received_badge') }}</span>
+                                    <div class="text-muted mt-1">{{ $receipt->received_at?->format('Y-m-d H:i') ?? '—' }}</div>
+                                @elseif($canReceive)
+                                    <span class="badge bg-warning text-dark">{{ __('admin.wh_awaiting_intake_badge') }}</span>
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
+                            <td class="small">
+                                @if($li->relationLoaded('shipmentItems') && $li->shipmentItems->isNotEmpty())
+                                    @foreach($li->shipmentItems as $si)
+                                        @php
+                                            $os = $si->shipment;
+                                            $op = $os ? AdminFulfillmentLabels::outboundShipment($os->status) : ['label' => '—', 'badge' => 'secondary'];
+                                        @endphp
+                                        @if($os)
+                                            <div class="mb-1 pb-1 @if(!$loop->last) border-bottom @endif">
+                                                <a href="{{ route('admin.shipments.show', $os) }}" class="fw-semibold">#{{ $os->id }}</a>
+                                                <span class="badge bg-{{ $op['badge'] }} ms-1">{{ $op['label'] }}</span>
+                                                @if($os->carrier || $os->tracking_number)
+                                                    <div class="text-muted text-truncate" style="max-width:14rem" title="{{ $os->carrier }} {{ $os->tracking_number }}">
+                                                        {{ $os->carrier ?? '—' }}
+                                                        @if($os->tracking_number)
+                                                            · {{ Str::limit($os->tracking_number, 24) }}
+                                                        @endif
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        @endif
+                                    @endforeach
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
                             <td>
                                 <form method="POST" action="{{ route('admin.order-line-items.procurement', $li) }}" class="ajax-submit-form mb-2">
                                     @csrf
@@ -58,27 +99,19 @@
                                     <form method="POST" action="{{ route('admin.order-line-items.procurement', $li) }}" class="ajax-submit-form d-inline">
                                         @csrf
                                         @method('PATCH')
-                                        <input type="hidden" name="action" value="mark_purchased">
+                                        <input type="hidden" name="procurement_action" value="mark_purchased">
                                         <button type="submit" class="btn btn-sm btn-primary" @if(!in_array($li->fulfillment_status, [OrderLineItem::FULFILLMENT_PAID, OrderLineItem::FULFILLMENT_REVIEWED], true)) disabled @endif>{{ __('admin.mark_purchased') }}</button>
                                     </form>
                                     <form method="POST" action="{{ route('admin.order-line-items.procurement', $li) }}" class="ajax-submit-form d-inline">
                                         @csrf
                                         @method('PATCH')
-                                        <input type="hidden" name="action" value="mark_in_transit">
+                                        <input type="hidden" name="procurement_action" value="mark_in_transit">
                                         <button type="submit" class="btn btn-sm btn-warning text-dark" @if(!in_array($li->fulfillment_status, [OrderLineItem::FULFILLMENT_PAID, OrderLineItem::FULFILLMENT_REVIEWED, OrderLineItem::FULFILLMENT_PURCHASED], true)) disabled @endif>{{ __('admin.mark_in_transit_wh') }}</button>
                                     </form>
                                 </div>
                                 <div class="small">
                                     @if($canReceive)
                                         <a href="{{ route('admin.warehouse.receive-form', $li) }}" class="btn btn-sm btn-success">{{ __('admin.warehouse_receive') }}</a>
-                                    @endif
-                                    @if($li->relationLoaded('shipmentItems') && $li->shipmentItems->isNotEmpty())
-                                        @foreach($li->shipmentItems as $si)
-                                            <a href="{{ route('admin.shipments.show', $si->shipment_id) }}" class="btn btn-sm btn-outline-secondary">{{ __('admin.outbound_shipment') }} #{{ $si->shipment_id }}</a>
-                                        @endforeach
-                                    @endif
-                                    @if($li->latestWarehouseReceipt)
-                                        <span class="text-muted ms-1">{{ __('admin.received_short') }} {{ $li->latestWarehouseReceipt->received_at?->format('Y-m-d') ?? '—' }}</span>
                                     @endif
                                 </div>
                             </td>

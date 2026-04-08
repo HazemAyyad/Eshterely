@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Models\OrderLineItem;
 use App\Models\OrderShipment;
 use App\Models\OrderShipmentEvent;
+use App\Models\Shipment;
 use App\Services\Admin\AdminOrderOperationService;
 use App\Services\Admin\OrderStatusWorkflowService;
 use App\Services\Admin\ShipmentOperationService;
@@ -85,7 +87,7 @@ class OrderController extends Controller
             'shipments.trackingEvents',
             'shipments.events',
             'lineItems.shipment.order',
-            'lineItems.shipmentItems.shipment',
+            'lineItems.shipmentItems.shipment.payments',
             'lineItems.latestWarehouseReceipt',
             'user',
             'payments.attempts',
@@ -103,7 +105,107 @@ class OrderController extends Controller
         }
         $shipmentEventTypes = OrderShipmentEvent::eventTypes();
 
-        return view('admin.orders.show', compact('order', 'priceLines', 'allowedStatuses', 'canTransitionTo', 'shipmentEventTypes'));
+        $items = $order->lineItems;
+        $hasPaidCheckout = $order->payments->contains(fn ($p) => $p->status->value === 'paid');
+
+        $fulfillmentSummary = [
+            'total_items' => $items->count(),
+            'paid_procurement' => $items->whereIn('fulfillment_status', [
+                OrderLineItem::FULFILLMENT_PAID,
+                OrderLineItem::FULFILLMENT_REVIEWED,
+            ])->count(),
+            'purchased' => $items->where('fulfillment_status', OrderLineItem::FULFILLMENT_PURCHASED)->count(),
+            'in_transit' => $items->where('fulfillment_status', OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE)->count(),
+            'arrived' => $items->where('fulfillment_status', OrderLineItem::FULFILLMENT_ARRIVED_AT_WAREHOUSE)->count(),
+            'ready_for_shipment' => $items->where('fulfillment_status', OrderLineItem::FULFILLMENT_READY_FOR_SHIPMENT)->count(),
+            'at_warehouse' => $items->whereIn('fulfillment_status', [
+                OrderLineItem::FULFILLMENT_ARRIVED_AT_WAREHOUSE,
+                OrderLineItem::FULFILLMENT_READY_FOR_SHIPMENT,
+            ])->count(),
+            'assigned_outbound' => $items->filter(fn ($li) => $li->shipmentItems->isNotEmpty())->count(),
+            'outbound_shipped' => $items->filter(function ($li) {
+                foreach ($li->shipmentItems as $si) {
+                    $s = $si->shipment;
+                    if ($s && in_array($s->status, [Shipment::STATUS_SHIPPED, Shipment::STATUS_DELIVERED], true)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            })->count(),
+            'outbound_packed' => $items->filter(function ($li) {
+                foreach ($li->shipmentItems as $si) {
+                    $s = $si->shipment;
+                    if ($s && in_array($s->status, [Shipment::STATUS_PACKED, Shipment::STATUS_SHIPPED, Shipment::STATUS_DELIVERED], true)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            })->count(),
+        ];
+
+        $fulfillmentStages = [
+            [
+                'id' => 'paid',
+                'done' => $hasPaidCheckout || $items->isEmpty(),
+            ],
+            [
+                'id' => 'purchased',
+                'done' => $items->contains(fn ($li) => in_array($li->fulfillment_status, [
+                    OrderLineItem::FULFILLMENT_PURCHASED,
+                    OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE,
+                    OrderLineItem::FULFILLMENT_ARRIVED_AT_WAREHOUSE,
+                    OrderLineItem::FULFILLMENT_READY_FOR_SHIPMENT,
+                ], true)),
+            ],
+            [
+                'id' => 'in_transit_wh',
+                'done' => $items->contains(fn ($li) => in_array($li->fulfillment_status, [
+                    OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE,
+                    OrderLineItem::FULFILLMENT_ARRIVED_AT_WAREHOUSE,
+                    OrderLineItem::FULFILLMENT_READY_FOR_SHIPMENT,
+                ], true)),
+            ],
+            [
+                'id' => 'arrived_wh',
+                'done' => $items->contains(fn ($li) => in_array($li->fulfillment_status, [
+                    OrderLineItem::FULFILLMENT_ARRIVED_AT_WAREHOUSE,
+                    OrderLineItem::FULFILLMENT_READY_FOR_SHIPMENT,
+                ], true)),
+            ],
+            [
+                'id' => 'assigned_outbound',
+                'done' => $items->contains(fn ($li) => $li->shipmentItems->isNotEmpty()),
+            ],
+            [
+                'id' => 'packed_shipped',
+                'done' => $items->contains(function ($li) {
+                    foreach ($li->shipmentItems as $si) {
+                        $s = $si->shipment;
+                        if ($s && in_array($s->status, [
+                            Shipment::STATUS_PACKED,
+                            Shipment::STATUS_SHIPPED,
+                            Shipment::STATUS_DELIVERED,
+                        ], true)) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }),
+            ],
+        ];
+
+        return view('admin.orders.show', compact(
+            'order',
+            'priceLines',
+            'allowedStatuses',
+            'canTransitionTo',
+            'shipmentEventTypes',
+            'fulfillmentSummary',
+            'fulfillmentStages'
+        ));
     }
 
     public function updateStatus(Request $request, Order $order): RedirectResponse|JsonResponse
