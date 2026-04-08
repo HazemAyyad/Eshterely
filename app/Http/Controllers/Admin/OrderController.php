@@ -82,9 +82,6 @@ class OrderController extends Controller
     public function show(Order $order): View
     {
         $order->load([
-            'shipments.lineItems',
-            'shipments.trackingEvents',
-            'shipments.events',
             'lineItems.shipment.order',
             'lineItems.cartItem',
             'lineItems.importedProduct',
@@ -104,8 +101,6 @@ class OrderController extends Controller
                 $canTransitionTo[] = $s;
             }
         }
-        $shipmentEventTypes = OrderShipmentEvent::eventTypes();
-
         $items = $order->lineItems;
         $hasPaidCheckout = $order->payments->contains(fn ($p) => $p->status->value === 'paid');
 
@@ -113,6 +108,13 @@ class OrderController extends Controller
         $fulfillmentSummary = $fulfillmentPresented['fulfillment_summary'];
         $fulfillmentStages = $fulfillmentPresented['fulfillment_stages'];
         $orderFulfillmentState = $fulfillmentPresented['order_fulfillment_state'];
+
+        $outboundShipments = $order->lineItems
+            ->flatMap(fn ($li) => $li->shipmentItems)
+            ->map(fn ($si) => $si->shipment)
+            ->filter()
+            ->unique('id')
+            ->values();
 
         $customerDisplayName = null;
         if ($order->user) {
@@ -128,10 +130,10 @@ class OrderController extends Controller
             'priceLines',
             'allowedStatuses',
             'canTransitionTo',
-            'shipmentEventTypes',
             'fulfillmentSummary',
             'fulfillmentStages',
             'orderFulfillmentState',
+            'outboundShipments',
             'customerDisplayName'
         ));
     }
