@@ -17,12 +17,12 @@ class AdminFulfillmentLabels
     public static function lineItemFulfillment(?string $status): array
     {
         $label = match ($status) {
-            OrderLineItem::FULFILLMENT_PAID => 'Paid (awaiting purchase)',
+            OrderLineItem::FULFILLMENT_PAID => 'Awaiting purchase',
             OrderLineItem::FULFILLMENT_REVIEWED => 'Reviewed',
             OrderLineItem::FULFILLMENT_PURCHASED => 'Purchased',
-            OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE => 'In transit to warehouse',
-            OrderLineItem::FULFILLMENT_ARRIVED_AT_WAREHOUSE => 'Arrived at warehouse',
-            OrderLineItem::FULFILLMENT_READY_FOR_SHIPMENT => 'Ready for shipment',
+            OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE => 'In transit to WH',
+            OrderLineItem::FULFILLMENT_ARRIVED_AT_WAREHOUSE => 'At warehouse',
+            OrderLineItem::FULFILLMENT_READY_FOR_SHIPMENT => 'Ready to ship',
             null, '' => '—',
             default => (string) $status,
         };

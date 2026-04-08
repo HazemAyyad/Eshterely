@@ -6,8 +6,8 @@
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div>
-            <h5 class="mb-0">{{ __('admin.procurement_line_items') }}</h5>
-            <p class="small text-muted mb-0">{{ __('admin.procurement_line_items_help_v2') }}</p>
+            <h5 class="mb-0">{{ __('admin.order_items_card_title') }}</h5>
+            <p class="small text-muted mb-0">{{ __('admin.order_items_card_help') }}</p>
         </div>
     </div>
     <div class="card-body p-0">
@@ -18,7 +18,7 @@
                         <th style="min-width:140px">{{ __('admin.product') }}</th>
                         <th>{{ __('admin.store') }}</th>
                         <th class="text-center">{{ __('admin.qty') }}</th>
-                        <th style="min-width:120px">{{ __('admin.procurement_status') }}</th>
+                        <th style="min-width:120px">{{ __('admin.item_fulfillment_stage') }}</th>
                         <th style="min-width:100px">{{ __('admin.store_tracking') }}</th>
                         <th style="min-width:100px">{{ __('admin.purchase_notes') }}</th>
                         <th style="min-width:130px">{{ __('admin.wh_receive_status_col') }}</th>
