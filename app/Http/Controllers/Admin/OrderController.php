@@ -112,6 +112,15 @@ class OrderController extends Controller
         $fulfillmentStages = $fulfillmentPresented['fulfillment_stages'];
         $orderFulfillmentState = $fulfillmentPresented['order_fulfillment_state'];
 
+        $customerDisplayName = null;
+        if ($order->user) {
+            $u = $order->user;
+            $customerDisplayName = trim((string) ($u->full_name ?: $u->display_name ?: $u->name));
+            if ($customerDisplayName === '') {
+                $customerDisplayName = $u->email ?? $u->phone ?? ('#'.$u->id);
+            }
+        }
+
         return view('admin.orders.show', compact(
             'order',
             'priceLines',
@@ -120,7 +129,8 @@ class OrderController extends Controller
             'shipmentEventTypes',
             'fulfillmentSummary',
             'fulfillmentStages',
-            'orderFulfillmentState'
+            'orderFulfillmentState',
+            'customerDisplayName'
         ));
     }
 

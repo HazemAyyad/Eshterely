@@ -4,13 +4,12 @@
 @endphp
 
 <div class="card border-0 shadow-sm mb-3">
-    <div class="card-header py-3">
+    <div class="card-header py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
         <h5 class="mb-0">{{ __('admin.fulfillment_summary_title') }}</h5>
-        <p class="small text-muted mb-0 mt-1">{{ __('admin.fulfillment_summary_subtitle') }}</p>
         @if($state !== 'no_items')
-            <div class="mt-2 d-flex flex-wrap align-items-center gap-2">
-                <span class="small text-muted">{{ __('admin.order_fulfillment_state_label') }}</span>
-                <span class="badge rounded-pill bg-primary">{{ __('admin.order_fulfillment_state_'.$state) }}</span>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <span class="small text-muted">{{ __('admin.order_fulfillment_state_label') }}:</span>
+                <span class="badge rounded-pill bg-primary fs-6">{{ __('admin.order_fulfillment_state_'.$state) }}</span>
             </div>
         @endif
     </div>

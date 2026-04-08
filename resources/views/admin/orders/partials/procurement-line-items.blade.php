@@ -5,10 +5,7 @@
 
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <div>
-            <h5 class="mb-0">{{ __('admin.order_items_card_title') }}</h5>
-            <p class="small text-muted mb-0">{{ __('admin.order_items_card_help') }}</p>
-        </div>
+        <h5 class="mb-0">{{ __('admin.order_items_card_title') }}</h5>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">

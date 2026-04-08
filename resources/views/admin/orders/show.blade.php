@@ -3,7 +3,13 @@
 @section('title', __('admin.order_number') . ' ' . $order->order_number)
 
 @section('content')
-<h4 class="py-4 mb-4">{{ __('admin.order_number') }} {{ $order->order_number }}</h4>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 py-4 mb-2">
+    <h4 class="mb-0">{{ __('admin.order_number') }} {{ $order->order_number }}</h4>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{{ route('admin.warehouse.index') }}" class="btn btn-sm btn-outline-primary">{{ __('admin.link_warehouse') }}</a>
+        <a href="{{ route('admin.shipments.index') }}" class="btn btn-sm btn-outline-primary">{{ __('admin.link_shipments') }}</a>
+    </div>
+</div>
 
 @if (session('success'))
     <div class="alert alert-success alert-dismissible">{{ session('success') }}
@@ -16,18 +22,7 @@
     </div>
 @endif
 
-<div class="alert alert-light border shadow-sm mb-4">
-    <div class="d-flex flex-wrap gap-3 align-items-center justify-content-between">
-        <div>
-            <strong>{{ __('admin.ops_flow_title') }}</strong>
-            <span class="text-muted ms-1">{{ __('admin.ops_flow_body') }}</span>
-        </div>
-        <div class="d-flex flex-wrap gap-2">
-            <a href="{{ route('admin.warehouse.index') }}" class="btn btn-sm btn-outline-primary">{{ __('admin.menu_warehouse_ops') }}</a>
-            <a href="{{ route('admin.shipments.index') }}" class="btn btn-sm btn-outline-primary">{{ __('admin.menu_shipments_ops') }}</a>
-        </div>
-    </div>
-</div>
+@include('admin.orders.partials.order-customer')
 
 @include('admin.orders.partials.fulfillment-summary')
 @include('admin.orders.partials.fulfillment-stage-strip')
@@ -176,8 +171,7 @@
 </div>
 
 <div class="mt-5 mb-2">
-    <h5 class="mb-1">{{ __('admin.checkout_shipments_section_title') }}</h5>
-    <p class="text-muted small mb-0">{{ __('admin.checkout_shipments_section_help') }}</p>
+    <h5 class="mb-0">{{ __('admin.checkout_shipments_section_title') }}</h5>
 </div>
 
 @foreach($order->shipments as $shipment)
