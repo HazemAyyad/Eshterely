@@ -86,6 +86,8 @@ class OrderController extends Controller
             'shipments.trackingEvents',
             'shipments.events',
             'lineItems.shipment.order',
+            'lineItems.cartItem',
+            'lineItems.importedProduct',
             'lineItems.shipmentItems.shipment.payments',
             'lineItems.latestWarehouseReceipt',
             'user',

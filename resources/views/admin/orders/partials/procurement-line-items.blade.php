@@ -1,6 +1,7 @@
 @php
     use App\Models\OrderLineItem;
     use App\Support\AdminFulfillmentLabels;
+    use App\Support\AdminOrderLineItemDisplay;
 @endphp
 
 <div class="card border-0 shadow-sm mb-4">
@@ -14,7 +15,11 @@
                     <tr>
                         <th style="min-width:140px">{{ __('admin.product') }}</th>
                         <th>{{ __('admin.store') }}</th>
+                        <th style="min-width:88px">{{ __('admin.source_link') }}</th>
+                        <th class="text-end" style="min-width:72px">{{ __('admin.unit_price') }}</th>
                         <th class="text-center">{{ __('admin.qty') }}</th>
+                        <th class="text-end" style="min-width:72px">{{ __('admin.service_fee') }}</th>
+                        <th class="text-end" style="min-width:88px">{{ __('admin.first_payment_total') }}</th>
                         <th style="min-width:120px">{{ __('admin.item_fulfillment_stage') }}</th>
                         <th style="min-width:100px">{{ __('admin.store_tracking') }}</th>
                         <th style="min-width:100px">{{ __('admin.purchase_notes') }}</th>
@@ -34,11 +39,26 @@
                                 OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE,
                             ], true);
                             $receipt = $li->latestWarehouseReceipt;
+                            $sourceUrl = AdminOrderLineItemDisplay::sourceProductUrl($li);
+                            $unitPrice = AdminOrderLineItemDisplay::unitPrice($li);
+                            $serviceFee = AdminOrderLineItemDisplay::serviceFeeAmount($li);
+                            $firstPay = AdminOrderLineItemDisplay::firstPaymentTotal($li);
+                            $cur = $order->currency ?? 'USD';
                         @endphp
                         <tr>
                             <td>{{ Str::limit($li->name, 56) }}</td>
                             <td>{{ $li->store_name ?? '—' }}</td>
+                            <td class="small">
+                                @if($sourceUrl)
+                                    <a href="{{ $sourceUrl }}" target="_blank" rel="noopener noreferrer">{{ __('admin.source_link_open') }}</a>
+                                @else
+                                    —
+                                @endif
+                            </td>
+                            <td class="text-end small text-nowrap">{{ number_format($unitPrice, 2) }} {{ $cur }}</td>
                             <td class="text-center">{{ $li->quantity }}</td>
+                            <td class="text-end small text-nowrap">{{ $serviceFee !== null ? number_format($serviceFee, 2).' '.$cur : '—' }}</td>
+                            <td class="text-end small text-nowrap">{{ $firstPay !== null ? number_format($firstPay, 2).' '.$cur : '—' }}</td>
                             <td><span class="badge bg-{{ $p['badge'] }}">{{ $p['label'] }}</span></td>
                             <td class="small">{{ $tracking !== '' ? Str::limit($tracking, 36) : '—' }}</td>
                             <td class="small">{{ $notes !== '' ? Str::limit($notes, 40) : '—' }}</td>

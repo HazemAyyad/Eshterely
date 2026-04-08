@@ -170,9 +170,10 @@
     </div>
 </div>
 
-<div class="mt-5 mb-2">
-    <h5 class="mb-0">{{ __('admin.checkout_shipments_section_title') }}</h5>
-</div>
+<details class="border rounded mt-5 mb-2">
+    <summary class="px-3 py-2 bg-light small fw-semibold user-select-none" style="cursor:pointer">{{ __('admin.checkout_shipments_collapsed_title') }}</summary>
+    <div class="p-3 border-top bg-body">
+        <p class="small text-muted mb-3">{{ __('admin.checkout_shipments_collapsed_help') }}</p>
 
 @foreach($order->shipments as $shipment)
 <div class="card mt-3">
@@ -270,32 +271,6 @@
                 <button type="submit" class="btn btn-sm btn-primary mt-2">{{ __('admin.apply_override') }}</button>
             </form>
         </div>
-        <table class="table table-sm mt-3">
-            <thead><tr><th>{{ __('admin.product') }}</th><th>{{ __('admin.store') }}</th><th>{{ __('admin.price') }}</th><th>{{ __('admin.qty') }}</th><th>{{ __('admin.source_carrier') }}</th></tr></thead>
-            <tbody>
-                @foreach($shipment->lineItems as $li)
-                <tr>
-                    <td>{{ $li->name }}</td>
-                    <td>{{ $li->store_name ?? '-' }}</td>
-                    <td>{{ number_format($li->price, 2) }}</td>
-                    <td>{{ $li->quantity }}</td>
-                    <td>{{ $li->source_type ?? '-' }} / {{ $li->review_metadata['carrier'] ?? '-' }}</td>
-                </tr>
-                @if($li->product_snapshot || $li->pricing_snapshot || $li->missing_fields)
-                <tr class="table-light">
-                    <td colspan="5" class="small">
-                        @if($li->product_snapshot) <strong>Product snapshot:</strong> {{ json_encode($li->product_snapshot) }} @endif
-                        @if($li->pricing_snapshot) <strong>Pricing snapshot:</strong> {{ json_encode($li->pricing_snapshot) }} @endif
-                        @if($li->missing_fields) <strong>Missing fields:</strong> {{ json_encode($li->missing_fields) }} @endif
-                        @if($li->estimated) <span class="badge bg-info">estimated</span> @endif
-                        @if($li->imported_product_id) Imported ID: {{ $li->imported_product_id }} @endif
-                        @if($li->cart_item_id) Cart item ID: {{ $li->cart_item_id }} @endif
-                    </td>
-                </tr>
-                @endif
-                @endforeach
-            </tbody>
-        </table>
         @if ($shipment->trackingEvents->isNotEmpty())
         <h6 class="mt-3">{{ __('admin.tracking_events') }}</h6>
         <ul class="list-unstyled">
@@ -307,6 +282,8 @@
     </div>
 </div>
 @endforeach
+    </div>
+</details>
 
 @if ($priceLines->isNotEmpty())
 <div class="card mt-4">
