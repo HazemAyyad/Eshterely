@@ -550,4 +550,11 @@ return [
     'purchase_details' => 'تفاصيل الشراء / ملاحظات',
     'purchase_details_placeholder' => 'ملاحظات المورد، الحالة، الفروقات…',
     'assigned_buyer' => 'المشتري / المسؤول',
+    'receive_dimensions_hint' => 'الأبعاد طول × عرض × ارتفاع — استخدم وحدة واحدة باستمرار (مثل سم أو بوصة)؛ لا يُعرض تحويل هنا.',
+    'dim_l' => 'الطول',
+    'dim_w' => 'العرض',
+    'dim_h' => 'الارتفاع',
+    'procurement_modal_fields_intro' => 'سجّل ما تم شراؤه وكيف يُتتبّع قبل استلام المستودع.',
+    'procurement_modal_fieldset_legend' => 'بيانات المشتريات',
+    'procurement_modal_no_transition_note' => 'حالة البند تجاوزت الشراء/النقل. يمكنك تحديث الحقول؛ استخدم المستودع عند وصول العنصر.',
 ];

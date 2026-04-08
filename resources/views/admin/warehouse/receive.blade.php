@@ -53,17 +53,17 @@
                     </label>
                     <input type="number" step="0.01" min="0" name="additional_fee_amount" class="form-control" value="{{ old('additional_fee_amount', '0') }}">
                 </div>
-                <div class="col-12"><span class="text-muted small">{{ __('admin.dims_lwh') }}</span></div>
+                <div class="col-12"><span class="text-muted small">{{ __('admin.receive_dimensions_hint') }}</span></div>
                 <div class="col-md-3">
-                    <label class="form-label">L</label>
+                    <label class="form-label">{{ __('admin.dim_l') }}</label>
                     <input type="number" step="0.0001" min="0" name="received_length" class="form-control" value="{{ old('received_length') }}">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">W</label>
+                    <label class="form-label">{{ __('admin.dim_w') }}</label>
                     <input type="number" step="0.0001" min="0" name="received_width" class="form-control" value="{{ old('received_width') }}">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">H</label>
+                    <label class="form-label">{{ __('admin.dim_h') }}</label>
                     <input type="number" step="0.0001" min="0" name="received_height" class="form-control" value="{{ old('received_height') }}">
                 </div>
                 <div class="col-md-3">

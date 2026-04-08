@@ -557,4 +557,11 @@ return [
     'purchase_details' => 'Purchase details / remarks',
     'purchase_details_placeholder' => 'Supplier notes, condition, discrepancies…',
     'assigned_buyer' => 'Buyer / assignee',
+    'receive_dimensions_hint' => 'Dimensions L × W × H — use one consistent unit (e.g. cm or in); no conversion shown here.',
+    'dim_l' => 'Length',
+    'dim_w' => 'Width',
+    'dim_h' => 'Height',
+    'procurement_modal_fields_intro' => 'Record what was bought and how it is tracked before warehouse receiving.',
+    'procurement_modal_fieldset_legend' => 'Procurement data',
+    'procurement_modal_no_transition_note' => 'Line status is past purchase / in-transit stages. You can still update these fields; use Warehouse when the item arrives.',
 ];
