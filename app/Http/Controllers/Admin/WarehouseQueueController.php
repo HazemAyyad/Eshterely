@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
 use App\Support\AdminFulfillmentLabels;
+use App\Support\AdminUserDisplay;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 
@@ -80,11 +81,12 @@ class WarehouseQueueController extends Controller
             ->addColumn('customer', function (OrderLineItem $li) {
                 $u = $li->shipment?->order?->user;
                 if (! $u) {
-                    return '-';
+                    return '—';
                 }
-                $c = e($u->phone ?? $u->email ?? ('#'.$u->id));
+                $name = e(AdminUserDisplay::primaryName($u));
+                $phone = $u->phone ? '<div class="text-muted small">'.e($u->phone).'</div>' : '';
 
-                return '<a href="'.route('admin.users.show', $u).'">'.$c.'</a>';
+                return '<div><a href="'.route('admin.users.show', $u).'" class="fw-semibold">'.$name.'</a></div>'.$phone;
             })
             ->addColumn('product', fn (OrderLineItem $li) => e(Str::limit($li->name, 60)))
             ->addColumn('store_name', fn (OrderLineItem $li) => e($li->store_name ?? '-'))
@@ -100,10 +102,17 @@ class WarehouseQueueController extends Controller
             })
             ->addColumn('actions', function (OrderLineItem $li) use ($showReceive) {
                 $order = route('admin.orders.show', $li->shipment->order_id);
+                $on = e($li->shipment?->order?->order_number ?? '—');
+                $pn = e(Str::limit($li->name, 80));
                 $html = '<div class="d-flex flex-wrap gap-1 align-items-center">';
                 if ($showReceive) {
-                    $html .= '<a href="'.route('admin.warehouse.receive-form', $li).'" class="btn btn-sm btn-primary">'
-                        .e(__('admin.warehouse_receive')).'</a>';
+                    $receiveUrl = route('admin.warehouse.receive', $li);
+                    $html .= '<button type="button" class="btn btn-sm btn-primary js-wh-receive-modal" data-bs-toggle="modal" data-bs-target="#warehouseReceiveModal"'
+                        .' data-receive-url="'.e($receiveUrl).'"'
+                        .' data-order-number="'.$on.'"'
+                        .' data-product-name="'.$pn.'">'
+                        .e(__('admin.warehouse_receive')).'</button>';
+                    $html .= '<a href="'.route('admin.warehouse.receive-form', $li).'" class="btn btn-sm btn-outline-secondary">'.e(__('admin.warehouse_receive_full_page')).'</a>';
                 }
                 $html .= '<a href="'.$order.'" class="btn btn-sm btn-outline-secondary">'.e(__('admin.source_order')).'</a>';
                 $html .= '</div>';

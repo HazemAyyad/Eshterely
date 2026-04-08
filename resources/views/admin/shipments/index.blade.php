@@ -26,7 +26,7 @@
             <thead>
                 <tr>
                     <th>ID</th>
-                    <th>{{ __('admin.user_name') }}</th>
+                    <th>{{ __('admin.customer') }}</th>
                     <th>{{ __('admin.shipping_address') }}</th>
                     <th>{{ __('admin.qty') }}</th>
                     <th>{{ __('admin.payment') }}</th>

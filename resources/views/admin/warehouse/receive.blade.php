@@ -35,7 +35,7 @@
 <div class="card border-0 shadow-sm">
     <div class="card-header"><h5 class="mb-0">{{ __('admin.receive_item_title') }}</h5></div>
     <div class="card-body">
-        <form method="POST" action="{{ route('admin.warehouse.receive', $orderLineItem) }}">
+        <form method="POST" action="{{ route('admin.warehouse.receive', $orderLineItem) }}" enctype="multipart/form-data">
             @csrf
             <div class="row g-3">
                 <div class="col-md-4">
@@ -47,7 +47,10 @@
                     <input type="number" step="0.0001" min="0" name="received_weight" class="form-control" value="{{ old('received_weight') }}">
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">{{ __('admin.additional_fee') }}</label>
+                    <label class="form-label d-flex align-items-center gap-1">
+                        {{ __('admin.additional_fee') }}
+                        <span class="text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ __('admin.tooltip_additional_fee') }}"><i class="ti tabler-help-circle"></i></span>
+                    </label>
                     <input type="number" step="0.01" min="0" name="additional_fee_amount" class="form-control" value="{{ old('additional_fee_amount', '0') }}">
                 </div>
                 <div class="col-12"><span class="text-muted small">{{ __('admin.dims_lwh') }}</span></div>
@@ -64,12 +67,21 @@
                     <input type="number" step="0.0001" min="0" name="received_height" class="form-control" value="{{ old('received_height') }}">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">{{ __('admin.special_handling') }}</label>
+                    <label class="form-label d-flex align-items-center gap-1">
+                        {{ __('admin.special_handling') }}
+                        <span class="text-muted" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ __('admin.tooltip_special_handling') }}"><i class="ti tabler-help-circle"></i></span>
+                    </label>
                     <input type="text" name="special_handling_type" class="form-control" maxlength="50" value="{{ old('special_handling_type') }}">
                 </div>
                 <div class="col-12">
-                    <label class="form-label">{{ __('admin.images_urls_help') }}</label>
-                    <textarea name="images_text" class="form-control" rows="3" placeholder="https://...">{{ old('images_text') }}</textarea>
+                    <label class="form-label">{{ __('admin.receipt_images_upload') }}</label>
+                    <input type="file" name="receipt_images[]" class="form-control" accept="image/*" multiple>
+                    <div class="form-text">{{ __('admin.receipt_images_upload_help') }}</div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">{{ __('admin.images_urls_optional') }}</label>
+                    <textarea name="images_text" class="form-control" rows="2" placeholder="https://...">{{ old('images_text') }}</textarea>
+                    <div class="form-text">{{ __('admin.images_urls_optional_help') }}</div>
                 </div>
                 <div class="col-12">
                     <label class="form-label">{{ __('admin.notes') }} / condition</label>
@@ -87,3 +99,13 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        new bootstrap.Tooltip(el);
+    });
+});
+</script>
+@endpush

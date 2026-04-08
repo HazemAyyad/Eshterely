@@ -4,9 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\OrderLineItem;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
 
 class OrderLineItemProcurementController extends Controller
 {
@@ -25,25 +25,31 @@ class OrderLineItemProcurementController extends Controller
             if ($request->ajax() || $request->wantsJson()) {
                 return response()->json(['success' => false, 'message' => $msg], 422);
             }
+
             return redirect()->back()->with('error', $msg);
         }
 
         $validated = $request->validate([
-            // `procurement_action` avoids clashing with HTML form `action` URL (see admin ajax-submit-form).
             'procurement_action' => 'nullable|string|in:mark_purchased,mark_in_transit',
             'action' => 'nullable|string|in:mark_purchased,mark_in_transit',
             'store_tracking' => 'nullable|string|max:255',
             'purchase_notes' => 'nullable|string|max:2000',
+            'purchase_details' => 'nullable|string|max:5000',
+            'actual_purchase_price' => 'nullable|numeric|min:0',
+            'assigned_buyer' => 'nullable|string|max:120',
         ]);
 
         $procurementAction = $validated['procurement_action'] ?? $validated['action'] ?? null;
 
         $meta = $orderLineItem->review_metadata ?? [];
-        if ($request->has('store_tracking')) {
-            $meta['store_tracking'] = $validated['store_tracking'];
+        foreach (['store_tracking', 'purchase_notes', 'purchase_details', 'assigned_buyer'] as $key) {
+            if (array_key_exists($key, $validated)) {
+                $meta[$key] = $validated[$key];
+            }
         }
-        if ($request->has('purchase_notes')) {
-            $meta['purchase_notes'] = $validated['purchase_notes'];
+        if ($request->has('actual_purchase_price')) {
+            $v = $request->input('actual_purchase_price');
+            $meta['actual_purchase_price'] = ($v === null || $v === '') ? null : round((float) $v, 2);
         }
 
         $status = (string) $orderLineItem->fulfillment_status;
@@ -58,6 +64,7 @@ class OrderLineItemProcurementController extends Controller
                     if ($request->ajax() || $request->wantsJson()) {
                         return response()->json(['success' => false, 'message' => $msg], 422);
                     }
+
                     return redirect()->back()->with('error', $msg);
                 }
                 $status = OrderLineItem::FULFILLMENT_PURCHASED;
@@ -72,6 +79,7 @@ class OrderLineItemProcurementController extends Controller
                     if ($request->ajax() || $request->wantsJson()) {
                         return response()->json(['success' => false, 'message' => $msg], 422);
                     }
+
                     return redirect()->back()->with('error', $msg);
                 }
                 $status = OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE;
@@ -86,6 +94,7 @@ class OrderLineItemProcurementController extends Controller
         if ($request->ajax() || $request->wantsJson()) {
             return response()->json(['success' => true, 'message' => __('admin.success')]);
         }
+
         return redirect()->back()->with('success', __('admin.success'));
     }
 }

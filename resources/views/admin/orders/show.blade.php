@@ -82,9 +82,9 @@
                 <p><strong>{{ __('admin.estimated_delivery') }}:</strong> {{ $order->estimated_delivery ?? '-' }}</p>
                 <p><strong>{{ __('admin.shipping_address') }}:</strong> {{ Str::limit($order->shipping_address_text ?? '-', 80) }}</p>
 
-                <details class="mt-3 pt-3 border-top">
-                    <summary class="small text-muted">{{ __('admin.checkout_review_legacy_section') }}</summary>
-                    <p class="small text-muted mb-2 mt-2">{{ __('admin.checkout_review_legacy_help') }}</p>
+                <details class="mt-3 pt-3 border-top border-primary border-opacity-25 rounded px-2 pb-2" @if($order->needs_review || ! $order->reviewed_at) open @endif>
+                    <summary class="fw-semibold text-body">{{ __('admin.checkout_review_gate_title') }}</summary>
+                    <p class="small text-muted mb-2 mt-2">{{ __('admin.checkout_review_gate_help') }}</p>
                     <p class="small mb-1"><strong>{{ __('admin.needs_review') }}:</strong> {{ $order->needs_review ? __('admin.yes') : __('admin.no') }}</p>
                     <p class="small mb-3"><strong>{{ __('admin.reviewed_at') }}:</strong> {{ $order->reviewed_at?->format('Y-m-d H:i') ?? '—' }}</p>
                     @if($order->needs_review || ! $order->reviewed_at)

@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
 use App\Support\AdminFulfillmentLabels;
+use App\Support\AdminUserDisplay;
 use Illuminate\Support\Str;
 
 class OutboundShipmentsAdminController extends Controller
@@ -31,11 +32,12 @@ class OutboundShipmentsAdminController extends Controller
             ->addColumn('customer', function (Shipment $s) {
                 $u = $s->user;
                 if (! $u) {
-                    return '-';
+                    return '—';
                 }
-                $label = e($u->phone ?? $u->email ?? ('#'.$u->id));
+                $name = e(AdminUserDisplay::primaryName($u));
+                $phone = $u->phone ? '<div class="text-muted small">'.e($u->phone).'</div>' : '';
 
-                return '<a href="'.route('admin.users.show', $u).'">'.$label.'</a>';
+                return '<div><a href="'.route('admin.users.show', $u).'" class="fw-semibold">'.$name.'</a></div>'.$phone;
             })
             ->addColumn('destination', function (Shipment $s) {
                 $a = $s->destinationAddress;

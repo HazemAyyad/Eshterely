@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\OrderShipment;
 use App\Models\OrderShipmentEvent;
 use App\Support\AdminOrderFulfillmentPresenter;
+use App\Support\AdminUserDisplay;
 use App\Services\Admin\AdminOrderOperationService;
 use App\Services\Admin\OrderStatusWorkflowService;
 use App\Services\Admin\ShipmentOperationService;
@@ -32,7 +33,11 @@ class OrderController extends Controller
 
     public function data(Request $request): JsonResponse
     {
-        $query = Order::with('user', 'payments', 'shipments.lineItems')
+        $query = Order::with([
+            'user',
+            'payments',
+            'lineItems.shipmentItems.shipment',
+        ])
             ->orderByDesc('updated_at');
 
         if ($request->filled('status')) {
@@ -43,39 +48,65 @@ class OrderController extends Controller
         }
 
         return DataTables::eloquent($query)
-            ->addColumn('user_contact', fn (Order $o) => $o->user?->phone ?? $o->user?->email ?? '-')
+            ->addColumn('customer', function (Order $o) {
+                $u = $o->user;
+                if (! $u) {
+                    return '—';
+                }
+                $name = e(AdminUserDisplay::primaryName($u));
+                $phone = $u->phone ? '<div class="text-muted small">'.e($u->phone).'</div>' : '';
+
+                return '<div><a href="'.route('admin.users.show', $u).'" class="fw-semibold">'.$name.'</a></div>'.$phone;
+            })
+            ->addColumn('fulfillment_state', function (Order $o) {
+                $hasPaid = $o->payments->contains(fn ($p) => $p->status->value === 'paid');
+                $state = AdminOrderFulfillmentPresenter::deriveOrderFulfillmentState($o->lineItems, $hasPaid);
+                $badge = match ($state) {
+                    'delivered' => 'success',
+                    'fully_shipped' => 'info',
+                    'partially_shipped' => 'info',
+                    'fully_at_warehouse' => 'primary',
+                    'partially_at_warehouse' => 'primary',
+                    'fully_purchased' => 'secondary',
+                    'partially_purchased' => 'warning',
+                    'awaiting_purchase' => 'secondary',
+                    'no_items' => 'secondary',
+                    default => 'secondary',
+                };
+
+                return '<span class="badge bg-'.$badge.'">'.e(__('admin.order_fulfillment_state_'.$state)).'</span>';
+            })
             ->addColumn('payment_status', function (Order $o) {
                 if ($o->status === Order::STATUS_PAID) {
                     return '<span class="badge bg-success">paid</span>';
                 }
                 $paid = $o->payments->contains(fn ($p) => $p->status->value === 'paid');
+
                 return $paid ? '<span class="badge bg-success">paid</span>' : '<span class="badge bg-secondary">pending</span>';
             })
-            ->editColumn('status', fn (Order $o) => '<span class="badge bg-' . $this->statusBadgeClass($o->status) . '">' . e($o->status) . '</span>')
-            ->addColumn('estimated', fn (Order $o) => $o->estimated ? '<span class="badge bg-info">estimated</span>' : '-')
-            ->addColumn('needs_review', fn (Order $o) => $o->needs_review ? '<span class="badge bg-warning">review</span>' : '-')
-            ->addColumn('order_total_snapshot', fn (Order $o) => $o->order_total_snapshot !== null ? number_format((float) $o->order_total_snapshot, 2) . ' ' . $o->currency : number_format((float) $o->total_amount, 2) . ' ' . $o->currency)
-            ->addColumn('payment_reference', function (Order $o) {
-                $paid = $o->payments->first(fn ($p) => $p->paid_at);
-                return $paid !== null ? $paid->reference : '-';
+            ->editColumn('status', fn (Order $o) => '<span class="badge bg-'.$this->statusBadgeClass($o->status).'">'.e($o->status).'</span>')
+            ->addColumn('order_total_snapshot', fn (Order $o) => $o->order_total_snapshot !== null ? number_format((float) $o->order_total_snapshot, 2).' '.$o->currency : number_format((float) $o->total_amount, 2).' '.$o->currency)
+            ->addColumn('paid_at', function (Order $o) {
+                $p = $o->payments->filter(fn ($x) => $x->paid_at !== null)->sortBy('paid_at')->first();
+
+                return $p && $p->paid_at ? e($p->paid_at->format('Y-m-d H:i')) : '—';
             })
-            ->addColumn('source_carrier', function (Order $o) {
-                $first = $o->shipments->flatMap(fn ($s) => $s->lineItems)->first();
-                if (! $first) {
-                    return '-';
-                }
-                $carrier = $first->review_metadata['carrier'] ?? $first->pricing_snapshot['carrier'] ?? null;
-                return $carrier ? e($carrier) : '-';
-            })
-            ->editColumn('total_amount', fn (Order $o) => number_format((float) $o->total_amount, 2) . ' ' . $o->currency)
-            ->editColumn('placed_at', fn (Order $o) => $o->placed_at?->format('Y-m-d') ?? '-')
-            ->addColumn('actions', fn (Order $o) => '<a href="' . route('admin.orders.show', $o) . '" class="btn btn-text-secondary rounded-pill waves-effect btn-icon" title="' . __('admin.show') . '"><i class="icon-base ti tabler-eye icon-22px"></i></a>')
-            ->rawColumns(['status', 'payment_status', 'estimated', 'needs_review', 'actions'])
+            ->editColumn('placed_at', fn (Order $o) => $o->placed_at?->format('Y-m-d H:i') ?? '—')
+            ->addColumn('actions', fn (Order $o) => '<a href="'.route('admin.orders.show', $o).'" class="btn btn-sm btn-primary">'.e(__('admin.view')).'</a>')
+            ->rawColumns(['customer', 'fulfillment_state', 'payment_status', 'status', 'actions'])
             ->filterColumn('order_number', fn ($q, $keyword) => $q)
-            ->filterColumn('user_contact', fn ($q, $keyword) => $q->where(function ($q2) use ($keyword) {
-                $q2->where('order_number', 'like', "%{$keyword}%")
-                    ->orWhereHas('user', fn ($u) => $u->where('phone', 'like', "%{$keyword}%")->orWhere('email', 'like', "%{$keyword}%"));
-            }))
+            ->filterColumn('customer', function ($q, $keyword) {
+                $q->where(function ($q2) use ($keyword) {
+                    $q2->where('order_number', 'like', "%{$keyword}%")
+                        ->orWhereHas('user', function ($u) use ($keyword) {
+                            $u->where('phone', 'like', "%{$keyword}%")
+                                ->orWhere('email', 'like', "%{$keyword}%")
+                                ->orWhere('name', 'like', "%{$keyword}%")
+                                ->orWhere('full_name', 'like', "%{$keyword}%")
+                                ->orWhere('display_name', 'like', "%{$keyword}%");
+                        });
+                });
+            })
             ->toJson();
     }
 

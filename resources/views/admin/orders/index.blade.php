@@ -33,18 +33,15 @@
         <table id="orders-table" class="table table-hover table-striped">
             <thead>
                 <tr>
-                    <th>#</th>
                     <th>{{ __('admin.order_number') }}</th>
-                    <th>User</th>
-                    <th>Origin</th>
-                    <th>Payment</th>
-                    <th>{{ __('admin.status') }}</th>
-                    <th>Est.</th>
-                    <th>Review</th>
-                    <th>Total (snapshot)</th>
-                    <th>Payment Ref.</th>
-                    <th>Carrier</th>
-                    <th>{{ __('admin.date') }}</th>
+                    <th>{{ __('admin.customer') }}</th>
+                    <th>{{ __('admin.origin') }}</th>
+                    <th>{{ __('admin.order_fulfillment_state_label') }}</th>
+                    <th>{{ __('admin.payment') }}</th>
+                    <th>{{ __('admin.order_record_status') }}</th>
+                    <th>{{ __('admin.total') }}</th>
+                    <th>{{ __('admin.paid_at') }}</th>
+                    <th>{{ __('admin.placed_at') }}</th>
                     <th>{{ __('admin.actions') }}</th>
                 </tr>
             </thead>
@@ -73,18 +70,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 d.origin = $('#orders-origin').val();
             }
         },
+        order: [[8, 'desc']],
         columns: [
-            { data: 'id', name: 'id' },
             { data: 'order_number', name: 'order_number' },
-            { data: 'user_contact', name: 'user_contact' },
+            { data: 'customer', name: 'customer', orderable: false, searchable: true },
             { data: 'origin', name: 'origin' },
+            { data: 'fulfillment_state', name: 'fulfillment_state', orderable: false, searchable: false },
             { data: 'payment_status', name: 'payment_status', orderable: false, searchable: false },
             { data: 'status', name: 'status' },
-            { data: 'estimated', name: 'estimated', orderable: false, searchable: false },
-            { data: 'needs_review', name: 'needs_review', orderable: false, searchable: false },
             { data: 'order_total_snapshot', name: 'order_total_snapshot', orderable: false, searchable: false },
-            { data: 'payment_reference', name: 'payment_reference', orderable: false, searchable: false },
-            { data: 'source_carrier', name: 'source_carrier', orderable: false, searchable: false },
+            { data: 'paid_at', name: 'paid_at', orderable: false, searchable: false },
             { data: 'placed_at', name: 'placed_at' },
             { data: 'actions', name: 'actions', orderable: false, searchable: false }
         ],

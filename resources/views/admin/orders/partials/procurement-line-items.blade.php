@@ -2,6 +2,7 @@
     use App\Models\OrderLineItem;
     use App\Support\AdminFulfillmentLabels;
     use App\Support\AdminOrderLineItemDisplay;
+    use App\Support\AdminWarehouseReceiptImages;
 @endphp
 
 <div class="card border-0 shadow-sm mb-4">
@@ -21,11 +22,9 @@
                         <th class="text-end" style="min-width:72px">{{ __('admin.service_fee') }}</th>
                         <th class="text-end" style="min-width:88px">{{ __('admin.first_payment_total') }}</th>
                         <th style="min-width:120px">{{ __('admin.item_fulfillment_stage') }}</th>
-                        <th style="min-width:100px">{{ __('admin.store_tracking') }}</th>
-                        <th style="min-width:100px">{{ __('admin.purchase_notes') }}</th>
                         <th style="min-width:130px">{{ __('admin.wh_receive_status_col') }}</th>
                         <th style="min-width:160px">{{ __('admin.outbound_shipments_col') }}</th>
-                        <th style="min-width:240px">{{ __('admin.actions') }}</th>
+                        <th style="min-width:120px">{{ __('admin.actions') }}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -34,6 +33,9 @@
                             $p = AdminFulfillmentLabels::lineItemFulfillment($li->fulfillment_status);
                             $tracking = $li->review_metadata['store_tracking'] ?? '';
                             $notes = $li->review_metadata['purchase_notes'] ?? '';
+                            $details = $li->review_metadata['purchase_details'] ?? '';
+                            $buyer = $li->review_metadata['assigned_buyer'] ?? '';
+                            $actualPrice = $li->review_metadata['actual_purchase_price'] ?? '';
                             $canReceive = in_array($li->fulfillment_status, [
                                 OrderLineItem::FULFILLMENT_PURCHASED,
                                 OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE,
@@ -44,6 +46,15 @@
                             $serviceFee = AdminOrderLineItemDisplay::serviceFeeAmount($li);
                             $firstPay = AdminOrderLineItemDisplay::firstPaymentTotal($li);
                             $cur = $order->currency ?? 'USD';
+                            $procPayload = [
+                                'action' => route('admin.order-line-items.procurement', $li),
+                                'store_tracking' => $tracking,
+                                'purchase_notes' => $notes,
+                                'purchase_details' => $details,
+                                'assigned_buyer' => $buyer,
+                                'actual_purchase_price' => $actualPrice,
+                                'fulfillment_status' => $li->fulfillment_status,
+                            ];
                         @endphp
                         <tr>
                             <td>{{ Str::limit($li->name, 56) }}</td>
@@ -60,12 +71,29 @@
                             <td class="text-end small text-nowrap">{{ $serviceFee !== null ? number_format($serviceFee, 2).' '.$cur : '—' }}</td>
                             <td class="text-end small text-nowrap">{{ $firstPay !== null ? number_format($firstPay, 2).' '.$cur : '—' }}</td>
                             <td><span class="badge bg-{{ $p['badge'] }}">{{ $p['label'] }}</span></td>
-                            <td class="small">{{ $tracking !== '' ? Str::limit($tracking, 36) : '—' }}</td>
-                            <td class="small">{{ $notes !== '' ? Str::limit($notes, 40) : '—' }}</td>
                             <td class="small">
                                 @if($receipt)
                                     <span class="badge bg-success">{{ __('admin.wh_received_badge') }}</span>
                                     <div class="text-muted mt-1">{{ $receipt->received_at?->format('Y-m-d H:i') ?? '—' }}</div>
+                                    @php
+                                        $receiptImgs = [];
+                                        if (is_array($receipt->images)) {
+                                            foreach ($receipt->images as $entry) {
+                                                if (is_string($entry) && $entry !== '') {
+                                                    $receiptImgs[] = AdminWarehouseReceiptImages::displayUrl($entry);
+                                                }
+                                            }
+                                        }
+                                    @endphp
+                                    @if(count($receiptImgs) > 0)
+                                        <div class="d-flex flex-wrap gap-1 mt-1">
+                                            @foreach(array_slice($receiptImgs, 0, 4) as $iu)
+                                                <a href="{{ $iu }}" target="_blank" rel="noopener noreferrer" title="{{ __('admin.receipt_images_upload') }}">
+                                                    <img src="{{ $iu }}" alt="" class="rounded border" width="36" height="36" style="object-fit:cover" loading="lazy">
+                                                </a>
+                                            @endforeach
+                                        </div>
+                                    @endif
                                 @elseif($canReceive)
                                     <span class="badge bg-warning text-dark">{{ __('admin.wh_awaiting_intake_badge') }}</span>
                                 @else
@@ -99,38 +127,16 @@
                                 @endif
                             </td>
                             <td>
-                                <form method="POST" action="{{ route('admin.order-line-items.procurement', $li) }}" class="ajax-submit-form mb-2">
-                                    @csrf
-                                    @method('PATCH')
-                                    <div class="input-group input-group-sm mb-1">
-                                        <span class="input-group-text">{{ __('admin.store_tracking') }}</span>
-                                        <input type="text" name="store_tracking" class="form-control" value="{{ old('store_tracking.'.$li->id, $tracking) }}" maxlength="255" autocomplete="off">
-                                    </div>
-                                    <div class="input-group input-group-sm mb-1">
-                                        <span class="input-group-text">{{ __('admin.purchase_notes') }}</span>
-                                        <input type="text" name="purchase_notes" class="form-control" value="{{ old('purchase_notes.'.$li->id, $notes) }}" maxlength="2000" autocomplete="off">
-                                    </div>
-                                    <button type="submit" class="btn btn-sm btn-outline-primary">{{ __('admin.save_procurement_notes') }}</button>
-                                </form>
-                                <div class="d-flex flex-wrap gap-1 mb-1">
-                                    <form method="POST" action="{{ route('admin.order-line-items.procurement', $li) }}" class="ajax-submit-form d-inline">
-                                        @csrf
-                                        @method('PATCH')
-                                        <input type="hidden" name="procurement_action" value="mark_purchased">
-                                        <button type="submit" class="btn btn-sm btn-primary" @if(!in_array($li->fulfillment_status, [OrderLineItem::FULFILLMENT_PAID, OrderLineItem::FULFILLMENT_REVIEWED], true)) disabled @endif>{{ __('admin.mark_purchased') }}</button>
-                                    </form>
-                                    <form method="POST" action="{{ route('admin.order-line-items.procurement', $li) }}" class="ajax-submit-form d-inline">
-                                        @csrf
-                                        @method('PATCH')
-                                        <input type="hidden" name="procurement_action" value="mark_in_transit">
-                                        <button type="submit" class="btn btn-sm btn-warning text-dark" @if(!in_array($li->fulfillment_status, [OrderLineItem::FULFILLMENT_PAID, OrderLineItem::FULFILLMENT_REVIEWED, OrderLineItem::FULFILLMENT_PURCHASED], true)) disabled @endif>{{ __('admin.mark_in_transit_wh') }}</button>
-                                    </form>
-                                </div>
-                                <div class="small">
-                                    @if($canReceive)
-                                        <a href="{{ route('admin.warehouse.receive-form', $li) }}" class="btn btn-sm btn-success">{{ __('admin.warehouse_receive') }}</a>
-                                    @endif
-                                </div>
+                                <button type="button"
+                                    class="btn btn-sm btn-primary mb-1"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#orderLineProcurementModal"
+                                    data-procurement="{{ e(json_encode($procPayload)) }}">
+                                    {{ __('admin.procurement_details_btn') }}
+                                </button>
+                                @if($canReceive)
+                                    <a href="{{ route('admin.warehouse.receive-form', $li) }}" class="btn btn-sm btn-success d-block">{{ __('admin.warehouse_receive') }}</a>
+                                @endif
                             </td>
                         </tr>
                     @endforeach
@@ -139,3 +145,5 @@
         </div>
     </div>
 </div>
+
+@include('admin.orders.partials.procurement-modal')
