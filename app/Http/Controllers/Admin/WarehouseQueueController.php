@@ -10,13 +10,25 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
 use App\Support\AdminFulfillmentLabels;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 
 class WarehouseQueueController extends Controller
 {
     public function index(Request $request): View
     {
-        return view('admin.warehouse.index');
+        $base = $this->paidOrderLineItemsQuery();
+
+        $counts = [
+            'awaiting_arrival' => (clone $base)->where('fulfillment_status', OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE)->count(),
+            'ready_to_receive' => (clone $base)->whereIn('fulfillment_status', [
+                OrderLineItem::FULFILLMENT_PURCHASED,
+                OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE,
+            ])->count(),
+            'received' => (clone $base)->where('fulfillment_status', OrderLineItem::FULFILLMENT_ARRIVED_AT_WAREHOUSE)->count(),
+        ];
+
+        return view('admin.warehouse.index', compact('counts'));
     }
 
     public function data(Request $request): JsonResponse
@@ -25,21 +37,21 @@ class WarehouseQueueController extends Controller
             ->with(['shipment.order.user', 'latestWarehouseReceipt'])
             ->whereHas('shipment.order', fn ($q) => $q->whereHas('payments', fn ($p) => $p->where('status', PaymentStatus::Paid)));
 
-        $queue = $request->get('queue', 'awaiting');
+        $queue = $request->get('queue', 'ready_to_receive');
+        $showReceive = $queue === 'ready_to_receive';
 
-        if ($queue === 'awaiting') {
-            $query->whereIn('fulfillment_status', [
+        match ($queue) {
+            'awaiting_arrival' => $query->where('fulfillment_status', OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE),
+            'ready_to_receive' => $query->whereIn('fulfillment_status', [
                 OrderLineItem::FULFILLMENT_PURCHASED,
                 OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE,
-            ]);
-        } elseif ($queue === 'received') {
-            $query->whereIn('fulfillment_status', [
-                OrderLineItem::FULFILLMENT_ARRIVED_AT_WAREHOUSE,
-                OrderLineItem::FULFILLMENT_READY_FOR_SHIPMENT,
-            ]);
-        } elseif ($queue === 'special') {
-            $query->whereHas('warehouseReceipts', fn ($q) => $q->whereNotNull('special_handling_type')->where('special_handling_type', '!=', ''));
-        }
+            ]),
+            'received' => $query->where('fulfillment_status', OrderLineItem::FULFILLMENT_ARRIVED_AT_WAREHOUSE),
+            default => $query->whereIn('fulfillment_status', [
+                OrderLineItem::FULFILLMENT_PURCHASED,
+                OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE,
+            ]),
+        };
 
         if ($request->filled('user_id')) {
             $query->whereHas('shipment.order', fn ($q) => $q->where('user_id', (int) $request->user_id));
@@ -56,7 +68,15 @@ class WarehouseQueueController extends Controller
         }
 
         return DataTables::eloquent($query)
-            ->addColumn('order_number', fn (OrderLineItem $li) => e($li->shipment?->order?->order_number ?? '-'))
+            ->addColumn('order_number', function (OrderLineItem $li) {
+                $on = $li->shipment?->order?->order_number ?? '-';
+                $oid = $li->shipment?->order_id;
+                if ($oid && $on !== '-') {
+                    return '<a href="'.route('admin.orders.show', $oid).'">'.e($on).'</a>';
+                }
+
+                return e($on);
+            })
             ->addColumn('customer', function (OrderLineItem $li) {
                 $u = $li->shipment?->order?->user;
                 if (! $u) {
@@ -78,17 +98,29 @@ class WarehouseQueueController extends Controller
 
                 return $t !== '' ? e(Str::limit($t, 24)) : '—';
             })
-            ->addColumn('actions', function (OrderLineItem $li) {
-                $receive = route('admin.warehouse.receive-form', $li);
+            ->addColumn('actions', function (OrderLineItem $li) use ($showReceive) {
                 $order = route('admin.orders.show', $li->shipment->order_id);
+                $html = '<div class="d-flex flex-wrap gap-1 align-items-center">';
+                if ($showReceive) {
+                    $html .= '<a href="'.route('admin.warehouse.receive-form', $li).'" class="btn btn-sm btn-primary">'
+                        .e(__('admin.warehouse_receive')).'</a>';
+                }
+                $html .= '<a href="'.$order.'" class="btn btn-sm btn-outline-secondary">'.e(__('admin.source_order')).'</a>';
+                $html .= '</div>';
 
-                return '<div class="d-flex flex-wrap gap-1">'
-                    .'<a href="'.$receive.'" class="btn btn-sm btn-primary">'.e(__('admin.warehouse_receive')).'</a>'
-                    .'<a href="'.$order.'" class="btn btn-sm btn-outline-secondary">'.e(__('admin.source_order')).'</a>'
-                    .'</div>';
+                return $html;
             })
-            ->rawColumns(['customer', 'fulfillment', 'actions'])
+            ->rawColumns(['customer', 'order_number', 'fulfillment', 'actions'])
             ->toJson();
+    }
+
+    /**
+     * Line items tied to paid orders (same scope as warehouse queues / tab counts).
+     */
+    private function paidOrderLineItemsQuery(): Builder
+    {
+        return OrderLineItem::query()
+            ->whereHas('shipment.order', fn ($q) => $q->whereHas('payments', fn ($p) => $p->where('status', PaymentStatus::Paid)));
     }
 
     public function receiveForm(OrderLineItem $orderLineItem): View
