@@ -56,7 +56,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('order-line-procurement-form');
     if (!modalEl || !form) return;
 
-    function applyProcurementActionButtons(st) {
+    function normalizeFs(st) {
+        return String(st ?? '').trim();
+    }
+
+    function applyProcurementActionButtons(stRaw) {
+        const st = normalizeFs(stRaw);
         const btnPurch = document.getElementById('proc-modal-mark-purchased');
         const btnTransit = document.getElementById('proc-modal-mark-transit');
         const note = document.getElementById('proc-modal-no-transitions-note');
@@ -74,16 +79,36 @@ document.addEventListener('DOMContentLoaded', function() {
             btnTransit.classList.remove('d-none');
             return;
         }
-        if (note && (st === 'in_transit_to_warehouse' || st === 'arrived_at_warehouse' || st === 'ready_for_shipment')) {
+        const pastPurchase = ['in_transit_to_warehouse', 'arrived_at_warehouse', 'ready_for_shipment'];
+        if (note && pastPurchase.indexOf(st) !== -1) {
             note.classList.remove('d-none');
         }
     }
 
+    function parseProcurementPayload(btn) {
+        const b64 = btn.getAttribute('data-procurement-b64');
+        if (b64) {
+            try {
+                return JSON.parse(atob(b64));
+            } catch (e) {
+                return null;
+            }
+        }
+        if (btn.dataset.procurement) {
+            try {
+                return JSON.parse(btn.dataset.procurement);
+            } catch (e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
     modalEl.addEventListener('show.bs.modal', function(event) {
         const btn = event.relatedTarget;
-        if (!btn || !btn.dataset.procurement) return;
-        let p;
-        try { p = JSON.parse(btn.dataset.procurement); } catch (e) { return; }
+        if (!btn) return;
+        const p = parseProcurementPayload(btn);
+        if (!p || !p.action) return;
         form.setAttribute('action', p.action);
         document.getElementById('proc-modal-actual-price').value = p.actual_purchase_price !== null && p.actual_purchase_price !== undefined && p.actual_purchase_price !== '' ? p.actual_purchase_price : '';
         document.getElementById('proc-modal-store-tracking').value = p.store_tracking || '';
@@ -92,7 +117,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('proc-modal-assigned-buyer').value = p.assigned_buyer || '';
         document.getElementById('proc-modal-action').value = '';
 
-        applyProcurementActionButtons(p.fulfillment_status || '');
+        applyProcurementActionButtons(p.fulfillment_status);
     });
 
     document.getElementById('proc-modal-save-only')?.addEventListener('click', function() {

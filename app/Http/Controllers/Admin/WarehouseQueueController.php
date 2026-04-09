@@ -112,7 +112,6 @@ class WarehouseQueueController extends Controller
                         .' data-order-number="'.$on.'"'
                         .' data-product-name="'.$pn.'">'
                         .e(__('admin.warehouse_receive')).'</button>';
-                    $html .= '<a href="'.route('admin.warehouse.receive-form', $li).'" class="btn btn-sm btn-outline-secondary">'.e(__('admin.warehouse_receive_full_page')).'</a>';
                 }
                 $html .= '<a href="'.$order.'" class="btn btn-sm btn-outline-secondary">'.e(__('admin.source_order')).'</a>';
                 $html .= '</div>';

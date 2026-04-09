@@ -55,6 +55,7 @@
                                 'actual_purchase_price' => $actualPrice,
                                 'fulfillment_status' => $li->fulfillment_status,
                             ];
+                            $procPayloadB64 = base64_encode(json_encode($procPayload, JSON_UNESCAPED_UNICODE));
                         @endphp
                         <tr>
                             <td>{{ Str::limit($li->name, 56) }}</td>
@@ -131,11 +132,22 @@
                                     class="btn btn-sm btn-primary mb-1"
                                     data-bs-toggle="modal"
                                     data-bs-target="#orderLineProcurementModal"
-                                    data-procurement="{{ e(json_encode($procPayload)) }}">
+                                    data-procurement-b64="{{ $procPayloadB64 }}">
                                     {{ __('admin.procurement_details_btn') }}
                                 </button>
                                 @if($canReceive)
-                                    <a href="{{ route('admin.warehouse.receive-form', $li) }}" class="btn btn-sm btn-success d-block">{{ __('admin.warehouse_receive') }}</a>
+                                    @php
+                                        $receivePostUrl = route('admin.warehouse.receive', $li);
+                                        $onDisp = e($order->order_number ?? '');
+                                        $pnDisp = e(Str::limit($li->name, 80));
+                                    @endphp
+                                    <button type="button"
+                                        class="btn btn-sm btn-success d-block js-wh-receive-modal"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#warehouseReceiveModal"
+                                        data-receive-url="{{ $receivePostUrl }}"
+                                        data-order-number="{{ $onDisp }}"
+                                        data-product-name="{{ $pnDisp }}">{{ __('admin.warehouse_receive') }}</button>
                                 @endif
                             </td>
                         </tr>

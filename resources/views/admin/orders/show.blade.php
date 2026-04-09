@@ -107,6 +107,8 @@
 @include('admin.orders.partials.fulfillment-summary')
 @include('admin.orders.partials.fulfillment-stage-strip')
 @include('admin.orders.partials.procurement-line-items')
+@include('admin.warehouse.partials.receive-modal')
+@include('admin.warehouse.partials.receive-modal-script')
 
 <div class="row g-4 mt-1">
     <div class="col-md-6">

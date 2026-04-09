@@ -29,6 +29,7 @@
         <p class="mb-0"><strong>{{ __('admin.order_number') }}:</strong>
             <a href="{{ route('admin.orders.show', $orderLineItem->shipment->order_id) }}">{{ $orderLineItem->shipment->order->order_number ?? '—' }}</a>
         </p>
+        <p class="small text-muted mb-0 mt-2">{{ __('admin.receive_full_page_fallback_note') }}</p>
     </div>
 </div>
 
@@ -43,7 +44,7 @@
                     <input type="datetime-local" name="received_at" class="form-control" value="{{ old('received_at', now()->format('Y-m-d\TH:i')) }}">
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">{{ __('admin.weight_kg') }}</label>
+                    <label class="form-label">{{ __('admin.weight_lb') }}</label>
                     <input type="number" step="0.0001" min="0" name="received_weight" class="form-control" value="{{ old('received_weight') }}">
                 </div>
                 <div class="col-md-4">
@@ -53,17 +54,17 @@
                     </label>
                     <input type="number" step="0.01" min="0" name="additional_fee_amount" class="form-control" value="{{ old('additional_fee_amount', '0') }}">
                 </div>
-                <div class="col-12"><span class="text-muted small">{{ __('admin.receive_dimensions_hint') }}</span></div>
+                <div class="col-12"><span class="text-muted small">{{ __('admin.receive_dimensions_hint_in') }}</span></div>
                 <div class="col-md-3">
-                    <label class="form-label">{{ __('admin.dim_l') }}</label>
+                    <label class="form-label">{{ __('admin.length_in') }}</label>
                     <input type="number" step="0.0001" min="0" name="received_length" class="form-control" value="{{ old('received_length') }}">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">{{ __('admin.dim_w') }}</label>
+                    <label class="form-label">{{ __('admin.width_in') }}</label>
                     <input type="number" step="0.0001" min="0" name="received_width" class="form-control" value="{{ old('received_width') }}">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">{{ __('admin.dim_h') }}</label>
+                    <label class="form-label">{{ __('admin.height_in') }}</label>
                     <input type="number" step="0.0001" min="0" name="received_height" class="form-control" value="{{ old('received_height') }}">
                 </div>
                 <div class="col-md-3">
