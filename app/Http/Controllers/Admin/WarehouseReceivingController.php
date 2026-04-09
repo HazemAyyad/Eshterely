@@ -19,6 +19,15 @@ class WarehouseReceivingController extends Controller
      */
     public function store(Request $request, OrderLineItem $orderLineItem): JsonResponse|RedirectResponse
     {
+        if ($orderLineItem->fulfillment_status !== OrderLineItem::FULFILLMENT_PURCHASED) {
+            $msg = __('admin.warehouse_receive_only_purchased');
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['success' => false, 'message' => $msg], 422);
+            }
+
+            return redirect()->back()->with('error', $msg);
+        }
+
         $validated = $request->validate([
             'received_at' => 'nullable|date',
             'received_weight' => 'nullable|numeric|min:0',

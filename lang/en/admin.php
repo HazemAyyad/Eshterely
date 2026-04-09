@@ -501,6 +501,7 @@ return [
     'mark_in_transit_wh' => 'In transit to WH',
     'warehouse_receive' => 'Receive',
     'warehouse_item_received' => 'Item received into warehouse.',
+    'warehouse_receive_only_purchased' => 'Receiving is only allowed when the line status is Purchased.',
     'source_order' => 'Order',
     'outbound_shipment' => 'Outbound',
     'received_short' => 'Received',

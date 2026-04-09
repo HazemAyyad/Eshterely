@@ -36,10 +36,7 @@
                             $details = $li->review_metadata['purchase_details'] ?? '';
                             $buyer = $li->review_metadata['assigned_buyer'] ?? '';
                             $actualPrice = $li->review_metadata['actual_purchase_price'] ?? '';
-                            $canReceive = in_array($li->fulfillment_status, [
-                                OrderLineItem::FULFILLMENT_PURCHASED,
-                                OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE,
-                            ], true);
+                            $canReceive = $li->fulfillment_status === OrderLineItem::FULFILLMENT_PURCHASED;
                             $receipt = $li->latestWarehouseReceipt;
                             $sourceUrl = AdminOrderLineItemDisplay::sourceProductUrl($li);
                             $unitPrice = AdminOrderLineItemDisplay::unitPrice($li);

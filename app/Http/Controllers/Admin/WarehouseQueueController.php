@@ -6,6 +6,7 @@ use App\Enums\Payment\PaymentStatus;
 use App\Http\Controllers\Controller;
 use App\Models\OrderLineItem;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
@@ -36,8 +37,7 @@ class WarehouseQueueController extends Controller
             ->with(['shipment.order.user', 'latestWarehouseReceipt', 'cartItem', 'importedProduct'])
             ->whereHas('shipment.order', fn ($q) => $q->whereHas('payments', fn ($p) => $p->where('status', PaymentStatus::Paid)));
 
-        $queue = $request->get('queue', 'ready_to_receive');
-        $showReceive = $queue === 'ready_to_receive';
+        $queue = $this->normalizeWarehouseQueue($request->input('queue'));
 
         match ($queue) {
             'awaiting_arrival' => $query->where('fulfillment_status', OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE),
@@ -45,6 +45,8 @@ class WarehouseQueueController extends Controller
             'received' => $query->where('fulfillment_status', OrderLineItem::FULFILLMENT_ARRIVED_AT_WAREHOUSE),
             default => $query->where('fulfillment_status', OrderLineItem::FULFILLMENT_PURCHASED),
         };
+
+        $showReceive = $queue === 'ready_to_receive';
 
         if ($request->filled('user_id')) {
             $query->whereHas('shipment.order', fn ($q) => $q->where('user_id', (int) $request->user_id));
@@ -97,7 +99,7 @@ class WarehouseQueueController extends Controller
                 $on = e($li->shipment?->order?->order_number ?? '—');
                 $pn = e(Str::limit($li->name, 80));
                 $html = '<div class="d-flex flex-wrap gap-1 align-items-center">';
-                if ($showReceive) {
+                if ($showReceive && $li->fulfillment_status === OrderLineItem::FULFILLMENT_PURCHASED) {
                     $receiveUrl = route('admin.warehouse.receive', $li);
                     $html .= '<button type="button" class="btn btn-sm btn-primary js-wh-receive-modal" data-bs-toggle="modal" data-bs-target="#warehouseReceiveModal"'
                         .' data-receive-url="'.e($receiveUrl).'"'
@@ -123,8 +125,26 @@ class WarehouseQueueController extends Controller
             ->whereHas('shipment.order', fn ($q) => $q->whereHas('payments', fn ($p) => $p->where('status', PaymentStatus::Paid)));
     }
 
-    public function receiveForm(OrderLineItem $orderLineItem): View
+    /**
+     * DataTables may send `queue` as an empty string; Request::input() would then not fall back to the default,
+     * which hid the Receive button while rows still matched the default (purchased) filter.
+     */
+    private function normalizeWarehouseQueue(mixed $queue): string
     {
+        $q = is_string($queue) ? trim($queue) : '';
+        $allowed = ['awaiting_arrival', 'ready_to_receive', 'received'];
+
+        return in_array($q, $allowed, true) ? $q : 'ready_to_receive';
+    }
+
+    public function receiveForm(OrderLineItem $orderLineItem): View|RedirectResponse
+    {
+        if ($orderLineItem->fulfillment_status !== OrderLineItem::FULFILLMENT_PURCHASED) {
+            return redirect()
+                ->route('admin.warehouse.index')
+                ->with('error', __('admin.warehouse_receive_only_purchased'));
+        }
+
         $orderLineItem->load(['shipment.order.user', 'latestWarehouseReceipt']);
 
         return view('admin.warehouse.receive', compact('orderLineItem'));

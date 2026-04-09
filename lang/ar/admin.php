@@ -494,6 +494,7 @@ return [
     'mark_in_transit_wh' => 'قيد النقل للمستودع',
     'warehouse_receive' => 'استلام',
     'warehouse_item_received' => 'تم استلام العنصر في المستودع.',
+    'warehouse_receive_only_purchased' => 'يُسمح بالاستلام فقط عندما تكون حالة البند «تم الشراء».',
     'source_order' => 'الطلب',
     'outbound_shipment' => 'صادر',
     'received_short' => 'مستلم',

@@ -3,6 +3,11 @@
 @section('title', __('admin.warehouse_title'))
 
 @section('content')
+@if (session('error'))
+    <div class="alert alert-danger alert-dismissible py-2">{{ session('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+@endif
 <h4 class="py-4 mb-2">{{ __('admin.warehouse_title') }}</h4>
 <p class="text-muted mb-3">{{ __('admin.warehouse_intro_tabs') }}</p>
 
@@ -101,7 +106,7 @@ document.addEventListener('DOMContentLoaded', function() {
         ajax: {
             url: "{{ route('admin.warehouse.data') }}",
             data: function(d) {
-                d.queue = queueInput.value;
+                d.queue = (queueInput && queueInput.value) ? queueInput.value : 'ready_to_receive';
                 d.user_id = $('#warehouse-user').val();
                 d.order_number = $('#warehouse-order').val();
                 d.store = $('#warehouse-store').val();
