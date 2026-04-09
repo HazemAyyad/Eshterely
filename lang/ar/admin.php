@@ -525,6 +525,8 @@ return [
     'shipment_dispatched' => 'تم تسجيل الشحنة كمشحونة.',
     'shipment_detail' => 'تفاصيل الشحنة',
     'shipment_items' => 'العناصر',
+    'product_image_col' => 'صورة المنتج',
+    'received_images_col' => 'صور الاستلام',
     'receive_item_title' => 'استلام إلى المستودع',
     'images_urls_help' => 'رابط صورة واحد في كل سطر.',
     'dispatch_note' => 'ملاحظة إرسال (داخلية)',

@@ -102,6 +102,9 @@ class OutboundShipmentsAdminController extends Controller
             'destinationAddress.city',
             'destinationAddress.country',
             'items.orderLineItem.shipment.order',
+            'items.orderLineItem.cartItem',
+            'items.orderLineItem.importedProduct',
+            'items.orderLineItem.warehouseReceipts' => fn ($q) => $q->orderByDesc('received_at'),
             'payments',
         ]);
 

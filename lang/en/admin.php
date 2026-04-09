@@ -532,6 +532,8 @@ return [
     'shipment_dispatched' => 'Shipment marked shipped.',
     'shipment_detail' => 'Shipment detail',
     'shipment_items' => 'Items',
+    'product_image_col' => 'Product image',
+    'received_images_col' => 'Received images',
     'receive_item_title' => 'Receive into warehouse',
     'images_urls_help' => 'One image URL per line (stored as receipt photos).',
     'dispatch_note' => 'Dispatch note (internal)',

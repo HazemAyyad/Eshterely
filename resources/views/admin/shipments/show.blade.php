@@ -5,6 +5,7 @@
 @section('content')
 @php
     use App\Support\AdminFulfillmentLabels;
+    use App\Support\AdminOrderLineItemDisplay;
     use App\Models\Shipment;
     $st = AdminFulfillmentLabels::outboundShipment($shipment->status);
 @endphp
@@ -78,7 +79,8 @@
             <table class="table table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th>{{ __('admin.product') }}</th>
+                        <th style="min-width:200px">{{ __('admin.product') }}</th>
+                        <th style="min-width:140px">{{ __('admin.received_images_col') }}</th>
                         <th>{{ __('admin.store') }}</th>
                         <th>{{ __('admin.order_number') }}</th>
                         <th>{{ __('admin.procurement_status') }}</th>
@@ -92,7 +94,20 @@
                             $ord = $li?->shipment?->order;
                         @endphp
                         <tr>
-                            <td>{{ $li?->name ?? '—' }}</td>
+                            <td class="align-top">
+                                @if($li)
+                                    {!! AdminOrderLineItemDisplay::adminProductThumbnailWithNameHtml($li, 48, 72) !!}
+                                @else
+                                    —
+                                @endif
+                            </td>
+                            <td class="align-top small">
+                                @if($li)
+                                    {!! AdminOrderLineItemDisplay::adminWarehouseReceiptThumbnailsHtml($li, 40, 8) !!}
+                                @else
+                                    —
+                                @endif
+                            </td>
                             <td>{{ $li?->store_name ?? '—' }}</td>
                             <td>
                                 @if($ord)

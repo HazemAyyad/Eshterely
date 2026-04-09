@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
 use App\Support\AdminFulfillmentLabels;
+use App\Support\AdminOrderLineItemDisplay;
 use App\Support\AdminUserDisplay;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
@@ -32,7 +33,7 @@ class WarehouseQueueController extends Controller
     public function data(Request $request): JsonResponse
     {
         $query = OrderLineItem::query()
-            ->with(['shipment.order.user', 'latestWarehouseReceipt'])
+            ->with(['shipment.order.user', 'latestWarehouseReceipt', 'cartItem', 'importedProduct'])
             ->whereHas('shipment.order', fn ($q) => $q->whereHas('payments', fn ($p) => $p->where('status', PaymentStatus::Paid)));
 
         $queue = $request->get('queue', 'ready_to_receive');
@@ -79,7 +80,7 @@ class WarehouseQueueController extends Controller
 
                 return '<div><a href="'.route('admin.users.show', $u).'" class="fw-semibold">'.$name.'</a></div>'.$phone;
             })
-            ->addColumn('product', fn (OrderLineItem $li) => e(Str::limit($li->name, 60)))
+            ->addColumn('product', fn (OrderLineItem $li) => AdminOrderLineItemDisplay::adminProductThumbnailWithNameHtml($li, 40, 60))
             ->addColumn('store_name', fn (OrderLineItem $li) => e($li->store_name ?? '-'))
             ->addColumn('fulfillment', function (OrderLineItem $li) {
                 $p = AdminFulfillmentLabels::lineItemFulfillment($li->fulfillment_status);
@@ -109,7 +110,7 @@ class WarehouseQueueController extends Controller
 
                 return $html;
             })
-            ->rawColumns(['customer', 'order_number', 'fulfillment', 'actions'])
+            ->rawColumns(['customer', 'order_number', 'product', 'fulfillment', 'actions'])
             ->toJson();
     }
 
