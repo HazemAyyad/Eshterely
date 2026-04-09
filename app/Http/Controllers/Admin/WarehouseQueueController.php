@@ -22,10 +22,7 @@ class WarehouseQueueController extends Controller
 
         $counts = [
             'awaiting_arrival' => (clone $base)->where('fulfillment_status', OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE)->count(),
-            'ready_to_receive' => (clone $base)->whereIn('fulfillment_status', [
-                OrderLineItem::FULFILLMENT_PURCHASED,
-                OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE,
-            ])->count(),
+            'ready_to_receive' => (clone $base)->where('fulfillment_status', OrderLineItem::FULFILLMENT_PURCHASED)->count(),
             'received' => (clone $base)->where('fulfillment_status', OrderLineItem::FULFILLMENT_ARRIVED_AT_WAREHOUSE)->count(),
         ];
 
@@ -43,15 +40,9 @@ class WarehouseQueueController extends Controller
 
         match ($queue) {
             'awaiting_arrival' => $query->where('fulfillment_status', OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE),
-            'ready_to_receive' => $query->whereIn('fulfillment_status', [
-                OrderLineItem::FULFILLMENT_PURCHASED,
-                OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE,
-            ]),
+            'ready_to_receive' => $query->where('fulfillment_status', OrderLineItem::FULFILLMENT_PURCHASED),
             'received' => $query->where('fulfillment_status', OrderLineItem::FULFILLMENT_ARRIVED_AT_WAREHOUSE),
-            default => $query->whereIn('fulfillment_status', [
-                OrderLineItem::FULFILLMENT_PURCHASED,
-                OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE,
-            ]),
+            default => $query->where('fulfillment_status', OrderLineItem::FULFILLMENT_PURCHASED),
         };
 
         if ($request->filled('user_id')) {
