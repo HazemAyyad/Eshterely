@@ -46,7 +46,7 @@ class WarehouseQueueController extends Controller
             default => $query->where('fulfillment_status', OrderLineItem::FULFILLMENT_PURCHASED),
         };
 
-        $showReceive = $queue === 'ready_to_receive';
+        $showReceive = in_array($queue, ['awaiting_arrival', 'ready_to_receive'], true);
 
         if ($request->filled('user_id')) {
             $query->whereHas('shipment.order', fn ($q) => $q->where('user_id', (int) $request->user_id));
@@ -99,7 +99,7 @@ class WarehouseQueueController extends Controller
                 $on = e($li->shipment?->order?->order_number ?? '—');
                 $pn = e(Str::limit($li->name, 80));
                 $html = '<div class="d-flex flex-wrap gap-1 align-items-center">';
-                if ($showReceive && $li->fulfillment_status === OrderLineItem::FULFILLMENT_PURCHASED) {
+                if ($showReceive && AdminOrderLineItemDisplay::canReceiveIntoWarehouse($li)) {
                     $receiveUrl = route('admin.warehouse.receive', $li);
                     $html .= '<button type="button" class="btn btn-sm btn-primary js-wh-receive-modal" data-bs-toggle="modal" data-bs-target="#warehouseReceiveModal"'
                         .' data-receive-url="'.e($receiveUrl).'"'
@@ -139,10 +139,10 @@ class WarehouseQueueController extends Controller
 
     public function receiveForm(OrderLineItem $orderLineItem): View|RedirectResponse
     {
-        if ($orderLineItem->fulfillment_status !== OrderLineItem::FULFILLMENT_PURCHASED) {
+        if (! AdminOrderLineItemDisplay::canReceiveIntoWarehouse($orderLineItem)) {
             return redirect()
                 ->route('admin.warehouse.index')
-                ->with('error', __('admin.warehouse_receive_only_purchased'));
+                ->with('error', __('admin.warehouse_receive_not_eligible'));
         }
 
         $orderLineItem->load(['shipment.order.user', 'latestWarehouseReceipt']);

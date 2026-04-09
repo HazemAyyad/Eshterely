@@ -11,6 +11,17 @@ use Illuminate\Support\Str;
 class AdminOrderLineItemDisplay
 {
     /**
+     * Whether the line may be physically received into the warehouse (queue, order detail, POST validation).
+     */
+    public static function canReceiveIntoWarehouse(OrderLineItem $li): bool
+    {
+        return in_array($li->fulfillment_status, [
+            OrderLineItem::FULFILLMENT_PURCHASED,
+            OrderLineItem::FULFILLMENT_IN_TRANSIT_TO_WAREHOUSE,
+        ], true);
+    }
+
+    /**
      * Canonical product image URL for admin UI (warehouse queue, shipment items, etc.).
      *
      * Priority: {@see OrderLineItem::$product_snapshot} image_url, line {@see OrderLineItem::$image_url},

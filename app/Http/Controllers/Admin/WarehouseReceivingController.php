@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\OrderLineItem;
 use App\Models\WarehouseReceipt;
+use App\Support\AdminOrderLineItemDisplay;
 use App\Support\AdminWarehouseReceiptImages;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -19,8 +20,8 @@ class WarehouseReceivingController extends Controller
      */
     public function store(Request $request, OrderLineItem $orderLineItem): JsonResponse|RedirectResponse
     {
-        if ($orderLineItem->fulfillment_status !== OrderLineItem::FULFILLMENT_PURCHASED) {
-            $msg = __('admin.warehouse_receive_only_purchased');
+        if (! AdminOrderLineItemDisplay::canReceiveIntoWarehouse($orderLineItem)) {
+            $msg = __('admin.warehouse_receive_not_eligible');
             if ($request->expectsJson() || $request->ajax()) {
                 return response()->json(['success' => false, 'message' => $msg], 422);
             }
