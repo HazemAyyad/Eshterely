@@ -3,11 +3,26 @@
 @section('title', __('admin.order_number') . ' ' . $order->order_number)
 
 @section('content')
+@php
+    $exec = $executionStatus ?? \App\Support\OrderExecutionStatus::AWAITING_PAYMENT;
+    $execBadge = \App\Support\OrderExecutionStatus::badgeClass($exec);
+    $isAwaitingReview = $exec === \App\Support\OrderExecutionStatus::AWAITING_REVIEW;
+    $showReviewComplete = $order->reviewed_at && ! $isAwaitingReview;
+@endphp
+
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 py-4 mb-2">
     <h4 class="mb-0">{{ __('admin.order_number') }} {{ $order->order_number }}</h4>
-    <div class="d-flex flex-wrap gap-2">
-        <a href="{{ route('admin.warehouse.index') }}" class="btn btn-sm btn-outline-primary">{{ __('admin.link_warehouse') }}</a>
-        <a href="{{ route('admin.shipments.index') }}" class="btn btn-sm btn-outline-primary">{{ __('admin.link_shipments') }}</a>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        @if(!empty($canCancelOrder))
+        <form method="POST" action="{{ route('admin.orders.update-status', $order) }}" class="ajax-submit-form d-inline" onsubmit="return confirm({{ json_encode(__('admin.confirm_cancel_order')) }});">
+            @csrf
+            @method('PATCH')
+            <input type="hidden" name="status" value="{{ \App\Models\Order::STATUS_CANCELLED }}">
+            <button type="submit" class="btn btn-sm btn-outline-danger">{{ __('admin.cancel_order') }}</button>
+        </form>
+        @endif
+        <a href="{{ route('admin.warehouse.index') }}" class="btn btn-sm btn-outline-secondary">{{ __('admin.link_warehouse') }}</a>
+        <a href="{{ route('admin.shipments.index') }}" class="btn btn-sm btn-outline-secondary">{{ __('admin.link_shipments') }}</a>
     </div>
 </div>
 
@@ -24,88 +39,87 @@
 
 @include('admin.orders.partials.order-customer')
 
+{{-- 1) Review: first required admin action --}}
+@if($isAwaitingReview)
+<div class="card border-warning border-3 shadow-sm mb-4">
+    <div class="card-body p-4">
+        <div class="d-flex flex-wrap align-items-start gap-3">
+            <div class="flex-grow-1" style="min-width: 240px;">
+                <div class="text-uppercase small text-warning fw-semibold mb-1">{{ __('admin.review_step_title') }}</div>
+                <h5 class="mb-2">{{ __('admin.review_required_card_title') }}</h5>
+                <p class="mb-2 text-body-secondary">{{ __('admin.review_required_card_intro') }}</p>
+                <p class="small text-muted mb-0">{{ __('admin.review_required_next_steps') }}</p>
+            </div>
+        </div>
+        <hr class="my-3">
+        <form method="POST" action="{{ route('admin.orders.review', $order) }}" class="ajax-submit-form">
+            @csrf
+            @method('PATCH')
+            <div class="mb-3">
+                <label class="form-label fw-semibold">{{ __('admin.notes_review_comments') }}</label>
+                <textarea name="admin_notes" class="form-control" rows="3" maxlength="5000" placeholder="{{ __('admin.checkout_review_gate_help') }}">{{ old('admin_notes', $order->admin_notes) }}</textarea>
+            </div>
+            <button type="submit" class="btn btn-primary btn-lg px-4">{{ __('admin.mark_reviewed_btn') }}</button>
+        </form>
+    </div>
+</div>
+@elseif($showReviewComplete)
+<div class="alert alert-success border-0 shadow-sm d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 py-3" role="status">
+    <div>
+        <strong>{{ __('admin.review_complete_banner_title') }}</strong>
+        <span class="text-body-secondary ms-md-2 d-block d-md-inline mt-1 mt-md-0">{{ __('admin.reviewed_at') }}: {{ $order->reviewed_at->format('Y-m-d H:i') }}</span>
+    </div>
+    <span class="small text-muted mb-0">{{ __('admin.review_complete_banner_hint') }}</span>
+</div>
+@endif
+
+{{-- 2) Execution status & order details --}}
 <div class="row g-4 mb-2">
-    <div class="col-12 col-xl-8">
-        @php
-            $exec = $executionStatus ?? \App\Support\OrderExecutionStatus::AWAITING_PAYMENT;
-            $execBadge = \App\Support\OrderExecutionStatus::badgeClass($exec);
-            $fs = $orderFulfillmentState ?? 'no_items';
-        @endphp
+    <div class="col-12">
         <div class="card border-0 shadow-sm">
-            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <h5 class="mb-0">{{ __('admin.order_info') }}</h5>
-                <div class="d-flex flex-wrap gap-2 align-items-center">
-                @if(count($canTransitionTo) > 0)
-                <form method="POST" action="{{ route('admin.orders.update-status', $order) }}" class="d-flex gap-2 ajax-submit-form">
-                    @csrf
-                    @method('PATCH')
-                    <select name="status" class="form-select form-select-sm" style="width:auto" required>
-                        <option value="">{{ __('admin.change_status') }}</option>
-                        @foreach($canTransitionTo as $s)
-                            <option value="{{ $s }}">{{ $s }}</option>
-                        @endforeach
-                    </select>
-                    <button type="submit" class="btn btn-sm btn-primary">{{ __('admin.update') }}</button>
-                </form>
-                @endif
-                @if(in_array(\App\Models\Order::STATUS_CANCELLED, $canTransitionTo ?? [], true))
-                <form method="POST" action="{{ route('admin.orders.update-status', $order) }}" class="ajax-submit-form" onsubmit="return confirm({{ json_encode(__('admin.confirm_cancel_order')) }});">
-                    @csrf
-                    @method('PATCH')
-                    <input type="hidden" name="status" value="{{ \App\Models\Order::STATUS_CANCELLED }}">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">{{ __('admin.cancel_order') }}</button>
-                </form>
-                @endif
-                </div>
+            <div class="card-header bg-light border-0 py-3">
+                <h5 class="mb-0">{{ __('admin.execution_section_title') }}</h5>
             </div>
             <div class="card-body">
-                <p class="mb-2">
-                    <strong>{{ __('admin.execution_status_label') }}:</strong>
-                    <span class="badge bg-{{ $execBadge }}">{{ __('admin.execution_status_'.$exec) }}</span>
+                <p class="mb-3 fs-5">
+                    <span class="text-muted me-2">{{ __('admin.execution_status_label') }}:</span>
+                    <span class="badge bg-{{ $execBadge }} fs-6">{{ __('admin.execution_status_'.$exec) }}</span>
                 </p>
-                <details class="mb-3 small text-muted">
-                    <summary class="fw-semibold text-body">{{ __('admin.internal_record_status_heading') }}</summary>
-                    <p class="mb-1 mt-2"><strong>{{ __('admin.order_record_status') }}:</strong> <span class="badge bg-secondary">{{ $order->status }}</span></p>
-                    <p class="mb-0"><strong>{{ __('admin.derived_fulfillment_snapshot') }}:</strong> {{ __('admin.order_fulfillment_state_'.$fs) }}</p>
-                </details>
-                <p><strong>{{ __('admin.origin') }}:</strong> {{ $order->origin }}</p>
-                <p><strong>{{ __('admin.total') }} (snapshot):</strong> {{ $order->order_total_snapshot !== null ? number_format($order->order_total_snapshot, 2) : number_format($order->total_amount, 2) }} {{ $order->currency }}</p>
-                <p><strong>{{ __('admin.estimated') }}:</strong> {{ $order->estimated ? __('admin.yes') : __('admin.no') }}</p>
-                @if($order->admin_notes)
-                    <p><strong>{{ __('admin.admin_notes') }}:</strong> {{ $order->admin_notes }}</p>
-                @endif
-                <p><strong>{{ __('admin.placed_at') }}:</strong> {{ $order->placed_at?->format('Y-m-d H:i') ?? '-' }}</p>
-                <p><strong>{{ __('admin.estimated_delivery') }}:</strong> {{ $order->estimated_delivery ?? '-' }}</p>
-                <p><strong>{{ __('admin.shipping_address') }}:</strong> {{ Str::limit($order->shipping_address_text ?? '-', 80) }}</p>
 
-                <details class="mt-3 pt-3 border-top border-primary border-opacity-25 rounded px-2 pb-2" @if($exec === \App\Support\OrderExecutionStatus::AWAITING_REVIEW) open @endif>
-                    <summary class="fw-semibold text-body">{{ __('admin.review_step_title') }}</summary>
-                    <p class="small text-muted mb-2 mt-2">{{ __('admin.checkout_review_gate_help') }}</p>
-                    <p class="small mb-1"><strong>{{ __('admin.needs_review') }}:</strong> {{ $order->needs_review ? __('admin.yes') : __('admin.no') }}</p>
-                    <p class="small mb-3"><strong>{{ __('admin.reviewed_at') }}:</strong> {{ $order->reviewed_at?->format('Y-m-d H:i') ?? '—' }}</p>
-                    @if($exec === \App\Support\OrderExecutionStatus::AWAITING_REVIEW)
-                        <form method="POST" action="{{ route('admin.orders.review', $order) }}" class="ajax-submit-form">
-                            @csrf
-                            @method('PATCH')
-                            <div class="mb-2">
-                                <label class="form-label small">{{ __('admin.notes_review_comments') }}</label>
-                                <textarea name="admin_notes" class="form-control form-control-sm" rows="2" maxlength="5000">{{ old('admin_notes', $order->admin_notes) }}</textarea>
-                            </div>
-                            <button type="submit" class="btn btn-sm btn-outline-secondary">{{ __('admin.mark_reviewed_btn') }}</button>
-                        </form>
-                    @endif
+                <details class="mb-3 small">
+                    <summary class="fw-semibold text-body-secondary user-select-none">{{ __('admin.internal_record_status_heading') }}</summary>
+                    <p class="mb-0 mt-2 text-muted">{{ __('admin.order_record_status') }}: <code>{{ $order->status }}</code></p>
+                    <p class="small text-muted mb-0 mt-1">{{ __('admin.internal_status_help') }}</p>
                 </details>
+
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>{{ __('admin.origin') }}:</strong> {{ $order->origin }}</p>
+                        <p class="mb-1"><strong>{{ __('admin.total') }} (snapshot):</strong> {{ $order->order_total_snapshot !== null ? number_format($order->order_total_snapshot, 2) : number_format($order->total_amount, 2) }} {{ $order->currency }}</p>
+                        <p class="mb-1"><strong>{{ __('admin.estimated') }}:</strong> {{ $order->estimated ? __('admin.yes') : __('admin.no') }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>{{ __('admin.placed_at') }}:</strong> {{ $order->placed_at?->format('Y-m-d H:i') ?? '-' }}</p>
+                        <p class="mb-1"><strong>{{ __('admin.estimated_delivery') }}:</strong> {{ $order->estimated_delivery ?? '-' }}</p>
+                        <p class="mb-0"><strong>{{ __('admin.shipping_address') }}:</strong> {{ Str::limit($order->shipping_address_text ?? '-', 120) }}</p>
+                    </div>
+                </div>
+                @if($order->admin_notes)
+                    <p class="mb-0 mt-3 pt-3 border-top"><strong>{{ __('admin.admin_notes') }}:</strong> {{ $order->admin_notes }}</p>
+                @endif
             </div>
         </div>
     </div>
 </div>
 
+{{-- 3) Fulfillment summary & line items --}}
 @include('admin.orders.partials.fulfillment-summary')
 @include('admin.orders.partials.fulfillment-stage-strip')
 @include('admin.orders.partials.procurement-line-items')
 @include('admin.warehouse.partials.receive-modal')
 @include('admin.warehouse.partials.receive-modal-script')
 
+{{-- 4) Payments & notifications --}}
 <div class="row g-4 mt-1">
     <div class="col-md-6">
         <div class="card border-0 shadow-sm">
@@ -188,6 +202,7 @@
     @endif
 </div>
 
+{{-- 5) Shipments & logs --}}
 @include('admin.orders.partials.outbound-shipments')
 
 @if ($priceLines->isNotEmpty())

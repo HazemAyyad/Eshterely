@@ -113,21 +113,13 @@ class OrderController extends Controller
             'operationLogs.admin',
         ]);
         $priceLines = DB::table('order_price_lines')->where('order_id', $order->id)->get();
-        $allowedStatuses = $this->workflow->allStatuses();
-        $canTransitionTo = [];
-        foreach ($allowedStatuses as $s) {
-            $check = $this->workflow->canTransitionTo($order, $s);
-            if ($check['allowed']) {
-                $canTransitionTo[] = $s;
-            }
-        }
+        $canCancelOrder = $this->workflow->canTransitionTo($order, Order::STATUS_CANCELLED)['allowed'];
         $items = $order->lineItems;
         $hasPaidCheckout = $order->payments->contains(fn ($p) => $p->status->value === 'paid');
 
         $fulfillmentPresented = AdminOrderFulfillmentPresenter::forOrder($items, $hasPaidCheckout);
         $fulfillmentSummary = $fulfillmentPresented['fulfillment_summary'];
         $fulfillmentStages = $fulfillmentPresented['fulfillment_stages'];
-        $orderFulfillmentState = $fulfillmentPresented['order_fulfillment_state'];
         $executionStatus = OrderExecutionStatus::resolve($order, $items, $hasPaidCheckout);
 
         $outboundShipments = $order->lineItems
@@ -149,11 +141,9 @@ class OrderController extends Controller
         return view('admin.orders.show', compact(
             'order',
             'priceLines',
-            'allowedStatuses',
-            'canTransitionTo',
+            'canCancelOrder',
             'fulfillmentSummary',
             'fulfillmentStages',
-            'orderFulfillmentState',
             'executionStatus',
             'outboundShipments',
             'customerDisplayName'
