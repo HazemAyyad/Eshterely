@@ -36,9 +36,8 @@
                     <th>{{ __('admin.order_number') }}</th>
                     <th>{{ __('admin.customer') }}</th>
                     <th>{{ __('admin.origin') }}</th>
-                    <th>{{ __('admin.order_fulfillment_state_label') }}</th>
+                    <th>{{ __('admin.execution_status_label') }}</th>
                     <th>{{ __('admin.payment') }}</th>
-                    <th>{{ __('admin.order_record_status') }}</th>
                     <th>{{ __('admin.total') }}</th>
                     <th>{{ __('admin.paid_at') }}</th>
                     <th>{{ __('admin.placed_at') }}</th>
@@ -70,14 +69,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 d.origin = $('#orders-origin').val();
             }
         },
-        order: [[8, 'desc']],
+        order: [[7, 'desc']],
         columns: [
             { data: 'order_number', name: 'order_number' },
             { data: 'customer', name: 'customer', orderable: false, searchable: true },
             { data: 'origin', name: 'origin' },
-            { data: 'fulfillment_state', name: 'fulfillment_state', orderable: false, searchable: false },
+            { data: 'execution_status', name: 'execution_status', orderable: false, searchable: false },
             { data: 'payment_status', name: 'payment_status', orderable: false, searchable: false },
-            { data: 'status', name: 'status' },
             { data: 'order_total_snapshot', name: 'order_total_snapshot', orderable: false, searchable: false },
             { data: 'paid_at', name: 'paid_at', orderable: false, searchable: false },
             { data: 'placed_at', name: 'placed_at' },

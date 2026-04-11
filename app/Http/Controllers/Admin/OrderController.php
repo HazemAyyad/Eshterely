@@ -8,6 +8,7 @@ use App\Models\OrderShipment;
 use App\Models\OrderShipmentEvent;
 use App\Support\AdminOrderFulfillmentPresenter;
 use App\Support\AdminUserDisplay;
+use App\Support\OrderExecutionStatus;
 use App\Services\Admin\AdminOrderOperationService;
 use App\Services\Admin\OrderStatusWorkflowService;
 use App\Services\Admin\ShipmentOperationService;
@@ -58,23 +59,12 @@ class OrderController extends Controller
 
                 return '<div><a href="'.route('admin.users.show', $u).'" class="fw-semibold">'.$name.'</a></div>'.$phone;
             })
-            ->addColumn('fulfillment_state', function (Order $o) {
+            ->addColumn('execution_status', function (Order $o) {
                 $hasPaid = $o->payments->contains(fn ($p) => $p->status->value === 'paid');
-                $state = AdminOrderFulfillmentPresenter::deriveOrderFulfillmentState($o->lineItems, $hasPaid);
-                $badge = match ($state) {
-                    'delivered' => 'success',
-                    'fully_shipped' => 'info',
-                    'partially_shipped' => 'info',
-                    'fully_at_warehouse' => 'primary',
-                    'partially_at_warehouse' => 'primary',
-                    'fully_purchased' => 'secondary',
-                    'partially_purchased' => 'warning',
-                    'awaiting_purchase' => 'secondary',
-                    'no_items' => 'secondary',
-                    default => 'secondary',
-                };
+                $exec = OrderExecutionStatus::resolve($o, $o->lineItems, $hasPaid);
+                $badge = OrderExecutionStatus::badgeClass($exec);
 
-                return '<span class="badge bg-'.$badge.'">'.e(__('admin.order_fulfillment_state_'.$state)).'</span>';
+                return '<span class="badge bg-'.$badge.'">'.e(__('admin.execution_status_'.$exec)).'</span>';
             })
             ->addColumn('payment_status', function (Order $o) {
                 if ($o->status === Order::STATUS_PAID) {
@@ -84,7 +74,6 @@ class OrderController extends Controller
 
                 return $paid ? '<span class="badge bg-success">paid</span>' : '<span class="badge bg-secondary">pending</span>';
             })
-            ->editColumn('status', fn (Order $o) => '<span class="badge bg-'.$this->statusBadgeClass($o->status).'">'.e($o->status).'</span>')
             ->addColumn('order_total_snapshot', fn (Order $o) => $o->order_total_snapshot !== null ? number_format((float) $o->order_total_snapshot, 2).' '.$o->currency : number_format((float) $o->total_amount, 2).' '.$o->currency)
             ->addColumn('paid_at', function (Order $o) {
                 $p = $o->payments->filter(fn ($x) => $x->paid_at !== null)->sortBy('paid_at')->first();
@@ -93,7 +82,7 @@ class OrderController extends Controller
             })
             ->editColumn('placed_at', fn (Order $o) => $o->placed_at?->format('Y-m-d H:i') ?? '—')
             ->addColumn('actions', fn (Order $o) => '<a href="'.route('admin.orders.show', $o).'" class="btn btn-sm btn-primary">'.e(__('admin.view')).'</a>')
-            ->rawColumns(['customer', 'fulfillment_state', 'payment_status', 'status', 'actions'])
+            ->rawColumns(['customer', 'execution_status', 'payment_status', 'actions'])
             ->filterColumn('order_number', fn ($q, $keyword) => $q)
             ->filterColumn('customer', function ($q, $keyword) {
                 $q->where(function ($q2) use ($keyword) {
@@ -139,6 +128,7 @@ class OrderController extends Controller
         $fulfillmentSummary = $fulfillmentPresented['fulfillment_summary'];
         $fulfillmentStages = $fulfillmentPresented['fulfillment_stages'];
         $orderFulfillmentState = $fulfillmentPresented['order_fulfillment_state'];
+        $executionStatus = OrderExecutionStatus::resolve($order, $items, $hasPaidCheckout);
 
         $outboundShipments = $order->lineItems
             ->flatMap(fn ($li) => $li->shipmentItems)
@@ -164,6 +154,7 @@ class OrderController extends Controller
             'fulfillmentSummary',
             'fulfillmentStages',
             'orderFulfillmentState',
+            'executionStatus',
             'outboundShipments',
             'customerDisplayName'
         ));
@@ -338,16 +329,5 @@ class OrderController extends Controller
             return response()->json(['success' => true, 'message' => __('admin.success')]);
         }
         return redirect()->route('admin.orders.show', $order)->with('success', __('admin.success'));
-    }
-
-    private function statusBadgeClass(string $status): string
-    {
-        return match ($status) {
-            Order::STATUS_DELIVERED => 'success',
-            Order::STATUS_CANCELLED => 'danger',
-            Order::STATUS_PAID, Order::STATUS_APPROVED => 'primary',
-            Order::STATUS_PENDING_PAYMENT => 'secondary',
-            default => 'warning',
-        };
     }
 }

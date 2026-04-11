@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PaymentResource;
 use App\Models\Order;
+use App\Support\OrderExecutionStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,7 +15,13 @@ class OrderController extends Controller
     public function index(Request $request): JsonResponse
     {
         $orders = Order::where('user_id', $request->user()->id)
-            ->with('shipments.lineItems', 'shipments.trackingEvents', 'shipments.events', 'payments')
+            ->with(
+                'shipments.lineItems',
+                'shipments.trackingEvents',
+                'shipments.events',
+                'payments',
+                'lineItems.shipmentItems.shipment',
+            )
             ->orderByDesc(DB::raw('COALESCE(orders.placed_at, orders.created_at)'))
             ->get();
 
@@ -24,7 +31,13 @@ class OrderController extends Controller
     public function show(Request $request, int $id): JsonResponse
     {
         $order = Order::where('user_id', $request->user()->id)
-            ->with('shipments.lineItems', 'shipments.trackingEvents', 'shipments.events', 'payments')
+            ->with(
+                'shipments.lineItems',
+                'shipments.trackingEvents',
+                'shipments.events',
+                'payments',
+                'lineItems.shipmentItems.shipment',
+            )
             ->findOrFail($id);
 
         return response()->json($this->formatOrder($order, true));
@@ -45,12 +58,17 @@ class OrderController extends Controller
 
     private function formatOrder(Order $o, bool $detailed = false): array
     {
+        $o->loadMissing(['payments', 'lineItems.shipmentItems.shipment']);
+        $hasPaid = $this->hasPaidPayment($o);
+        $executionStatus = OrderExecutionStatus::resolve($o, $o->lineItems, $hasPaid);
+
         $base = [
             'id' => (string) $o->id,
             'order_number' => $o->order_number,
             'origin' => $o->origin,
             'status' => $o->status,
-            'status_key' => $this->orderStatusKey($o),
+            'execution_status' => $executionStatus,
+            'status_key' => $executionStatus,
             'payment_status' => $this->orderPaymentStatus($o),
             'payment_reference' => $this->orderPaymentReference($o),
             'placed_date' => $this->orderPlacedDateFormatted($o),
@@ -144,43 +162,6 @@ class OrderController extends Controller
         }
 
         return $base;
-    }
-
-    /**
-     * Frontend-friendly status key; aligned with OrderResource::statusKey.
-     */
-    private function orderStatusKey(Order $o): string
-    {
-        if ($o->needs_review || $o->status === Order::STATUS_UNDER_REVIEW) {
-            return 'pending_review';
-        }
-
-        // Payment succeeded: never expose stale pending_payment / ambiguous "paid" key to the app.
-        if ($this->hasPaidPayment($o)) {
-            return match ($o->status) {
-                Order::STATUS_PENDING_PAYMENT,
-                Order::STATUS_PAID,
-                Order::STATUS_APPROVED,
-                Order::STATUS_PROCESSING,
-                Order::STATUS_PURCHASED => 'processing',
-                Order::STATUS_SHIPPED_TO_WAREHOUSE,
-                Order::STATUS_INTERNATIONAL_SHIPPING,
-                Order::STATUS_IN_TRANSIT => 'shipped',
-                Order::STATUS_DELIVERED => 'delivered',
-                Order::STATUS_CANCELLED => 'cancelled',
-                default => 'processing',
-            };
-        }
-
-        return match ($o->status) {
-            Order::STATUS_PENDING_PAYMENT => 'pending_payment',
-            Order::STATUS_PAID => 'paid',
-            Order::STATUS_APPROVED, Order::STATUS_PROCESSING, Order::STATUS_PURCHASED => 'processing',
-            Order::STATUS_SHIPPED_TO_WAREHOUSE, Order::STATUS_INTERNATIONAL_SHIPPING, Order::STATUS_IN_TRANSIT => 'shipped',
-            Order::STATUS_DELIVERED => 'delivered',
-            Order::STATUS_CANCELLED => 'cancelled',
-            default => $o->status,
-        };
     }
 
     private function orderPaymentStatus(Order $o): string
