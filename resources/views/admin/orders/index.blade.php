@@ -9,16 +9,11 @@
 <div class="card border-0 shadow-sm">
     <div class="card-header">
         <form id="orders-filter" class="d-flex flex-wrap gap-2 align-items-center">
-            <select name="status" id="orders-status" class="form-select" style="max-width: 150px;">
-                <option value="">{{ __('admin.all_statuses') }}</option>
-                <option value="pending_payment">Pending Payment</option>
-                <option value="paid">Paid</option>
-                <option value="under_review">Under Review</option>
-                <option value="approved">Approved</option>
-                <option value="processing">Processing</option>
-                <option value="in_transit">{{ __('admin.in_transit') }}</option>
-                <option value="delivered">{{ __('admin.delivered') }}</option>
-                <option value="cancelled">{{ __('admin.cancelled') }}</option>
+            <select name="execution_status" id="orders-execution-status" class="form-select" style="max-width: 320px;">
+                <option value="">{{ __('admin.all_execution_statuses') }}</option>
+                @foreach(\App\Support\OrderExecutionStatus::filterableExecutionStatuses() as $execKey)
+                    <option value="{{ $execKey }}">{{ __('admin.execution_status_'.$execKey) }}</option>
+                @endforeach
             </select>
             <select name="origin" id="orders-origin" class="form-select" style="max-width: 150px;">
                 <option value="">{{ __('admin.all_origins') }}</option>
@@ -65,7 +60,7 @@ document.addEventListener('DOMContentLoaded', function() {
         ajax: {
             url: "{{ route('admin.orders.data') }}",
             data: function(d) {
-                d.status = $('#orders-status').val();
+                d.execution_status = $('#orders-execution-status').val();
                 d.origin = $('#orders-origin').val();
             }
         },

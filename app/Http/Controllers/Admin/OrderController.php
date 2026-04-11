@@ -41,8 +41,16 @@ class OrderController extends Controller
         ])
             ->orderByDesc('updated_at');
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
+        if ($request->filled('execution_status')) {
+            $exec = (string) $request->input('execution_status');
+            if (in_array($exec, OrderExecutionStatus::filterableExecutionStatuses(), true)) {
+                $ids = OrderExecutionStatus::matchingOrderIdsForExecutionFilter($exec);
+                if ($ids === []) {
+                    $query->whereRaw('0 = 1');
+                } else {
+                    $query->whereIn('orders.id', $ids);
+                }
+            }
         }
         if ($request->filled('origin')) {
             $query->where('origin', $request->origin);

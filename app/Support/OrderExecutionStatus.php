@@ -2,8 +2,10 @@
 
 namespace App\Support;
 
+use App\Enums\Payment\PaymentStatus;
 use App\Models\Order;
 use App\Models\OrderLineItem;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
@@ -38,6 +40,119 @@ final class OrderExecutionStatus
     public const DELIVERED = 'delivered';
 
     public const CANCELLED = 'cancelled';
+
+    /**
+     * Values exposed in admin/orders execution-status filter (same vocabulary as resolve()).
+     *
+     * @return list<string>
+     */
+    public static function filterableExecutionStatuses(): array
+    {
+        return [
+            self::AWAITING_REVIEW,
+            self::REVIEWED,
+            self::AWAITING_PURCHASE,
+            self::PARTIALLY_PURCHASED,
+            self::FULLY_PURCHASED,
+            self::IN_TRANSIT_TO_WAREHOUSE,
+            self::PARTIALLY_AT_WAREHOUSE,
+            self::FULLY_AT_WAREHOUSE,
+            self::PARTIALLY_SHIPPED,
+            self::FULLY_SHIPPED,
+            self::DELIVERED,
+            self::CANCELLED,
+        ];
+    }
+
+    /**
+     * Order IDs whose resolved execution status matches $target (same rules as resolve()).
+     * Simple statuses use an exact SQL prefilter; others use the same prefilter + in-memory resolve on chunks.
+     *
+     * @return list<int>
+     */
+    public static function matchingOrderIdsForExecutionFilter(string $target): array
+    {
+        if (! in_array($target, self::filterableExecutionStatuses(), true)) {
+            return [];
+        }
+
+        $base = Order::query()->select('orders.id');
+        self::applyPrefilterForExecutionFilter($base, $target);
+
+        if (in_array($target, [
+            self::CANCELLED,
+            self::AWAITING_REVIEW,
+            self::AWAITING_PURCHASE,
+            self::REVIEWED,
+        ], true)) {
+            return $base->orderBy('orders.id')->pluck('orders.id')->all();
+        }
+
+        $ids = [];
+        $q = Order::query()
+            ->select('orders.id')
+            ->with(['payments', 'lineItems.shipmentItems.shipment']);
+        self::applyPrefilterForExecutionFilter($q, $target);
+
+        $q->orderBy('orders.id')->chunkById(500, function ($orders) use ($target, &$ids) {
+            foreach ($orders as $order) {
+                $hasPaid = $order->payments->contains(fn ($p) => $p->status->value === 'paid');
+                if (self::resolve($order, $order->lineItems, $hasPaid) === $target) {
+                    $ids[] = $order->id;
+                }
+            }
+        });
+
+        return $ids;
+    }
+
+    /**
+     * SQL prefilter to shrink the candidate set before resolve() (exact for cancelled / review / purchase / reviewed).
+     */
+    private static function applyPrefilterForExecutionFilter(Builder $q, string $target): void
+    {
+        $paid = fn (Builder $p) => $p->where('status', PaymentStatus::Paid);
+
+        switch ($target) {
+            case self::CANCELLED:
+                $q->where('orders.status', Order::STATUS_CANCELLED);
+                return;
+            case self::AWAITING_REVIEW:
+                $q->where('orders.status', '!=', Order::STATUS_CANCELLED)
+                    ->whereHas('payments', $paid)
+                    ->where(function (Builder $qq) {
+                        $qq->where('needs_review', true)
+                            ->orWhereNull('reviewed_at');
+                    });
+                return;
+            case self::AWAITING_PURCHASE:
+                $q->where('orders.status', '!=', Order::STATUS_CANCELLED)
+                    ->whereHas('payments', $paid)
+                    ->whereNotNull('reviewed_at')
+                    ->where('needs_review', false)
+                    ->whereDoesntHave('lineItems');
+                return;
+            case self::REVIEWED:
+                $q->where('orders.status', '!=', Order::STATUS_CANCELLED)
+                    ->whereHas('payments', $paid)
+                    ->whereNotNull('reviewed_at')
+                    ->where('needs_review', false)
+                    ->whereHas('lineItems')
+                    ->whereDoesntHave('lineItems', function (Builder $line) {
+                        $line->whereNotIn('fulfillment_status', [
+                            OrderLineItem::FULFILLMENT_PAID,
+                            OrderLineItem::FULFILLMENT_REVIEWED,
+                        ]);
+                    });
+                return;
+            default:
+                $q->where('orders.status', '!=', Order::STATUS_CANCELLED)
+                    ->whereHas('payments', $paid)
+                    ->whereNotNull('reviewed_at')
+                    ->where('needs_review', false)
+                    ->has('lineItems');
+        }
+    }
 
     /**
      * @param  Collection<int, \App\Models\OrderLineItem>  $items

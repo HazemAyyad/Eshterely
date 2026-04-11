@@ -206,6 +206,7 @@ return [
     'orders_list_procurement_hint' => 'Customer orders and payments. Use each order detail for line-item procurement (purchase, tracking, in-transit). Physical receiving and outbound packing are under Warehouse and Shipments.',
     'order_number' => 'Order #',
     'all_statuses' => 'All statuses',
+    'all_execution_statuses' => 'All execution statuses',
     'in_transit' => 'In transit',
     'delivered' => 'Delivered',
     'cancelled' => 'Cancelled',
