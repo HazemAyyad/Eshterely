@@ -7,10 +7,12 @@ use App\Enums\Payment\PaymentStatus;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentEvent;
+use App\Models\Shipment;
 use App\Models\Wallet;
 use App\Models\WalletTopUpPayment;
 use App\Services\Cart\RemoveOrderedCartItemsService;
 use App\Services\Fcm\OrderShipmentNotificationTrigger;
+use App\Services\Shipments\ShipmentDraftFinalizationService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -28,7 +30,8 @@ class SquareWebhookService
 
     public function __construct(
         protected PaymentService $paymentService,
-        protected OrderShipmentNotificationTrigger $notificationTrigger
+        protected OrderShipmentNotificationTrigger $notificationTrigger,
+        protected ShipmentDraftFinalizationService $shipmentDraftFinalization
     ) {}
 
     /**
@@ -368,6 +371,7 @@ class SquareWebhookService
                     'square_status' => $paymentObject['status'] ?? null,
                 ], 'Square webhook: payment completed');
                 $this->syncOrderToPaid($payment);
+                $this->finalizeOutboundShipmentAfterGatewayPayment($payment);
                 Log::info('Square webhook payment status changed', [
                     'payment_id' => $payment->id,
                     'status' => 'paid',
@@ -427,6 +431,20 @@ class SquareWebhookService
      * When payment becomes paid, update order status to paid and set placed_at.
      * Idempotent: only updates if order is still pending_payment (duplicate webhooks do not duplicate transitions).
      */
+    protected function finalizeOutboundShipmentAfterGatewayPayment(Payment $payment): void
+    {
+        if ($payment->order_id !== null || $payment->shipment_id === null) {
+            return;
+        }
+
+        $shipment = Shipment::find($payment->shipment_id);
+        if (! $shipment || $shipment->status !== Shipment::STATUS_DRAFT) {
+            return;
+        }
+
+        $this->shipmentDraftFinalization->finalizeDraftAndMarkPaid($shipment);
+    }
+
     protected function syncOrderToPaid(Payment $payment): void
     {
         if ($payment->order_id === null) {

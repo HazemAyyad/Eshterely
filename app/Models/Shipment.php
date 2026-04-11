@@ -37,6 +37,7 @@ class Shipment extends Model
         'total_shipping_payment',
         'currency',
         'pricing_breakdown',
+        'draft_payload',
     ];
 
     protected function casts(): array
@@ -51,6 +52,7 @@ class Shipment extends Model
             'additional_fees_total' => 'decimal:2',
             'total_shipping_payment' => 'decimal:2',
             'pricing_breakdown' => 'array',
+            'draft_payload' => 'array',
         ];
     }
 

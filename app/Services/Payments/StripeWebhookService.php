@@ -6,10 +6,12 @@ use App\Enums\Payment\PaymentEventSource;
 use App\Enums\Payment\PaymentStatus;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\Shipment;
 use App\Models\Wallet;
 use App\Models\WalletTopUpPayment;
 use App\Services\Cart\RemoveOrderedCartItemsService;
 use App\Services\Fcm\OrderShipmentNotificationTrigger;
+use App\Services\Shipments\ShipmentDraftFinalizationService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -17,7 +19,8 @@ class StripeWebhookService
 {
     public function __construct(
         protected PaymentService $paymentService,
-        protected OrderShipmentNotificationTrigger $notificationTrigger
+        protected OrderShipmentNotificationTrigger $notificationTrigger,
+        protected ShipmentDraftFinalizationService $shipmentDraftFinalization
     ) {}
 
     public function handleEvent(?string $eventType, array $payload): void
@@ -152,6 +155,7 @@ class StripeWebhookService
 
             if ($newStatus === PaymentStatus::Paid) {
                 $this->syncOrderToPaid($payment);
+                $this->finalizeOutboundShipmentAfterGatewayPayment($payment);
                 $this->notificationTrigger->onPaymentSuccess($payment);
             } elseif ($newStatus === PaymentStatus::Failed) {
                 $this->notificationTrigger->onPaymentFailed($payment);
@@ -235,6 +239,20 @@ class StripeWebhookService
                 }
             }
         });
+    }
+
+    protected function finalizeOutboundShipmentAfterGatewayPayment(Payment $payment): void
+    {
+        if ($payment->order_id !== null || $payment->shipment_id === null) {
+            return;
+        }
+
+        $shipment = Shipment::find($payment->shipment_id);
+        if (! $shipment || $shipment->status !== Shipment::STATUS_DRAFT) {
+            return;
+        }
+
+        $this->shipmentDraftFinalization->finalizeDraftAndMarkPaid($shipment);
     }
 
     protected function syncOrderToPaid(Payment $payment): void

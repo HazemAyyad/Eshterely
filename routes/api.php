@@ -129,6 +129,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('warehouse/items', [WarehouseController::class, 'items']);
     Route::post('shipments/create', [ShipmentsController::class, 'store']);
     Route::get('shipments', [ShipmentsController::class, 'index']);
+    Route::delete('shipments/{shipment}', [ShipmentsController::class, 'destroy']);
     Route::post('shipments/{shipment}/pay', [ShipmentsController::class, 'pay']);
 });
 
