@@ -121,6 +121,7 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
 
     // Outbound shipments (user warehouse → second payment) — POST handlers (API + admin forms)
     Route::post('warehouse/order-line-items/{orderLineItem}/receive', [WarehouseReceivingController::class, 'store'])->name('warehouse.receive');
+    Route::put('warehouse/order-line-items/{orderLineItem}/receive/{warehouseReceipt}', [WarehouseReceivingController::class, 'update'])->name('warehouse.receive-update');
     Route::post('shipments/{shipment}/pack', [OutboundShipmentController::class, 'pack'])->name('outbound-shipments.pack');
     Route::post('shipments/{shipment}/ship', [OutboundShipmentController::class, 'ship'])->name('outbound-shipments.ship');
 

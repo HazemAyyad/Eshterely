@@ -75,6 +75,7 @@
                         <th>{{ __('admin.procurement_status') }}</th>
                         <th>{{ __('admin.store') }}</th>
                         <th>{{ __('admin.store_tracking') }}</th>
+                        <th style="min-width:12rem">{{ __('admin.wh_intake_details_col') }}</th>
                         <th>{{ __('admin.actions') }}</th>
                     </tr>
                 </thead>
@@ -120,6 +121,7 @@ document.addEventListener('DOMContentLoaded', function() {
             { data: 'fulfillment', name: 'order_line_items.fulfillment_status', orderable: true, searchable: false },
             { data: 'store_name', name: 'order_line_items.store_name', searchable: true },
             { data: 'store_tracking', name: 'store_tracking', orderable: false, searchable: false },
+            { data: 'intake', name: 'intake', orderable: false, searchable: false },
             { data: 'actions', name: 'actions', orderable: false, searchable: false }
         ],
         language: dtLang

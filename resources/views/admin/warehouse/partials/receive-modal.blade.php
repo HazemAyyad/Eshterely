@@ -23,6 +23,7 @@
         <div class="modal-content d-flex flex-column mh-100">
             <form method="POST" id="warehouse-receive-modal-form" class="d-flex flex-column flex-grow-1" style="min-height:0;" enctype="multipart/form-data" action="">
                 @csrf
+                <input type="hidden" name="_method" id="wh-receive-http-method" value="" disabled>
                 <div class="modal-header flex-shrink-0">
                     <h5 class="modal-title" id="warehouseReceiveModalLabel">{{ __('admin.warehouse_receive_modal_title') }}</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -65,9 +66,14 @@
                             </label>
                             <input type="text" name="special_handling_type" class="form-control" maxlength="50">
                         </div>
+                        <div class="col-12 d-none" id="wh-receive-existing-images-wrap">
+                            <label class="form-label">{{ __('admin.existing_receipt_images') }}</label>
+                            <p class="small text-muted mb-2">{{ __('admin.existing_receipt_images_help') }}</p>
+                            <div id="wh-receive-existing-images" class="border rounded p-2 bg-body-secondary"></div>
+                        </div>
                         <div class="col-12">
                             <label class="form-label">{{ __('admin.receipt_images_upload') }}</label>
-                            <input type="file" name="receipt_images[]" class="form-control" accept="image/*" multiple>
+                            <input type="file" name="receipt_images[]" id="wh-receive-file-input" class="form-control" accept="image/*" multiple>
                             <div class="form-text">{{ __('admin.receipt_images_upload_help') }}</div>
                         </div>
                         <div class="col-12">

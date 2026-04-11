@@ -13,6 +13,8 @@ use Yajra\DataTables\Facades\DataTables;
 use App\Support\AdminFulfillmentLabels;
 use App\Support\AdminOrderLineItemDisplay;
 use App\Support\AdminUserDisplay;
+use App\Support\AdminWarehouseReceiptDisplay;
+use App\Support\AdminWarehouseReceiptImages;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 
@@ -47,6 +49,7 @@ class WarehouseQueueController extends Controller
         };
 
         $showReceive = in_array($queue, ['awaiting_arrival', 'ready_to_receive'], true);
+        $showEditReceive = $queue === 'received';
 
         if ($request->filled('user_id')) {
             $query->whereHas('shipment.order', fn ($q) => $q->where('user_id', (int) $request->user_id));
@@ -94,7 +97,14 @@ class WarehouseQueueController extends Controller
 
                 return $t !== '' ? e(Str::limit($t, 24)) : '—';
             })
-            ->addColumn('actions', function (OrderLineItem $li) use ($showReceive) {
+            ->addColumn('intake', function (OrderLineItem $li) use ($queue) {
+                if ($queue !== 'received') {
+                    return '<span class="text-muted small">—</span>';
+                }
+
+                return AdminWarehouseReceiptDisplay::queueIntakeSummaryHtml($li->latestWarehouseReceipt);
+            })
+            ->addColumn('actions', function (OrderLineItem $li) use ($showReceive, $showEditReceive) {
                 $order = route('admin.orders.show', $li->shipment->order_id);
                 $on = e($li->shipment?->order?->order_number ?? '—');
                 $pn = e(Str::limit($li->name, 80));
@@ -107,12 +117,48 @@ class WarehouseQueueController extends Controller
                         .' data-product-name="'.$pn.'">'
                         .e(__('admin.warehouse_receive')).'</button>';
                 }
+                if ($showEditReceive) {
+                    $wr = $li->latestWarehouseReceipt;
+                    if ($wr) {
+                        $editUrl = route('admin.warehouse.receive-update', [$li, $wr]);
+                        $imgPayload = [];
+                        if (is_array($wr->images)) {
+                            foreach ($wr->images as $entry) {
+                                if (! is_string($entry) || $entry === '') {
+                                    continue;
+                                }
+                                $imgPayload[] = [
+                                    'raw' => $entry,
+                                    'display' => AdminWarehouseReceiptImages::displayUrl($entry),
+                                ];
+                            }
+                        }
+                        $editPayload = [
+                            'received_at' => $wr->received_at?->format('Y-m-d\TH:i'),
+                            'received_weight' => $wr->received_weight,
+                            'received_length' => $wr->received_length,
+                            'received_width' => $wr->received_width,
+                            'received_height' => $wr->received_height,
+                            'additional_fee_amount' => $wr->additional_fee_amount !== null ? (float) $wr->additional_fee_amount : null,
+                            'condition_notes' => $wr->condition_notes,
+                            'special_handling_type' => $wr->special_handling_type,
+                            'images' => $imgPayload,
+                        ];
+                        $b64 = base64_encode(json_encode($editPayload, JSON_UNESCAPED_UNICODE));
+                        $html .= '<button type="button" class="btn btn-sm btn-outline-primary js-wh-receive-modal" data-bs-toggle="modal" data-bs-target="#warehouseReceiveModal"'
+                            .' data-receive-url="'.e($editUrl).'"'
+                            .' data-receive-edit-b64="'.e($b64).'"'
+                            .' data-order-number="'.$on.'"'
+                            .' data-product-name="'.$pn.'">'
+                            .e(__('admin.warehouse_edit_receive')).'</button>';
+                    }
+                }
                 $html .= '<a href="'.$order.'" class="btn btn-sm btn-outline-secondary">'.e(__('admin.source_order')).'</a>';
                 $html .= '</div>';
 
                 return $html;
             })
-            ->rawColumns(['customer', 'order_number', 'product', 'fulfillment', 'actions'])
+            ->rawColumns(['customer', 'order_number', 'product', 'fulfillment', 'intake', 'actions'])
             ->toJson();
     }
 
