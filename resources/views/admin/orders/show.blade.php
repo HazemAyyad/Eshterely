@@ -86,12 +86,6 @@
                     <span class="badge bg-{{ $execBadge }} fs-6">{{ __('admin.execution_status_'.$exec) }}</span>
                 </p>
 
-                <details class="mb-3 small">
-                    <summary class="fw-semibold text-body-secondary user-select-none">{{ __('admin.internal_record_status_heading') }}</summary>
-                    <p class="mb-0 mt-2 text-muted">{{ __('admin.order_record_status') }}: <code>{{ $order->status }}</code></p>
-                    <p class="small text-muted mb-0 mt-1">{{ __('admin.internal_status_help') }}</p>
-                </details>
-
                 <div class="row g-2">
                     <div class="col-md-6">
                         <p class="mb-1"><strong>{{ __('admin.origin') }}:</strong> {{ $order->origin }}</p>
@@ -125,7 +119,7 @@
         <div class="card border-0 shadow-sm">
             <div class="card-header"><h5 class="mb-0">{{ __('admin.payments') }}</h5></div>
             <div class="card-body">
-                @if(((float) ($order->wallet_applied_amount ?? 0)) > 0 && ($order->needs_review || $order->status === \App\Models\Order::STATUS_UNDER_REVIEW))
+                @if(((float) ($order->wallet_applied_amount ?? 0)) > 0 && ($order->needs_review || $isAwaitingReview))
                     <div class="alert alert-light border mb-3 py-2 small">
                         <strong>{{ __('admin.wallet_checkout_pending') }}:</strong>
                         {{ number_format((float) $order->wallet_applied_amount, 2) }} {{ $order->currency }}
