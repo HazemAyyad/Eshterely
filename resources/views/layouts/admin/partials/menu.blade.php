@@ -120,7 +120,7 @@
                 </li>
             </ul>
         </li>
-        <li class="menu-item {{ request()->routeIs('admin.users*', 'admin.cart-review*', 'admin.wallets*', 'admin.wallet-refunds*', 'admin.support*') ? 'active open' : '' }}">
+        <li class="menu-item {{ request()->routeIs('admin.users*', 'admin.cart-review*', 'admin.wallets*', 'admin.wallet-refunds*', 'admin.wallet-withdrawals*', 'admin.support*') ? 'active open' : '' }}">
             <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon icon-base ti tabler-users"></i>
                 <div>{{ __('admin.management') }}</div>
@@ -143,7 +143,12 @@
                 </li>
                 <li class="menu-item {{ request()->routeIs('admin.wallet-refunds*') ? 'active' : '' }}">
                     <a href="{{ route('admin.wallet-refunds.index') }}" class="menu-link">
-                        <div>{{ __('admin.wallet_refunds_title') }}</div>
+                        <div>{{ __('admin.wallet_refunds_to_wallet_title') }}</div>
+                    </a>
+                </li>
+                <li class="menu-item {{ request()->routeIs('admin.wallet-withdrawals*') ? 'active' : '' }}">
+                    <a href="{{ route('admin.wallet-withdrawals.index') }}" class="menu-link">
+                        <div>{{ __('admin.wallet_withdrawals_title') }}</div>
                     </a>
                 </li>
                 <li class="menu-item {{ request()->routeIs('admin.support*') ? 'active' : '' }}">

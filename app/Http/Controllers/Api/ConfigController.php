@@ -83,6 +83,7 @@ class ConfigController extends Controller
         ];
 
         $checkoutPaymentMode = 'gateway_only';
+        $refundFeePercent = 0.0;
         if (Schema::hasTable('payment_gateway_settings')) {
             $pg = DB::table('payment_gateway_settings')->first();
             if ($pg && isset($pg->checkout_payment_mode)) {
@@ -90,6 +91,9 @@ class ConfigController extends Controller
                 if (in_array($m, ['wallet_only', 'gateway_only', 'wallet_and_gateway'], true)) {
                     $checkoutPaymentMode = $m;
                 }
+            }
+            if ($pg && isset($pg->refund_fee_percent)) {
+                $refundFeePercent = max(0, (float) $pg->refund_fee_percent);
             }
             if ($pg) {
                 $enabled = [];
@@ -204,6 +208,7 @@ class ConfigController extends Controller
             'app_icon_url' => $appIconUrl,
             'payment_gateways' => $paymentGateways,
             'checkout_payment_mode' => $checkoutPaymentMode,
+            'refund_fee_percent' => $refundFeePercent,
         ]);
     }
 }

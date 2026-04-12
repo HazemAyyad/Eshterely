@@ -24,7 +24,8 @@ use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\SupportController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WalletController;
-use App\Http\Controllers\Admin\WalletRefundRequestsController;
+use App\Http\Controllers\Admin\WalletRefundsController;
+use App\Http\Controllers\Admin\WalletWithdrawalsController;
 use App\Http\Controllers\Admin\WarehouseReceivingController;
 use App\Http\Controllers\Admin\OutboundShipmentController;
 use App\Http\Controllers\Admin\OrderLineItemProcurementController;
@@ -139,11 +140,17 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
     Route::get('wallets', [WalletController::class, 'index'])->name('wallets.index');
     Route::get('wallets/{user}', [WalletController::class, 'show'])->name('wallets.show');
 
-    // Wallet refund requests
-    Route::get('wallet-refunds/data', [WalletRefundRequestsController::class, 'data'])->name('wallet-refunds.data');
-    Route::get('wallet-refunds', [WalletRefundRequestsController::class, 'index'])->name('wallet-refunds.index');
-    Route::get('wallet-refunds/{walletRefundRequest}', [WalletRefundRequestsController::class, 'show'])->name('wallet-refunds.show');
-    Route::patch('wallet-refunds/{walletRefundRequest}/status', [WalletRefundRequestsController::class, 'updateStatus'])->name('wallet-refunds.update-status');
+    // Refund to wallet (order/shipment)
+    Route::get('wallet-refunds/data', [WalletRefundsController::class, 'data'])->name('wallet-refunds.data');
+    Route::get('wallet-refunds', [WalletRefundsController::class, 'index'])->name('wallet-refunds.index');
+    Route::get('wallet-refunds/{walletRefund}', [WalletRefundsController::class, 'show'])->name('wallet-refunds.show');
+    Route::patch('wallet-refunds/{walletRefund}/status', [WalletRefundsController::class, 'updateStatus'])->name('wallet-refunds.update-status');
+
+    // Withdraw to bank
+    Route::get('wallet-withdrawals/data', [WalletWithdrawalsController::class, 'data'])->name('wallet-withdrawals.data');
+    Route::get('wallet-withdrawals', [WalletWithdrawalsController::class, 'index'])->name('wallet-withdrawals.index');
+    Route::get('wallet-withdrawals/{walletWithdrawal}', [WalletWithdrawalsController::class, 'show'])->name('wallet-withdrawals.show');
+    Route::patch('wallet-withdrawals/{walletWithdrawal}/status', [WalletWithdrawalsController::class, 'updateStatus'])->name('wallet-withdrawals.update-status');
 
     // Support
     Route::get('support/data', [SupportController::class, 'data'])->name('support.data');

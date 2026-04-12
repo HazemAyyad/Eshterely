@@ -1,23 +1,24 @@
 @extends('layouts.admin')
 
-@section('title', __('admin.wallet_refunds_to_wallet_title'))
+@section('title', __('admin.wallet_withdrawals_title'))
 
 @section('content')
-<h4 class="py-4 mb-4">{{ __('admin.wallet_refunds_to_wallet_title') }}</h4>
+<h4 class="py-4 mb-4">{{ __('admin.wallet_withdrawals_title') }}</h4>
 
 <div class="card border-0 shadow-sm">
     <div class="card-header">
         <h5 class="mb-0">{{ __('admin.list') }}</h5>
     </div>
     <div class="table-responsive text-nowrap">
-        <table id="wallet-refunds-table" class="table table-hover table-striped">
+        <table id="wallet-withdrawals-table" class="table table-hover table-striped">
             <thead>
                 <tr>
                     <th>#</th>
                     <th>{{ __('admin.user') }}</th>
-                    <th>{{ __('admin.source') }}</th>
                     <th>{{ __('admin.amount') }}</th>
                     <th>{{ __('admin.status') }}</th>
+                    <th>{{ __('admin.bank_name') }}</th>
+                    <th>{{ __('admin.country') }}</th>
                     <th>{{ __('admin.created_at') }}</th>
                     <th>{{ __('admin.actions') }}</th>
                 </tr>
@@ -37,16 +38,17 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const dtLang = @json(__('datatatables'));
-    $('#wallet-refunds-table').DataTable({
+    $('#wallet-withdrawals-table').DataTable({
         processing: true,
         serverSide: true,
-        ajax: "{{ route('admin.wallet-refunds.data') }}",
+        ajax: "{{ route('admin.wallet-withdrawals.data') }}",
         columns: [
             { data: 'id', name: 'id' },
             { data: 'user_contact', name: 'user_id' },
-            { data: 'source_label', name: 'source_type' },
             { data: 'amount_fmt', name: 'amount' },
             { data: 'status', name: 'status' },
+            { data: 'bank_name', name: 'bank_name' },
+            { data: 'country', name: 'country' },
             { data: 'created_at', name: 'created_at' },
             { data: 'actions', name: 'actions', orderable: false, searchable: false }
         ],

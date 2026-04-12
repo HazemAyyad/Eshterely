@@ -54,6 +54,8 @@ class WalletController extends Controller
             'amount' => ($t->amount >= 0 ? '+' : '-') . ' $' . number_format(abs($t->amount), 2),
             'subtitle' => $t->subtitle ?? '',
             'is_credit' => $t->amount >= 0,
+            'reference_type' => $t->reference_type,
+            'reference_id' => $t->reference_id !== null ? (string) $t->reference_id : null,
         ]));
     }
 

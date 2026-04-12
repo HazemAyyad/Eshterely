@@ -44,6 +44,15 @@
                     </div>
 
                     <div class="col-12">
+                        <label class="form-label">Withdrawal fee (%)</label>
+                        <input type="number" name="refund_fee_percent" class="form-control" step="0.0001" min="0" max="100"
+                               value="{{ old('refund_fee_percent', $values['refund_fee_percent'] ?? 0) }}">
+                        <small class="text-muted d-block mt-1">
+                            Applied only when users withdraw wallet balance to a bank account (not for refunds to wallet).
+                        </small>
+                    </div>
+
+                    <div class="col-12">
                         <label class="form-label">Default Gateway</label>
                         <select name="default_gateway" class="form-select">
                             <option value="square" {{ old('default_gateway', $values['default_gateway'] ?? 'square') === 'square' ? 'selected' : '' }}>

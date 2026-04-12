@@ -3,40 +3,32 @@
 namespace App\Services\Wallet;
 
 use App\Models\Notification;
-use App\Models\WalletRefundRequest;
+use App\Models\WalletRefund;
 use App\Services\Fcm\FcmNotificationService;
 use App\Services\Fcm\NotificationDispatchService;
 
-/**
- * In-app notification row + FCM for wallet refund request lifecycle.
- */
-class WalletRefundRequestNotifier
+class WalletRefundNotifier
 {
     public function __construct(
         protected NotificationDispatchService $dispatchService
     ) {}
 
-    public function notifySubmitted(WalletRefundRequest $req): void
+    public function notifySubmitted(WalletRefund $req): void
     {
         $this->dispatch($req, 'submitted');
     }
 
-    public function notifyApproved(WalletRefundRequest $req): void
+    public function notifyApproved(WalletRefund $req): void
     {
         $this->dispatch($req, 'approved');
     }
 
-    public function notifyRejected(WalletRefundRequest $req): void
+    public function notifyRejected(WalletRefund $req): void
     {
         $this->dispatch($req, 'rejected');
     }
 
-    public function notifyTransferred(WalletRefundRequest $req): void
-    {
-        $this->dispatch($req, 'transferred');
-    }
-
-    private function dispatch(WalletRefundRequest $req, string $kind): void
+    private function dispatch(WalletRefund $req, string $kind): void
     {
         $req->loadMissing('user');
         $user = $req->user;
@@ -45,22 +37,19 @@ class WalletRefundRequestNotifier
         }
 
         $amt = number_format((float) $req->amount, 2);
+        $src = $req->source_type === WalletRefund::SOURCE_ORDER ? 'order' : 'shipment';
         [$title, $body] = match ($kind) {
             'submitted' => [
-                'Refund request received',
-                "We received your refund request for \${$amt}. Our team will review it soon.",
+                'Refund to wallet requested',
+                "We received your {$src} refund request for \${$amt}. Our team will review it.",
             ],
             'approved' => [
-                'Refund request approved',
-                "Your refund request #{$req->id} for \${$amt} has been approved. Bank processing will follow.",
+                'Refund to wallet approved',
+                "Your {$src} refund of \${$amt} was approved and added to your wallet balance.",
             ],
             'rejected' => [
-                'Refund request not approved',
-                "Your refund request #{$req->id} was not approved. Open the app for details.",
-            ],
-            'transferred' => [
-                'Refund transfer completed',
-                'Your bank transfer for this refund has been marked as sent. Receiving the funds may take up to 30 days depending on your bank.',
+                'Refund to wallet not approved',
+                "Your {$src} refund request #{$req->id} was not approved. Open the app for details.",
             ],
             default => [null, null],
         };
@@ -81,14 +70,14 @@ class WalletRefundRequestNotifier
         ]);
 
         $data = FcmNotificationService::systemEventData(
-            'wallet_refund',
+            'wallet_refund_to_wallet',
             (string) $req->id,
             $title,
             $body,
-            'wallet_refund',
+            'wallet_refund_to_wallet',
             (string) $req->id,
             'wallet',
-            ['refund_request_id' => $req->id]
+            ['wallet_refund_id' => $req->id]
         );
 
         $this->dispatchService->sendSystemEvent($title, $body, $user, $data);

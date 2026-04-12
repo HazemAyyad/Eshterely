@@ -38,6 +38,7 @@ class PaymentGatewaysController extends Controller
             'stripe_publishable_key' => $row->stripe_publishable_key ?? '',
             'stripe_secret_key' => $row->stripe_secret_key ?? '',
             'stripe_webhook_secret' => $row->stripe_webhook_secret ?? '',
+            'refund_fee_percent' => isset($row->refund_fee_percent) ? (float) $row->refund_fee_percent : 0.0,
         ];
 
         return view('admin.config.payment-gateways.edit', ['values' => $values]);
@@ -69,6 +70,9 @@ class PaymentGatewaysController extends Controller
         ];
         if (Schema::hasColumn('payment_gateway_settings', 'checkout_payment_mode')) {
             $rules['checkout_payment_mode'] = 'required|in:wallet_only,gateway_only,wallet_and_gateway';
+        }
+        if (Schema::hasColumn('payment_gateway_settings', 'refund_fee_percent')) {
+            $rules['refund_fee_percent'] = 'nullable|numeric|min:0|max:100';
         }
         $validated = $request->validate($rules);
 
@@ -105,6 +109,9 @@ class PaymentGatewaysController extends Controller
         ];
         if (Schema::hasColumn('payment_gateway_settings', 'checkout_payment_mode')) {
             $data['checkout_payment_mode'] = $validated['checkout_payment_mode'];
+        }
+        if (Schema::hasColumn('payment_gateway_settings', 'refund_fee_percent')) {
+            $data['refund_fee_percent'] = round((float) ($validated['refund_fee_percent'] ?? 0), 4);
         }
 
         if ($wasEmpty) {
