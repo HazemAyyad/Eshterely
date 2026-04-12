@@ -25,6 +25,8 @@ use App\Http\Controllers\Admin\SupportController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WalletController;
 use App\Http\Controllers\Admin\WalletRefundsController;
+use App\Http\Controllers\Admin\SavedPaymentMethodsController;
+use App\Http\Controllers\Admin\WalletTopupRequestsController;
 use App\Http\Controllers\Admin\WalletWithdrawalsController;
 use App\Http\Controllers\Admin\WarehouseReceivingController;
 use App\Http\Controllers\Admin\OutboundShipmentController;
@@ -151,6 +153,16 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
     Route::get('wallet-withdrawals', [WalletWithdrawalsController::class, 'index'])->name('wallet-withdrawals.index');
     Route::get('wallet-withdrawals/{walletWithdrawal}', [WalletWithdrawalsController::class, 'show'])->name('wallet-withdrawals.show');
     Route::patch('wallet-withdrawals/{walletWithdrawal}/status', [WalletWithdrawalsController::class, 'updateStatus'])->name('wallet-withdrawals.update-status');
+
+    // Manual wallet funding (wire / Zelle) & saved Stripe cards
+    Route::get('wallet-topup-requests/data', [WalletTopupRequestsController::class, 'data'])->name('wallet-topup-requests.data');
+    Route::get('wallet-topup-requests', [WalletTopupRequestsController::class, 'index'])->name('wallet-topup-requests.index');
+    Route::get('wallet-topup-requests/{walletTopupRequest}', [WalletTopupRequestsController::class, 'show'])->name('wallet-topup-requests.show');
+    Route::patch('wallet-topup-requests/{walletTopupRequest}/status', [WalletTopupRequestsController::class, 'updateStatus'])->name('wallet-topup-requests.update-status');
+
+    Route::get('saved-payment-methods/data', [SavedPaymentMethodsController::class, 'data'])->name('saved-payment-methods.data');
+    Route::get('saved-payment-methods', [SavedPaymentMethodsController::class, 'index'])->name('saved-payment-methods.index');
+    Route::patch('saved-payment-methods/{savedPaymentMethod}/disable', [SavedPaymentMethodsController::class, 'disable'])->name('saved-payment-methods.disable');
 
     // Support
     Route::get('support/data', [SupportController::class, 'data'])->name('support.data');

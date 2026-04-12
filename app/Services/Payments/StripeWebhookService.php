@@ -6,9 +6,12 @@ use App\Enums\Payment\PaymentEventSource;
 use App\Enums\Payment\PaymentStatus;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\SavedPaymentMethod;
 use App\Models\Shipment;
 use App\Models\Wallet;
 use App\Models\WalletTopUpPayment;
+use App\Services\Wallet\WalletCardVerificationNotifier;
+use App\Services\Wallet\WalletTopUpCreditNotifier;
 use App\Services\Cart\RemoveOrderedCartItemsService;
 use App\Services\Fcm\OrderShipmentNotificationTrigger;
 use App\Services\Shipments\ShipmentDraftFinalizationService;
@@ -47,6 +50,18 @@ class StripeWebhookService
     {
         $metadata = is_array($object['metadata'] ?? null) ? $object['metadata'] : [];
 
+        // Card verification micro-charges (PaymentIntent only — no wallet_top_up_reference).
+        if (str_starts_with($eventType, 'payment_intent.')) {
+            $spmId = $metadata['saved_payment_method_id'] ?? null;
+            $hasTopUpRef = is_string($metadata['wallet_top_up_reference'] ?? null)
+                && trim((string) $metadata['wallet_top_up_reference']) !== '';
+            if (is_string($spmId) && $spmId !== '' && ! $hasTopUpRef) {
+                $this->handleSavedCardVerificationIntent($eventType, $object);
+
+                return;
+            }
+        }
+
         $paymentReference = $metadata['payment_reference'] ?? null;
         $topUpReference = $metadata['wallet_top_up_reference'] ?? null;
 
@@ -65,6 +80,10 @@ class StripeWebhookService
             'checkout.session.expired' => PaymentStatus::Cancelled,
             'checkout.session.canceled' => PaymentStatus::Cancelled,
             'payment_intent.succeeded' => PaymentStatus::Paid,
+            'payment_intent.processing' => PaymentStatus::Processing,
+            'payment_intent.requires_action' => PaymentStatus::RequiresAction,
+            'payment_intent.payment_failed' => PaymentStatus::Failed,
+            'payment_intent.canceled' => PaymentStatus::Cancelled,
             default => null,
         };
 
@@ -107,6 +126,34 @@ class StripeWebhookService
             'wallet_top_up_reference' => is_string($topUpReference) ? $topUpReference : null,
             'provider_session_id' => is_string($providerSessionId) ? $providerSessionId : null,
         ]);
+    }
+
+    protected function handleSavedCardVerificationIntent(string $eventType, array $object): void
+    {
+        if ($eventType !== 'payment_intent.payment_failed') {
+            return;
+        }
+
+        $metadata = is_array($object['metadata'] ?? null) ? $object['metadata'] : [];
+        $spmId = $metadata['saved_payment_method_id'] ?? null;
+        if (! is_string($spmId) || $spmId === '') {
+            return;
+        }
+
+        $card = SavedPaymentMethod::query()->find($spmId);
+        if ($card === null) {
+            return;
+        }
+
+        DB::transaction(function () use ($card): void {
+            $card->refresh();
+            if ($card->verification_status !== SavedPaymentMethod::STATUS_PENDING) {
+                return;
+            }
+            $card->update(['verification_status' => SavedPaymentMethod::STATUS_FAILED]);
+        });
+
+        app(WalletCardVerificationNotifier::class)->notifyFailed($card->fresh());
     }
 
     protected function applyPaymentStatusFromStripe(
@@ -180,6 +227,7 @@ class StripeWebhookService
             PaymentStatus::Processing => 'processing',
             PaymentStatus::Failed => 'failed',
             PaymentStatus::Cancelled => 'cancelled',
+            PaymentStatus::RequiresAction => 'processing',
             default => null,
         };
 
@@ -187,7 +235,9 @@ class StripeWebhookService
             return;
         }
 
-        DB::transaction(function () use ($topUp, $newStatusString, $eventType, $stripeObject): void {
+        $creditedThisRun = false;
+
+        DB::transaction(function () use ($topUp, $newStatusString, $stripeObject, &$creditedThisRun): void {
             $topUp->refresh();
 
             // Idempotency: if already terminal, do nothing.
@@ -225,20 +275,33 @@ class StripeWebhookService
                         $wallet->available_balance = (float) $wallet->available_balance + (float) $topUp->amount;
                         $wallet->save();
 
+                        $txType = ($meta['wallet_tx_type'] ?? '') === 'card_topup_credit'
+                            ? 'card_topup_credit'
+                            : 'top_up';
+                        $title = $txType === 'card_topup_credit' ? 'Card top-up' : 'Top-up';
+                        $subtitle = $txType === 'card_topup_credit' ? 'SAVED CARD' : 'PAID';
+
                         $wallet->transactions()->create([
-                            'type' => 'top_up',
-                            'title' => 'Top-up',
+                            'type' => $txType,
+                            'title' => $title,
                             'amount' => (float) $topUp->amount,
-                            'subtitle' => 'PAID',
+                            'subtitle' => $subtitle,
                             'reference_type' => 'wallet_top_up_payment',
                             'reference_id' => $topUp->id,
                         ]);
                     }
                     $meta['wallet_credited_at'] = now()->toIso8601String();
                     $topUp->update(['metadata' => $meta]);
+                    $creditedThisRun = true;
                 }
             }
         });
+
+        if ($creditedThisRun) {
+            DB::afterCommit(function () use ($topUp): void {
+                app(WalletTopUpCreditNotifier::class)->notifyCredited($topUp->fresh());
+            });
+        }
     }
 
     protected function finalizeOutboundShipmentAfterGatewayPayment(Payment $payment): void

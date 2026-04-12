@@ -21,8 +21,11 @@ use App\Http\Controllers\Api\ProductImportController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SessionsController;
 use App\Http\Controllers\Api\SupportController;
+use App\Http\Controllers\Api\SavedPaymentMethodController;
 use App\Http\Controllers\Api\WalletController;
+use App\Http\Controllers\Api\WalletFundingRequestController;
 use App\Http\Controllers\Api\WalletRefundController;
+use App\Http\Controllers\Api\WalletSavedCardTopUpController;
 use App\Http\Controllers\Api\WalletWithdrawalController;
 use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\ShipmentsController;
@@ -132,6 +135,18 @@ Route::middleware('auth:sanctum')->prefix('wallet')->group(function () {
     Route::get('withdrawals', [WalletWithdrawalController::class, 'index']);
     Route::post('withdrawals', [WalletWithdrawalController::class, 'store']);
     Route::get('withdrawals/{walletWithdrawal}', [WalletWithdrawalController::class, 'show']);
+
+    Route::post('saved-cards/setup-intent', [SavedPaymentMethodController::class, 'setupIntent']);
+    Route::post('saved-cards', [SavedPaymentMethodController::class, 'store']);
+    Route::get('saved-cards', [SavedPaymentMethodController::class, 'index']);
+    Route::post('saved-cards/{savedPaymentMethod}/verify', [SavedPaymentMethodController::class, 'verify']);
+    Route::post('saved-cards/{savedPaymentMethod}/default', [SavedPaymentMethodController::class, 'setDefault']);
+    Route::delete('saved-cards/{savedPaymentMethod}', [SavedPaymentMethodController::class, 'destroy']);
+    Route::post('top-up-saved-card', [WalletSavedCardTopUpController::class, 'store']);
+
+    Route::get('funding-requests', [WalletFundingRequestController::class, 'index']);
+    Route::post('funding-requests/wire', [WalletFundingRequestController::class, 'storeWire']);
+    Route::post('funding-requests/zelle', [WalletFundingRequestController::class, 'storeZelle']);
 });
 
 // Warehouse & outbound shipments (second payment — auth required)

@@ -95,6 +95,25 @@ class PaymentGatewayManager
         return $gateway;
     }
 
+    /**
+     * Stripe secret key for direct API usage (saved cards, PaymentIntents, etc.).
+     */
+    public function stripeSecretKey(): string
+    {
+        $settings = $this->getSettingsRow();
+        $secretKey = $settings?->stripe_secret_key ?: Config::get('stripe.secret_key');
+
+        return (string) $secretKey;
+    }
+
+    public function stripeCurrencyDefault(): string
+    {
+        $settings = $this->getSettingsRow();
+        $currency = $settings?->stripe_currency_default ?: Config::get('stripe.currency_default');
+
+        return $currency ? (string) $currency : 'USD';
+    }
+
     private function resolveStripeGateway(): PaymentGatewayInterface
     {
         $settings = $this->getSettingsRow();

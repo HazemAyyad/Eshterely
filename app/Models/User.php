@@ -23,6 +23,7 @@ class User extends Authenticatable
         'name',
         'email',
         'phone',
+        'stripe_customer_id',
         'password',
         'full_name',
         'display_name',
@@ -70,5 +71,10 @@ class User extends Authenticatable
     public function deviceTokens(): HasMany
     {
         return $this->hasMany(UserDeviceToken::class);
+    }
+
+    public function savedPaymentMethods(): HasMany
+    {
+        return $this->hasMany(SavedPaymentMethod::class);
     }
 }
