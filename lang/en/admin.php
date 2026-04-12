@@ -249,6 +249,18 @@ return [
     'pending' => 'Pending',
     'promo' => 'Promo',
     'no_wallets' => 'No wallets',
+    'wallet_refunds_title' => 'Wallet refund requests',
+    'wallet_refund_detail' => 'Wallet refund request',
+    'wallet_refund_status_updated' => 'Refund request updated.',
+    'request_details' => 'Request details',
+    'update_status' => 'Update status',
+    'reason' => 'Reason',
+    'reviewed_at' => 'Reviewed at',
+    'processed_at' => 'Processed at',
+    'transferred_at' => 'Transferred at',
+    'admin_notes' => 'Admin notes',
+    'created_at' => 'Created at',
+    'bank_name' => 'Bank name',
 
     // Support
     'support_tickets' => 'Support Tickets',

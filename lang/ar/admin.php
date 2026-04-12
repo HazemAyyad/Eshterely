@@ -249,6 +249,18 @@ return [
     'pending' => 'قيد الانتظار',
     'promo' => 'العروض',
     'no_wallets' => 'لا توجد محافظ',
+    'wallet_refunds_title' => 'طلبات استرداد المحفظة',
+    'wallet_refund_detail' => 'طلب استرداد محفظة',
+    'wallet_refund_status_updated' => 'تم تحديث طلب الاسترداد.',
+    'request_details' => 'تفاصيل الطلب',
+    'update_status' => 'تحديث الحالة',
+    'reason' => 'السبب',
+    'reviewed_at' => 'تاريخ المراجعة',
+    'processed_at' => 'تاريخ المعالجة',
+    'transferred_at' => 'تاريخ التحويل',
+    'admin_notes' => 'ملاحظات الإدارة',
+    'created_at' => 'تاريخ الإنشاء',
+    'bank_name' => 'اسم البنك',
 
     // Support
     'support_tickets' => 'تذاكر الدعم',

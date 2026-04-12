@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SessionsController;
 use App\Http\Controllers\Api\SupportController;
 use App\Http\Controllers\Api\WalletController;
+use App\Http\Controllers\Api\WalletRefundRequestController;
 use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\ShipmentsController;
 use App\Http\Controllers\Api\WarehousesController;
@@ -122,6 +123,9 @@ Route::middleware('auth:sanctum')->prefix('wallet')->group(function () {
     Route::get('transactions', [WalletController::class, 'transactions']);
     Route::get('activity', [WalletController::class, 'transactions']);
     Route::post('top-up', [WalletController::class, 'topUp']);
+    Route::get('refund-requests', [WalletRefundRequestController::class, 'index']);
+    Route::post('refund-requests', [WalletRefundRequestController::class, 'store']);
+    Route::get('refund-requests/{walletRefundRequest}', [WalletRefundRequestController::class, 'show']);
 });
 
 // Warehouse & outbound shipments (second payment — auth required)

@@ -24,6 +24,7 @@ use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\SupportController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WalletController;
+use App\Http\Controllers\Admin\WalletRefundRequestsController;
 use App\Http\Controllers\Admin\WarehouseReceivingController;
 use App\Http\Controllers\Admin\OutboundShipmentController;
 use App\Http\Controllers\Admin\OrderLineItemProcurementController;
@@ -137,6 +138,12 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
     Route::get('wallets/data', [WalletController::class, 'data'])->name('wallets.data');
     Route::get('wallets', [WalletController::class, 'index'])->name('wallets.index');
     Route::get('wallets/{user}', [WalletController::class, 'show'])->name('wallets.show');
+
+    // Wallet refund requests
+    Route::get('wallet-refunds/data', [WalletRefundRequestsController::class, 'data'])->name('wallet-refunds.data');
+    Route::get('wallet-refunds', [WalletRefundRequestsController::class, 'index'])->name('wallet-refunds.index');
+    Route::get('wallet-refunds/{walletRefundRequest}', [WalletRefundRequestsController::class, 'show'])->name('wallet-refunds.show');
+    Route::patch('wallet-refunds/{walletRefundRequest}/status', [WalletRefundRequestsController::class, 'updateStatus'])->name('wallet-refunds.update-status');
 
     // Support
     Route::get('support/data', [SupportController::class, 'data'])->name('support.data');

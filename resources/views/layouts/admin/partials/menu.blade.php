@@ -120,7 +120,7 @@
                 </li>
             </ul>
         </li>
-        <li class="menu-item {{ request()->routeIs('admin.users*', 'admin.cart-review*', 'admin.wallets*', 'admin.support*') ? 'active open' : '' }}">
+        <li class="menu-item {{ request()->routeIs('admin.users*', 'admin.cart-review*', 'admin.wallets*', 'admin.wallet-refunds*', 'admin.support*') ? 'active open' : '' }}">
             <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon icon-base ti tabler-users"></i>
                 <div>{{ __('admin.management') }}</div>
@@ -139,6 +139,11 @@
                 <li class="menu-item {{ request()->routeIs('admin.wallets*') ? 'active' : '' }}">
                     <a href="{{ route('admin.wallets.index') }}" class="menu-link">
                         <div>{{ __('admin.wallet') }}</div>
+                    </a>
+                </li>
+                <li class="menu-item {{ request()->routeIs('admin.wallet-refunds*') ? 'active' : '' }}">
+                    <a href="{{ route('admin.wallet-refunds.index') }}" class="menu-link">
+                        <div>{{ __('admin.wallet_refunds_title') }}</div>
                     </a>
                 </li>
                 <li class="menu-item {{ request()->routeIs('admin.support*') ? 'active' : '' }}">
