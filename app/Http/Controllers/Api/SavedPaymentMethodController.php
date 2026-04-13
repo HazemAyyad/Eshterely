@@ -97,7 +97,7 @@ class SavedPaymentMethodController extends Controller
         }
 
         $validated = $request->validate([
-            'amount' => 'required|numeric|min:0.01',
+            'amount' => 'required|numeric|min:1|max:5',
         ]);
 
         if ($savedPaymentMethod->verification_status !== SavedPaymentMethod::STATUS_PENDING) {

@@ -84,8 +84,12 @@ class ConfigController extends Controller
 
         $checkoutPaymentMode = 'gateway_only';
         $refundFeePercent = 0.0;
+        $paymentSettingsRow = null;
         if (Schema::hasTable('payment_gateway_settings')) {
-            $pg = DB::table('payment_gateway_settings')->first();
+            $paymentSettingsRow = DB::table('payment_gateway_settings')->first();
+        }
+        if (Schema::hasTable('payment_gateway_settings')) {
+            $pg = $paymentSettingsRow;
             if ($pg && isset($pg->checkout_payment_mode)) {
                 $m = strtolower(trim((string) $pg->checkout_payment_mode));
                 if (in_array($m, ['wallet_only', 'gateway_only', 'wallet_and_gateway'], true)) {
@@ -209,6 +213,41 @@ class ConfigController extends Controller
             'payment_gateways' => $paymentGateways,
             'checkout_payment_mode' => $checkoutPaymentMode,
             'refund_fee_percent' => $refundFeePercent,
+            'wallet_funding' => $this->walletFundingForBootstrap($paymentSettingsRow),
         ]);
+    }
+
+    /**
+     * Safe display-only hints for manual wallet top-ups (Zelle destination, wire copy).
+     */
+    private function walletFundingForBootstrap(?object $row): array
+    {
+        if ($row === null
+            || ! Schema::hasTable('payment_gateway_settings')
+            || ! Schema::hasColumn('payment_gateway_settings', 'zelle_receiver_name')) {
+            return [
+                'zelle' => [
+                    'receiver_name' => '',
+                    'receiver_email' => '',
+                    'receiver_phone' => '',
+                    'receiver_qr_url' => '',
+                ],
+                'wire' => [
+                    'instructions' => '',
+                ],
+            ];
+        }
+
+        return [
+            'zelle' => [
+                'receiver_name' => (string) ($row->zelle_receiver_name ?? ''),
+                'receiver_email' => (string) ($row->zelle_receiver_email ?? ''),
+                'receiver_phone' => (string) ($row->zelle_receiver_phone ?? ''),
+                'receiver_qr_url' => $this->imageUrl($row->zelle_receiver_qr_image ?? null),
+            ],
+            'wire' => [
+                'instructions' => (string) ($row->wire_transfer_instructions ?? ''),
+            ],
+        ];
     }
 }

@@ -106,6 +106,8 @@ class WalletFundingRequestController extends Controller
             $proofUrl = Storage::disk('public')->url($r->proof_file);
         }
 
+        $hasProof = is_string($r->proof_file) && $r->proof_file !== '';
+
         return [
             'id' => (string) $r->id,
             'method' => $r->method,
@@ -118,8 +120,10 @@ class WalletFundingRequestController extends Controller
             'bank_name' => $r->bank_name,
             'notes' => $r->notes,
             'proof_url' => $proofUrl,
+            'proof_attached' => $hasProof,
             'status' => $r->status,
             'admin_notes' => $r->admin_notes,
+            'team_message' => $r->admin_notes,
             'created_at' => $r->created_at?->toIso8601String(),
             'reviewed_at' => $r->reviewed_at?->toIso8601String(),
             'approved_at' => $r->approved_at?->toIso8601String(),

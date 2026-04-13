@@ -39,6 +39,17 @@ class PaymentGatewaysController extends Controller
             'stripe_secret_key' => $row->stripe_secret_key ?? '',
             'stripe_webhook_secret' => $row->stripe_webhook_secret ?? '',
             'refund_fee_percent' => isset($row->refund_fee_percent) ? (float) $row->refund_fee_percent : 0.0,
+
+            'zelle_receiver_name' => (is_object($row) && Schema::hasColumn('payment_gateway_settings', 'zelle_receiver_name'))
+                ? (string) ($row->zelle_receiver_name ?? '') : '',
+            'zelle_receiver_email' => (is_object($row) && Schema::hasColumn('payment_gateway_settings', 'zelle_receiver_email'))
+                ? (string) ($row->zelle_receiver_email ?? '') : '',
+            'zelle_receiver_phone' => (is_object($row) && Schema::hasColumn('payment_gateway_settings', 'zelle_receiver_phone'))
+                ? (string) ($row->zelle_receiver_phone ?? '') : '',
+            'zelle_receiver_qr_image' => (is_object($row) && Schema::hasColumn('payment_gateway_settings', 'zelle_receiver_qr_image'))
+                ? (string) ($row->zelle_receiver_qr_image ?? '') : '',
+            'wire_transfer_instructions' => (is_object($row) && Schema::hasColumn('payment_gateway_settings', 'wire_transfer_instructions'))
+                ? (string) ($row->wire_transfer_instructions ?? '') : '',
         ];
 
         return view('admin.config.payment-gateways.edit', ['values' => $values]);
@@ -73,6 +84,13 @@ class PaymentGatewaysController extends Controller
         }
         if (Schema::hasColumn('payment_gateway_settings', 'refund_fee_percent')) {
             $rules['refund_fee_percent'] = 'nullable|numeric|min:0|max:100';
+        }
+        if (Schema::hasColumn('payment_gateway_settings', 'zelle_receiver_name')) {
+            $rules['zelle_receiver_name'] = 'nullable|string|max:255';
+            $rules['zelle_receiver_email'] = 'nullable|email|max:255';
+            $rules['zelle_receiver_phone'] = 'nullable|string|max:64';
+            $rules['wire_transfer_instructions'] = 'nullable|string|max:20000';
+            $rules['zelle_receiver_qr_image'] = 'nullable|image|max:5120';
         }
         $validated = $request->validate($rules);
 
@@ -112,6 +130,20 @@ class PaymentGatewaysController extends Controller
         }
         if (Schema::hasColumn('payment_gateway_settings', 'refund_fee_percent')) {
             $data['refund_fee_percent'] = round((float) ($validated['refund_fee_percent'] ?? 0), 4);
+        }
+
+        if (Schema::hasColumn('payment_gateway_settings', 'zelle_receiver_name')) {
+            $data['zelle_receiver_name'] = trim((string) ($validated['zelle_receiver_name'] ?? '')) ?: null;
+            $data['zelle_receiver_email'] = trim((string) ($validated['zelle_receiver_email'] ?? '')) ?: null;
+            $data['zelle_receiver_phone'] = trim((string) ($validated['zelle_receiver_phone'] ?? '')) ?: null;
+            $data['wire_transfer_instructions'] = isset($validated['wire_transfer_instructions'])
+                ? trim((string) $validated['wire_transfer_instructions']) : null;
+            if ($data['wire_transfer_instructions'] === '') {
+                $data['wire_transfer_instructions'] = null;
+            }
+            if ($request->hasFile('zelle_receiver_qr_image')) {
+                $data['zelle_receiver_qr_image'] = $request->file('zelle_receiver_qr_image')->store('zelle-qr', 'public');
+            }
         }
 
         if ($wasEmpty) {

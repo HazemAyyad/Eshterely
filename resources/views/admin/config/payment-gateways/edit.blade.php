@@ -20,7 +20,7 @@
         </div>
 
         <div class="card-body">
-            <form method="POST" action="{{ route('admin.config.payment-gateways.edit') }}" class="ajax-submit-form">
+            <form method="POST" action="{{ route('admin.config.payment-gateways.edit') }}" class="ajax-submit-form" enctype="multipart/form-data">
                 @method('PATCH')
                 @csrf
 
@@ -165,6 +165,44 @@
                         <small class="text-muted d-block mt-1">
                             Stripe webhook endpoint: <code>/api/webhooks/stripe</code>
                         </small>
+                    </div>
+
+                    <hr class="my-4"/>
+
+                    <div class="col-12">
+                        <h6 class="text-muted mb-3">Wallet manual funding (display in app)</h6>
+                        <p class="small text-muted">Shown to users before they submit Wire / Zelle top-up requests. No secrets here.</p>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Zelle — receive as (name)</label>
+                        <input type="text" name="zelle_receiver_name" class="form-control"
+                               value="{{ old('zelle_receiver_name', $values['zelle_receiver_name'] ?? '') }}" placeholder="Business or account name">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Zelle — receive at (email)</label>
+                        <input type="email" name="zelle_receiver_email" class="form-control"
+                               value="{{ old('zelle_receiver_email', $values['zelle_receiver_email'] ?? '') }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Zelle — receive at (phone)</label>
+                        <input type="text" name="zelle_receiver_phone" class="form-control"
+                               value="{{ old('zelle_receiver_phone', $values['zelle_receiver_phone'] ?? '') }}" placeholder="+1 ...">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Zelle — QR code image (optional)</label>
+                        <input type="file" name="zelle_receiver_qr_image" class="form-control" accept="image/*">
+                        @if(!empty($values['zelle_receiver_qr_image'] ?? ''))
+                            <div class="mt-2">
+                                <span class="small text-muted">Current:</span>
+                                <img src="{{ asset('storage/'.$values['zelle_receiver_qr_image']) }}" alt="Zelle QR" style="max-height:120px" class="d-block mt-1">
+                            </div>
+                        @endif
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Wire transfer — instructions for users</label>
+                        <textarea name="wire_transfer_instructions" class="form-control" rows="5"
+                                  placeholder="Bank name, beneficiary, IBAN/reference, etc.">{{ old('wire_transfer_instructions', $values['wire_transfer_instructions'] ?? '') }}</textarea>
                     </div>
 
                     <div class="col-12 mt-4">
