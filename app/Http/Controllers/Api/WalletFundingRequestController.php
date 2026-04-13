@@ -124,6 +124,9 @@ class WalletFundingRequestController extends Controller
             'status' => $r->status,
             'admin_notes' => $r->admin_notes,
             'team_message' => $r->admin_notes,
+            'rejection_reason' => $r->status === WalletTopupRequest::STATUS_REJECTED
+                ? $r->admin_notes
+                : null,
             'created_at' => $r->created_at?->toIso8601String(),
             'reviewed_at' => $r->reviewed_at?->toIso8601String(),
             'approved_at' => $r->approved_at?->toIso8601String(),
