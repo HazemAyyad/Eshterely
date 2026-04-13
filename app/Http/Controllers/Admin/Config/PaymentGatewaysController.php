@@ -48,6 +48,8 @@ class PaymentGatewaysController extends Controller
                 ? (string) ($row->zelle_receiver_phone ?? '') : '',
             'zelle_receiver_qr_image' => (is_object($row) && Schema::hasColumn('payment_gateway_settings', 'zelle_receiver_qr_image'))
                 ? (string) ($row->zelle_receiver_qr_image ?? '') : '',
+            'zelle_instruction_text' => (is_object($row) && Schema::hasColumn('payment_gateway_settings', 'zelle_instruction_text'))
+                ? (string) ($row->zelle_instruction_text ?? '') : '',
             'wire_transfer_instructions' => (is_object($row) && Schema::hasColumn('payment_gateway_settings', 'wire_transfer_instructions'))
                 ? (string) ($row->wire_transfer_instructions ?? '') : '',
         ];
@@ -91,6 +93,9 @@ class PaymentGatewaysController extends Controller
             $rules['zelle_receiver_phone'] = 'nullable|string|max:64';
             $rules['wire_transfer_instructions'] = 'nullable|string|max:20000';
             $rules['zelle_receiver_qr_image'] = 'nullable|image|max:5120';
+            if (Schema::hasColumn('payment_gateway_settings', 'zelle_instruction_text')) {
+                $rules['zelle_instruction_text'] = 'nullable|string|max:20000';
+            }
         }
         $validated = $request->validate($rules);
 
@@ -143,6 +148,13 @@ class PaymentGatewaysController extends Controller
             }
             if ($request->hasFile('zelle_receiver_qr_image')) {
                 $data['zelle_receiver_qr_image'] = $request->file('zelle_receiver_qr_image')->store('zelle-qr', 'public');
+            }
+            if (Schema::hasColumn('payment_gateway_settings', 'zelle_instruction_text')) {
+                $data['zelle_instruction_text'] = isset($validated['zelle_instruction_text'])
+                    ? trim((string) $validated['zelle_instruction_text']) : null;
+                if ($data['zelle_instruction_text'] === '') {
+                    $data['zelle_instruction_text'] = null;
+                }
             }
         }
 

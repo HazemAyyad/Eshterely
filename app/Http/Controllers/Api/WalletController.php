@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Wallet;
+use App\Models\WalletTopupRequest;
 use App\Models\WalletTopUpPayment;
 use App\Services\Payments\PaymentReferenceGenerator;
 use App\Services\Payments\PaymentGatewayManager;
@@ -23,10 +24,25 @@ class WalletController extends Controller
             ['available_balance' => 0, 'pending_balance' => 0, 'promo_balance' => 0]
         );
 
+        // Pending = total amount of Wire/Zelle manual funding requests awaiting review (not spendable).
+        $manualFundingPending = (float) WalletTopupRequest::query()
+            ->where('user_id', $request->user()->id)
+            ->whereIn('status', [
+                WalletTopupRequest::STATUS_PENDING,
+                WalletTopupRequest::STATUS_UNDER_REVIEW,
+            ])
+            ->whereIn('method', [
+                WalletTopupRequest::METHOD_WIRE,
+                WalletTopupRequest::METHOD_ZELLE,
+            ])
+            ->sum('amount');
+
         return response()->json([
             'available' => (float) $wallet->available_balance,
-            'pending' => (float) $wallet->pending_balance,
+            'pending' => round($manualFundingPending, 2),
             'promo' => (float) $wallet->promo_balance,
+            // Legacy DB column (unused in most flows); kept for debugging/admin tools.
+            'wallet_pending_balance' => (float) $wallet->pending_balance,
         ]);
     }
 

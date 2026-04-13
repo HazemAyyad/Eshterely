@@ -200,6 +200,11 @@
                         @endif
                     </div>
                     <div class="col-12">
+                        <label class="form-label">Zelle — extra instruction text (optional)</label>
+                        <textarea name="zelle_instruction_text" class="form-control" rows="3"
+                                  placeholder="Short note shown on the Zelle instruction screen in the app (e.g. use memo XYZ).">{{ old('zelle_instruction_text', $values['zelle_instruction_text'] ?? '') }}</textarea>
+                    </div>
+                    <div class="col-12">
                         <label class="form-label">Wire transfer — instructions for users</label>
                         <textarea name="wire_transfer_instructions" class="form-control" rows="5"
                                   placeholder="Bank name, beneficiary, IBAN/reference, etc.">{{ old('wire_transfer_instructions', $values['wire_transfer_instructions'] ?? '') }}</textarea>

@@ -231,6 +231,7 @@ class ConfigController extends Controller
                     'receiver_email' => '',
                     'receiver_phone' => '',
                     'receiver_qr_url' => '',
+                    'instruction_text' => '',
                 ],
                 'wire' => [
                     'instructions' => '',
@@ -244,6 +245,9 @@ class ConfigController extends Controller
                 'receiver_email' => (string) ($row->zelle_receiver_email ?? ''),
                 'receiver_phone' => (string) ($row->zelle_receiver_phone ?? ''),
                 'receiver_qr_url' => $this->imageUrl($row->zelle_receiver_qr_image ?? null),
+                'instruction_text' => Schema::hasColumn('payment_gateway_settings', 'zelle_instruction_text')
+                    ? (string) ($row->zelle_instruction_text ?? '')
+                    : '',
             ],
             'wire' => [
                 'instructions' => (string) ($row->wire_transfer_instructions ?? ''),
