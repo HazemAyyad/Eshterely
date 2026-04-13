@@ -92,7 +92,14 @@ class WalletFundingRequestController extends Controller
             'status' => WalletTopupRequest::STATUS_PENDING,
         ]);
 
-        $this->fundingNotifier->notifySubmitted($row->fresh());
+        // Defer push/in-app notifications until after the JSON response (avoids client timeouts on slow FCM).
+        $id = $row->id;
+        defer(function () use ($id) {
+            $fresh = WalletTopupRequest::query()->find($id);
+            if ($fresh !== null) {
+                app(WalletFundingNotifier::class)->notifySubmitted($fresh);
+            }
+        });
 
         return response()->json([
             'wallet_topup_request' => $this->serialize($row),
