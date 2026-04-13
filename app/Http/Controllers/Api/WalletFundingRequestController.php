@@ -3,18 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\NotifyWalletFundingRequestSubmitted;
 use App\Models\WalletTopupRequest;
-use App\Services\Wallet\WalletFundingNotifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class WalletFundingRequestController extends Controller
 {
-    public function __construct(
-        protected WalletFundingNotifier $fundingNotifier
-    ) {}
-
     public function index(Request $request): JsonResponse
     {
         $rows = WalletTopupRequest::query()
@@ -54,10 +51,23 @@ class WalletFundingRequestController extends Controller
 
     private function storeManual(Request $request, string $method, array $extraRules): JsonResponse
     {
+        $t0 = microtime(true);
+        $trace = function (string $phase, array $extra = []) use ($t0, $method): void {
+            Log::info('wallet_funding.manual', array_merge([
+                'phase' => $phase,
+                'method' => $method,
+                'ms' => (int) round((microtime(true) - $t0) * 1000),
+            ], $extra));
+        };
+
+        $trace('request_received');
+
         $validated = $request->validate(array_merge([
             'amount' => 'required|numeric|min:1',
             'currency' => 'nullable|string|size:3',
         ], $extraRules));
+
+        $trace('validation_done');
 
         if ($method === WalletTopupRequest::METHOD_ZELLE) {
             $em = trim((string) ($validated['sender_email'] ?? ''));
@@ -72,11 +82,14 @@ class WalletFundingRequestController extends Controller
 
         $proofPath = null;
         if ($request->hasFile('proof')) {
+            $trace('proof_upload_start', ['bytes' => $request->file('proof')?->getSize()]);
             $proofPath = $request->file('proof')->store('wallet-topup-proofs', 'public');
+            $trace('proof_upload_end', ['stored' => $proofPath]);
         }
 
         $currency = strtoupper(trim((string) ($validated['currency'] ?? 'USD')));
 
+        $trace('db_create_start');
         $row = WalletTopupRequest::create([
             'user_id' => $request->user()->id,
             'method' => $method,
@@ -91,19 +104,24 @@ class WalletFundingRequestController extends Controller
             'notes' => $validated['notes'] ?? null,
             'status' => WalletTopupRequest::STATUS_PENDING,
         ]);
+        $trace('db_create_end', ['id' => $row->id]);
 
-        // Defer push/in-app notifications until after the JSON response (avoids client timeouts on slow FCM).
+        // Queue notifications: with database/redis the worker runs FCM/in-app off the HTTP worker.
+        // With sync, defer so work runs in terminate (after response is sent; see Symfony send + fastcgi_finish_request).
         $id = $row->id;
-        defer(function () use ($id) {
-            $fresh = WalletTopupRequest::query()->find($id);
-            if ($fresh !== null) {
-                app(WalletFundingNotifier::class)->notifySubmitted($fresh);
-            }
+        defer(function () use ($id): void {
+            NotifyWalletFundingRequestSubmitted::dispatch($id);
         });
 
-        return response()->json([
+        $trace('serialize_start');
+        $payload = [
             'wallet_topup_request' => $this->serialize($row),
-        ], 201);
+        ];
+        $trace('serialize_end');
+
+        $trace('response_ready', ['total_ms' => (int) round((microtime(true) - $t0) * 1000)]);
+
+        return response()->json($payload, 201);
     }
 
     private function serialize(WalletTopupRequest $r): array
