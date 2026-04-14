@@ -34,8 +34,11 @@ class StripeSavedCardService
 
         $si = SetupIntent::create([
             'customer' => $customerId,
-            'payment_method_types' => ['card'],
             'usage' => 'off_session',
+            'automatic_payment_methods' => [
+                'enabled' => true,
+                'allow_redirects' => 'never',
+            ],
         ]);
 
         if (! is_string($si->client_secret) || $si->client_secret === '') {
@@ -114,6 +117,7 @@ class StripeSavedCardService
                 'currency' => strtolower($this->gatewayManager->stripeCurrencyDefault()),
                 'customer' => $customerId,
                 'payment_method' => $pmId,
+                'payment_method_types' => ['card'],
                 'confirmation_method' => 'automatic',
                 'confirm' => true,
                 'metadata' => [
@@ -162,6 +166,7 @@ class StripeSavedCardService
             'currency' => $currency,
             'customer' => $card->stripe_customer_id,
             'payment_method' => $card->stripe_payment_method_id,
+            'payment_method_types' => ['card'],
             'confirmation_method' => 'automatic',
             'confirm' => true,
             'metadata' => [
