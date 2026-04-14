@@ -46,6 +46,39 @@ class WalletController extends Controller
         ]);
     }
 
+    /**
+     * Recent Stripe wallet top-ups (saved-card + hosted checkout) for history / pending visibility.
+     * GET /api/wallet/stripe-top-ups
+     */
+    public function stripeTopUps(Request $request): JsonResponse
+    {
+        $rows = WalletTopUpPayment::query()
+            ->where('user_id', $request->user()->id)
+            ->where('provider', 'stripe')
+            ->orderByDesc('id')
+            ->limit(40)
+            ->get();
+
+        return response()->json([
+            'top_ups' => $rows->map(static function (WalletTopUpPayment $r) {
+                $meta = is_array($r->metadata) ? $r->metadata : [];
+                $savedCardId = $meta['saved_payment_method_id'] ?? null;
+
+                return [
+                    'id' => (string) $r->id,
+                    'reference' => $r->reference,
+                    'amount' => (float) $r->amount,
+                    'currency' => $r->currency,
+                    'status' => $r->status,
+                    'method' => is_numeric($savedCardId) ? 'saved_card' : 'checkout',
+                    'created_at' => $r->created_at?->toIso8601String(),
+                    'paid_at' => $r->paid_at?->toIso8601String(),
+                    'failure_message' => $r->failure_message,
+                ];
+            }),
+        ]);
+    }
+
     public function transactions(Request $request): JsonResponse
     {
         $wallet = Wallet::firstOrCreate(

@@ -9,6 +9,7 @@ use App\Models\WalletTopUpPayment;
 use App\Services\Payments\PaymentGatewayManager;
 use App\Services\Payments\PaymentReferenceGenerator;
 use App\Services\Wallet\StripeSavedCardService;
+use App\Services\Wallet\WalletTopUpPaymentCompletionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,7 +20,8 @@ class WalletSavedCardTopUpController extends Controller
 {
     public function __construct(
         protected StripeSavedCardService $stripeSavedCardService,
-        protected PaymentGatewayManager $gatewayManager
+        protected PaymentGatewayManager $gatewayManager,
+        protected WalletTopUpPaymentCompletionService $topUpCompletion
     ) {}
 
     public function store(Request $request): JsonResponse
@@ -102,8 +104,18 @@ class WalletSavedCardTopUpController extends Controller
             'status' => 'processing',
         ]);
 
+        // When Stripe charges immediately, credit wallet without waiting for webhooks (dev/local).
+        $this->topUpCompletion->settleSavedCardTopUpIfIntentSucceeded(
+            $topUp->fresh(),
+            (string) ($pi['status'] ?? '')
+        );
+
+        $topUp->refresh();
+
         return response()->json([
-            'message' => 'Saved card top-up initiated.',
+            'message' => $topUp->status === 'paid'
+                ? 'Saved card top-up completed.'
+                : 'Saved card top-up initiated.',
             'payment_intent' => [
                 'client_secret' => $pi['client_secret'],
                 'payment_intent_id' => $pi['payment_intent_id'],
@@ -114,7 +126,8 @@ class WalletSavedCardTopUpController extends Controller
                 'reference' => $topUp->reference,
                 'amount' => (float) $topUp->amount,
                 'currency' => $topUp->currency,
-                'payment_status' => $topUp->fresh()->status,
+                'payment_status' => $topUp->status,
+                'paid_at' => $topUp->paid_at?->toIso8601String(),
             ],
         ], 201);
     }

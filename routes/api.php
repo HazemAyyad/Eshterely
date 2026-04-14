@@ -124,6 +124,7 @@ Route::middleware('auth:sanctum')->prefix('checkout')->group(function () {
 // Wallet (auth required)
 Route::middleware('auth:sanctum')->prefix('wallet')->group(function () {
     Route::get('/', [WalletController::class, 'show']);
+    Route::get('stripe-top-ups', [WalletController::class, 'stripeTopUps']);
     Route::get('transactions', [WalletController::class, 'transactions']);
     Route::get('activity', [WalletController::class, 'transactions']);
     Route::post('top-up', [WalletController::class, 'topUp']);

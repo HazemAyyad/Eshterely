@@ -8,10 +8,10 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Models\SavedPaymentMethod;
 use App\Models\Shipment;
-use App\Models\Wallet;
 use App\Models\WalletTopUpPayment;
 use App\Services\Wallet\WalletCardVerificationNotifier;
 use App\Services\Wallet\WalletTopUpCreditNotifier;
+use App\Services\Wallet\WalletTopUpPaymentCompletionService;
 use App\Services\Cart\RemoveOrderedCartItemsService;
 use App\Services\Fcm\OrderShipmentNotificationTrigger;
 use App\Services\Shipments\ShipmentDraftFinalizationService;
@@ -23,7 +23,8 @@ class StripeWebhookService
     public function __construct(
         protected PaymentService $paymentService,
         protected OrderShipmentNotificationTrigger $notificationTrigger,
-        protected ShipmentDraftFinalizationService $shipmentDraftFinalization
+        protected ShipmentDraftFinalizationService $shipmentDraftFinalization,
+        protected WalletTopUpPaymentCompletionService $walletTopUpCompletion
     ) {}
 
     public function handleEvent(?string $eventType, array $payload): void
@@ -268,30 +269,8 @@ class StripeWebhookService
 
             // Credit wallet exactly once for paid top-ups.
             if ($newStatusString === 'paid') {
-                $meta = $topUp->metadata ?? [];
-                if (! isset($meta['wallet_credited_at'])) {
-                    $wallet = Wallet::lockForUpdate()->find($topUp->wallet_id);
-                    if ($wallet) {
-                        $wallet->available_balance = (float) $wallet->available_balance + (float) $topUp->amount;
-                        $wallet->save();
-
-                        $txType = ($meta['wallet_tx_type'] ?? '') === 'card_topup_credit'
-                            ? 'card_topup_credit'
-                            : 'top_up';
-                        $title = $txType === 'card_topup_credit' ? 'Card top-up' : 'Top-up';
-                        $subtitle = $txType === 'card_topup_credit' ? 'SAVED CARD' : 'PAID';
-
-                        $wallet->transactions()->create([
-                            'type' => $txType,
-                            'title' => $title,
-                            'amount' => (float) $topUp->amount,
-                            'subtitle' => $subtitle,
-                            'reference_type' => 'wallet_top_up_payment',
-                            'reference_id' => $topUp->id,
-                        ]);
-                    }
-                    $meta['wallet_credited_at'] = now()->toIso8601String();
-                    $topUp->update(['metadata' => $meta]);
+                $topUp->refresh();
+                if ($this->walletTopUpCompletion->creditWalletIfPaidAndNotYetCredited($topUp)) {
                     $creditedThisRun = true;
                 }
             }
