@@ -103,10 +103,11 @@ class WalletSavedCardTopUpController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Confirm payment in the app.',
+            'message' => 'Saved card top-up initiated.',
             'payment_intent' => [
                 'client_secret' => $pi['client_secret'],
                 'payment_intent_id' => $pi['payment_intent_id'],
+                'status' => $pi['status'],
             ],
             'top_up' => [
                 'id' => (string) $topUp->id,

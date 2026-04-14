@@ -146,7 +146,7 @@ class StripeSavedCardService
     }
 
     /**
-     * @return array{client_secret: string, payment_intent_id: string}
+     * @return array{client_secret: string, payment_intent_id: string, status: string}
      */
     public function createTopUpPaymentIntent(User $user, SavedPaymentMethod $card, float $amount, string $reference, int $walletTopUpId): array
     {
@@ -182,6 +182,7 @@ class StripeSavedCardService
         return [
             'client_secret' => $pi->client_secret,
             'payment_intent_id' => (string) $pi->id,
+            'status' => (string) $pi->status,
         ];
     }
 
