@@ -12,6 +12,11 @@
     <div class="alert alert-danger">{{ session('error') }}</div>
 @endif
 
+<div class="alert alert-secondary mb-4" role="note">
+    Cards with status <strong>blocked</strong> reached the failed verification attempt limit. Use <strong>Unblock / reset</strong>
+    to clear attempts and return the card to <em>pending verification</em> so the customer can try again (after you have confirmed it is safe).
+</div>
+
 <div class="card border-0 shadow-sm">
     <div class="card-header">
         <h5 class="mb-0">{{ __('admin.list') }}</h5>
@@ -21,9 +26,11 @@
             <thead>
                 <tr>
                     <th>#</th>
-                    <th>{{ __('admin.user') }}</th>
+                    <th>Customer</th>
                     <th>Card</th>
-                    <th>{{ __('admin.status') }}</th>
+                    <th>Status</th>
+                    <th>Failed attempts</th>
+                    <th>Blocked at</th>
                     <th>{{ __('admin.created_at') }}</th>
                     <th>{{ __('admin.actions') }}</th>
                 </tr>
@@ -49,9 +56,11 @@ document.addEventListener('DOMContentLoaded', function() {
         ajax: "{{ route('admin.saved-payment-methods.data') }}",
         columns: [
             { data: 'id', name: 'id' },
-            { data: 'user_contact', name: 'user_id' },
+            { data: 'customer', name: 'user_id' },
             { data: 'card_label', name: 'brand', orderable: false },
-            { data: 'verification_status', name: 'verification_status' },
+            { data: 'status_badge', name: 'verification_status' },
+            { data: 'failed_attempts', name: 'verification_attempts' },
+            { data: 'blocked_at_fmt', name: 'blocked_at' },
             { data: 'created_at', name: 'created_at' },
             { data: 'actions', name: 'actions', orderable: false, searchable: false }
         ],

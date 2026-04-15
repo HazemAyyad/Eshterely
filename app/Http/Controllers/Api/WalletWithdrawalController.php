@@ -80,13 +80,19 @@ class WalletWithdrawalController extends Controller
 
         $available = (float) $wallet->available_balance;
         $reserved = WalletWithdrawal::reservedAmountForUser((int) $user->id);
+        $maxWithdrawable = max(0.0, round($available - $reserved, 2));
 
-        if ($amount + $reserved > $available + 0.00001) {
+        if ($amount > $maxWithdrawable + 0.00001) {
+            $message = $reserved > 0.00001
+                ? 'That amount is more than you can withdraw right now. Some of your balance is reserved for pending withdrawal requests.'
+                : 'Withdrawal amount cannot be greater than your available wallet balance.';
+
             return response()->json([
-                'message' => 'Insufficient wallet balance for this withdrawal (including pending requests).',
+                'message' => $message,
                 'error_code' => 'insufficient_balance',
                 'available' => round($available, 2),
                 'reserved' => round($reserved, 2),
+                'max_withdrawable' => $maxWithdrawable,
             ], 422);
         }
 

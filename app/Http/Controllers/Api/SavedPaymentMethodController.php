@@ -96,9 +96,12 @@ class SavedPaymentMethodController extends Controller
             abort(404);
         }
 
-        $validated = $request->validate([
-            'amount' => 'required|numeric|min:1|max:5',
-        ]);
+        if ($savedPaymentMethod->verification_status === SavedPaymentMethod::STATUS_BLOCKED) {
+            return response()->json([
+                'message' => 'This card is blocked after too many failed verification attempts. An administrator must review and unblock it before you can try again.',
+                'error_key' => 'verification_blocked',
+            ], 422);
+        }
 
         if ($savedPaymentMethod->verification_status !== SavedPaymentMethod::STATUS_PENDING) {
             return response()->json([
@@ -107,11 +110,15 @@ class SavedPaymentMethodController extends Controller
             ], 422);
         }
 
+        $validated = $request->validate([
+            'amount' => 'required|numeric|min:1|max:5',
+        ]);
+
         $guess = round((float) $validated['amount'], 2);
 
         $verified = false;
         $mismatch = false;
-        $attemptsAfter = 0;
+        $attemptsAfter = (int) $savedPaymentMethod->verification_attempts;
 
         DB::transaction(function () use ($savedPaymentMethod, $guess, &$verified, &$mismatch, &$attemptsAfter): void {
             $card = SavedPaymentMethod::query()->lockForUpdate()->findOrFail($savedPaymentMethod->id);
@@ -120,53 +127,61 @@ class SavedPaymentMethodController extends Controller
             }
 
             $expected = round((float) $card->verification_charge_amount, 2);
-            $card->increment('verification_attempts');
-            $card->refresh();
-            $attemptsAfter = (int) $card->verification_attempts;
 
-            if (abs($guess - $expected) > 0.009) {
-                $mismatch = true;
-                if ($card->verification_attempts >= 5) {
-                    $card->verification_status = SavedPaymentMethod::STATUS_FAILED;
-                    $card->save();
-                }
+            if (abs($guess - $expected) <= 0.009) {
+                $wallet = Wallet::query()->lockForUpdate()->firstOrCreate(
+                    ['user_id' => $card->user_id],
+                    ['available_balance' => 0, 'pending_balance' => 0, 'promo_balance' => 0]
+                );
+
+                $credit = (float) $card->verification_charge_amount;
+                $wallet->available_balance = (float) $wallet->available_balance + $credit;
+                $wallet->save();
+
+                $wallet->transactions()->create([
+                    'type' => 'card_verification_credit',
+                    'title' => 'Card verification',
+                    'amount' => $credit,
+                    'subtitle' => 'VERIFIED',
+                    'reference_type' => 'saved_payment_method',
+                    'reference_id' => $card->id,
+                ]);
+
+                $card->verification_status = SavedPaymentMethod::STATUS_VERIFIED;
+                $card->verified_at = now();
+                $card->save();
+                $verified = true;
 
                 return;
             }
 
-            $wallet = Wallet::query()->lockForUpdate()->firstOrCreate(
-                ['user_id' => $card->user_id],
-                ['available_balance' => 0, 'pending_balance' => 0, 'promo_balance' => 0]
-            );
+            $mismatch = true;
+            $card->increment('verification_attempts');
+            $card->refresh();
+            $attemptsAfter = (int) $card->verification_attempts;
 
-            $credit = (float) $card->verification_charge_amount;
-            $wallet->available_balance = (float) $wallet->available_balance + $credit;
-            $wallet->save();
-
-            $wallet->transactions()->create([
-                'type' => 'card_verification_credit',
-                'title' => 'Card verification',
-                'amount' => $credit,
-                'subtitle' => 'VERIFIED',
-                'reference_type' => 'saved_payment_method',
-                'reference_id' => $card->id,
-            ]);
-
-            $card->verification_status = SavedPaymentMethod::STATUS_VERIFIED;
-            $card->verified_at = now();
-            $card->save();
-            $verified = true;
+            if ($card->verification_attempts >= SavedPaymentMethod::MAX_VERIFICATION_ATTEMPTS) {
+                $card->verification_status = SavedPaymentMethod::STATUS_BLOCKED;
+                $card->blocked_at = now();
+                $card->blocked_reason = 'Too many failed verification attempts.';
+                $card->save();
+            }
         });
 
         if ($mismatch) {
-            if ($attemptsAfter >= 5) {
+            $max = SavedPaymentMethod::MAX_VERIFICATION_ATTEMPTS;
+            $remaining = max(0, $max - $attemptsAfter);
+
+            if ($attemptsAfter >= $max) {
                 $this->verificationNotifier->notifyFailed($savedPaymentMethod->fresh());
             }
 
             return response()->json([
                 'message' => 'The amount does not match the verification charge. Check your bank statement.',
                 'error_key' => 'verification_mismatch',
-                'attempts_remaining' => max(0, 5 - $attemptsAfter),
+                'attempts_remaining' => $remaining,
+                'verification_attempts' => $attemptsAfter,
+                'max_verification_attempts' => $max,
             ], 422);
         }
 
@@ -245,6 +260,10 @@ class SavedPaymentMethodController extends Controller
 
     private function serializeCard(SavedPaymentMethod $c): array
     {
+        $failed = (int) $c->verification_attempts;
+        $max = SavedPaymentMethod::MAX_VERIFICATION_ATTEMPTS;
+        $pending = $c->verification_status === SavedPaymentMethod::STATUS_PENDING;
+
         return [
             'id' => (string) $c->id,
             'stripe_payment_method_id' => $c->stripe_payment_method_id,
@@ -254,6 +273,11 @@ class SavedPaymentMethodController extends Controller
             'exp_year' => $c->exp_year,
             'is_default' => (bool) $c->is_default,
             'verification_status' => $c->verification_status,
+            'verification_attempts' => $failed,
+            'max_verification_attempts' => $max,
+            'attempts_remaining' => $pending ? max(0, $max - $failed) : 0,
+            'blocked_at' => $c->blocked_at?->toIso8601String(),
+            'blocked_reason' => $c->blocked_reason,
             'verified_at' => $c->verified_at?->toIso8601String(),
             'created_at' => $c->created_at?->toIso8601String(),
         ];

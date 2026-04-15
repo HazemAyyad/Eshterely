@@ -37,10 +37,15 @@ class WalletCardVerificationNotifier
                 'Card verified',
                 "Your card ending in {$last4} is verified. The verification amount was added to your wallet.",
             ],
-            'failed' => [
-                'Card verification failed',
-                "We could not verify your card ending in {$last4}. Add a different card or contact support.",
-            ],
+            'failed' => $card->verification_status === SavedPaymentMethod::STATUS_BLOCKED
+                ? [
+                    'Card verification blocked',
+                    "Your card ending in {$last4} was blocked after too many incorrect attempts. An administrator must review and unblock it before you can try again.",
+                ]
+                : [
+                    'Card verification failed',
+                    "We could not verify your card ending in {$last4}. Add a different card or contact support.",
+                ],
             default => [null, null],
         };
 

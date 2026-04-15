@@ -13,7 +13,12 @@ class SavedPaymentMethod extends Model
 
     public const STATUS_FAILED = 'failed_verification';
 
+    /** Too many failed amount-verification attempts; recoverable via admin unblock. */
+    public const STATUS_BLOCKED = 'blocked';
+
     public const STATUS_DISABLED = 'disabled';
+
+    public const MAX_VERIFICATION_ATTEMPTS = 3;
 
     protected $fillable = [
         'user_id',
@@ -29,6 +34,8 @@ class SavedPaymentMethod extends Model
         'verification_attempts',
         'stripe_verification_payment_intent_id',
         'verified_at',
+        'blocked_at',
+        'blocked_reason',
     ];
 
     protected function casts(): array
@@ -37,6 +44,7 @@ class SavedPaymentMethod extends Model
             'is_default' => 'boolean',
             'verification_charge_amount' => 'decimal:2',
             'verified_at' => 'datetime',
+            'blocked_at' => 'datetime',
         ];
     }
 
@@ -48,5 +56,10 @@ class SavedPaymentMethod extends Model
     public function isUsableForTopUp(): bool
     {
         return $this->verification_status === self::STATUS_VERIFIED;
+    }
+
+    public function isBlockedForVerification(): bool
+    {
+        return $this->verification_status === self::STATUS_BLOCKED;
     }
 }
