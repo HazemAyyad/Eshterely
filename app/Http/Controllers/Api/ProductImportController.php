@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\ProductExtractionService;
 use App\Services\ProductPageFetcherService;
 use App\Services\ProductImport\ImportAttemptOrchestrator;
+use App\Services\ProductImport\ImportFlowDecisionService;
 use App\Services\ProductImport\ImportOrchestrator;
 use App\Services\ProductImport\StoreResolver;
 use App\Services\Shipping\FinalProductPricingService;
@@ -32,6 +33,7 @@ class ProductImportController extends Controller
         ImportAttemptOrchestrator $orchestrator,
         ImportOrchestrator $importOrchestrator,
         ShippingPricingConfigService $shippingPricingConfig,
+        ImportFlowDecisionService $importFlowDecision,
     ): JsonResponse {
         $validated = $request->validate([
             'url' => 'required|url',
@@ -192,13 +194,9 @@ class ProductImportController extends Controller
             // Log successful attempt.
             $orchestrator->recordSuccess($url, $storeKey, $product['extraction_source'] ?? 'unknown');
 
-            // Add via Link: supported store + minimal product data → standard import/cart path; otherwise Purchase Assistant.
+            // Add via Link: ONLY stores listed as active in admin Featured Stores → standard import/cart; all others → Purchase Assistant.
             $storeKeyLower = strtolower((string) ($product['store_key'] ?? $storeKey));
-            $nameRaw = trim((string) ($product['name'] ?? ''));
-            $nameOk = $nameRaw !== '' && strcasecmp($nameRaw, 'product') !== 0;
-            $priceOk = is_numeric($product['price'] ?? null) && (float) $product['price'] > 0;
-            $supportedStore = $storeKeyLower !== 'generic';
-            $product['import_flow'] = ($supportedStore && $nameOk && $priceOk) ? 'standard' : 'purchase_assistant';
+            $product['import_flow'] = $importFlowDecision->importFlowForResolvedStoreKey($storeKeyLower);
 
             return response()->json($product);
         } catch (\Exception $e) {

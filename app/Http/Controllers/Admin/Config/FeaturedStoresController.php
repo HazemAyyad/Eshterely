@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\Config;
 
 use App\Http\Controllers\Controller;
 use App\Models\FeaturedStore;
+use App\Services\ProductImport\ImportFlowDecisionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -68,6 +69,7 @@ class FeaturedStoresController extends Controller
         unset($validated['logo']);
 
         $store = FeaturedStore::create($validated);
+        app(ImportFlowDecisionService::class)->forgetActiveSlugsCache();
         if ($request->hasFile('logo')) {
             $path = $request->file('logo')->store('config/featured-stores', 'public');
             $store->update(['logo_url' => $path]);
@@ -105,6 +107,7 @@ class FeaturedStoresController extends Controller
         unset($validated['logo']);
 
         $featured_store->update($validated);
+        app(ImportFlowDecisionService::class)->forgetActiveSlugsCache();
         if ($request->hasFile('logo')) {
             if ($featured_store->logo_url && !str_starts_with($featured_store->logo_url, 'http')) {
                 Storage::disk('public')->delete($featured_store->logo_url);
@@ -123,6 +126,7 @@ class FeaturedStoresController extends Controller
     public function destroy(Request $request, FeaturedStore $featured_store): JsonResponse|RedirectResponse
     {
         $featured_store->delete();
+        app(ImportFlowDecisionService::class)->forgetActiveSlugsCache();
 
         if ($request->ajax() || $request->wantsJson()) {
             return response()->json(['success' => true, 'message' => __('admin.store_deleted')]);
