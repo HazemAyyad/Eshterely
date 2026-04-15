@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\WalletRefund;
 use App\Services\Wallet\WalletRefundNotifier;
 use App\Services\Wallet\WalletRefundProcessor;
+use App\Support\AdminWalletDataTable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -28,12 +30,13 @@ class WalletRefundsController extends Controller
         $query = WalletRefund::query()->with('user')->orderByDesc('id');
 
         return DataTables::eloquent($query)
-            ->addColumn('user_contact', fn (WalletRefund $r) => $r->user?->email ?? $r->user?->phone ?? 'User #'.$r->user_id)
+            ->addColumn('customer', fn (WalletRefund $r) => AdminWalletDataTable::customerCell($r->user))
             ->addColumn('source_label', fn (WalletRefund $r) => $r->source_type.' #'.$r->source_id)
             ->addColumn('amount_fmt', fn (WalletRefund $r) => number_format((float) $r->amount, 2).' '.$r->currency)
+            ->addColumn('status_badge', fn (WalletRefund $r) => AdminWalletDataTable::refundStatusInteractive($r))
             ->editColumn('created_at', fn (WalletRefund $r) => $r->created_at?->format('Y-m-d H:i') ?? '')
             ->addColumn('actions', fn (WalletRefund $r) => '<a href="'.route('admin.wallet-refunds.show', $r).'" class="btn btn-sm btn-primary">'.e(__('admin.details')).'</a>')
-            ->rawColumns(['actions'])
+            ->rawColumns(['customer', 'status_badge', 'actions'])
             ->toJson();
     }
 
@@ -44,7 +47,7 @@ class WalletRefundsController extends Controller
         return view('admin.wallet-refunds.show', ['refund' => $walletRefund]);
     }
 
-    public function updateStatus(Request $request, WalletRefund $walletRefund): RedirectResponse
+    public function updateStatus(Request $request, WalletRefund $walletRefund): RedirectResponse|JsonResponse
     {
         $validated = $request->validate([
             'status' => 'required|string|in:'.implode(',', [
@@ -57,6 +60,26 @@ class WalletRefundsController extends Controller
 
         $old = $walletRefund->status;
         $new = $validated['status'];
+        $wantsJson = $request->wantsJson() || $request->expectsJson();
+
+        if ($old === $new) {
+            if (array_key_exists('admin_notes', $validated)) {
+                $walletRefund->admin_notes = $validated['admin_notes'];
+                $walletRefund->save();
+            }
+            $walletRefund->refresh();
+            if ($wantsJson) {
+                return response()->json([
+                    'ok' => true,
+                    'message' => __('admin.wallet_refund_status_updated'),
+                    'status' => $walletRefund->status,
+                ]);
+            }
+
+            return redirect()
+                ->route('admin.wallet-refunds.show', $walletRefund)
+                ->with('success', __('admin.wallet_refund_status_updated'));
+        }
 
         if ($new === WalletRefund::STATUS_APPROVED && $old === WalletRefund::STATUS_PENDING) {
             if (array_key_exists('admin_notes', $validated)) {
@@ -66,11 +89,24 @@ class WalletRefundsController extends Controller
             try {
                 $this->refundProcessor->approveAndCredit($walletRefund, (int) auth('admin')->id());
             } catch (\Throwable $e) {
+                if ($wantsJson) {
+                    return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+                }
+
                 return redirect()
                     ->route('admin.wallet-refunds.show', $walletRefund)
                     ->with('error', $e->getMessage());
             }
             $this->notifier->notifyApproved($walletRefund->fresh());
+            $walletRefund->refresh();
+
+            if ($wantsJson) {
+                return response()->json([
+                    'ok' => true,
+                    'message' => __('admin.wallet_refund_status_updated'),
+                    'status' => $walletRefund->status,
+                ]);
+            }
 
             return redirect()
                 ->route('admin.wallet-refunds.show', $walletRefund)
@@ -86,6 +122,15 @@ class WalletRefundsController extends Controller
             $walletRefund->reviewed_at = now();
             $walletRefund->save();
             $this->notifier->notifyRejected($walletRefund->fresh());
+            $walletRefund->refresh();
+
+            if ($wantsJson) {
+                return response()->json([
+                    'ok' => true,
+                    'message' => __('admin.wallet_refund_status_updated'),
+                    'status' => $walletRefund->status,
+                ]);
+            }
 
             return redirect()
                 ->route('admin.wallet-refunds.show', $walletRefund)
@@ -93,13 +138,21 @@ class WalletRefundsController extends Controller
         }
 
         if ($new === WalletRefund::STATUS_PENDING) {
+            if ($wantsJson) {
+                return response()->json(['ok' => false, 'message' => 'Cannot revert to pending.'], 422);
+            }
+
             return redirect()
                 ->route('admin.wallet-refunds.show', $walletRefund)
                 ->with('error', 'Cannot revert to pending.');
         }
 
+        if ($wantsJson) {
+            return response()->json(['ok' => false, 'message' => 'Invalid status change.'], 422);
+        }
+
         return redirect()
             ->route('admin.wallet-refunds.show', $walletRefund)
-            ->with('success', __('admin.wallet_refund_status_updated'));
+            ->with('error', 'Invalid status change.');
     }
 }

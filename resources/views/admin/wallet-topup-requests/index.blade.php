@@ -37,7 +37,7 @@
             <thead>
                 <tr>
                     <th>#</th>
-                    <th>{{ __('admin.user') }}</th>
+                    <th>Customer</th>
                     <th>Method</th>
                     <th>{{ __('admin.amount') }}</th>
                     <th>{{ __('admin.status') }}</th>
@@ -48,6 +48,8 @@
         </table>
     </div>
 </div>
+
+@include('admin.partials.wallet-inline-status-modal')
 @endsection
 
 @push('styles')
@@ -72,16 +74,17 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         columns: [
             { data: 'id', name: 'id' },
-            { data: 'user_contact', name: 'user_id' },
+            { data: 'customer', name: 'user_id' },
             { data: 'method_label', name: 'method', orderable: false, searchable: false },
             { data: 'amount_fmt', name: 'amount' },
-            { data: 'status', name: 'status' },
+            { data: 'status_badge', name: 'status', orderable: false, searchable: false },
             { data: 'created_at', name: 'created_at' },
             { data: 'actions', name: 'actions', orderable: false, searchable: false }
         ],
         order: [[0, 'desc']],
         language: dtLang
     });
+    window.walletInlineDataTableReload = function () { table.ajax.reload(null, false); };
     document.getElementById('filter-status').addEventListener('change', () => table.ajax.reload());
     document.getElementById('filter-method').addEventListener('change', () => table.ajax.reload());
 });

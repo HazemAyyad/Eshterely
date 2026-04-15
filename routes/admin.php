@@ -164,6 +164,7 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
     Route::get('saved-payment-methods', [SavedPaymentMethodsController::class, 'index'])->name('saved-payment-methods.index');
     Route::patch('saved-payment-methods/{savedPaymentMethod}/unblock', [SavedPaymentMethodsController::class, 'unblock'])->name('saved-payment-methods.unblock');
     Route::patch('saved-payment-methods/{savedPaymentMethod}/disable', [SavedPaymentMethodsController::class, 'disable'])->name('saved-payment-methods.disable');
+    Route::delete('saved-payment-methods/{savedPaymentMethod}', [SavedPaymentMethodsController::class, 'destroy'])->name('saved-payment-methods.destroy');
 
     // Support
     Route::get('support/data', [SupportController::class, 'data'])->name('support.data');

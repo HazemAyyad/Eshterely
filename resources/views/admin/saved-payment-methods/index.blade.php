@@ -28,6 +28,7 @@
                     <th>#</th>
                     <th>Customer</th>
                     <th>Card</th>
+                    <th>Verification charge</th>
                     <th>Status</th>
                     <th>Failed attempts</th>
                     <th>Blocked at</th>
@@ -58,6 +59,7 @@ document.addEventListener('DOMContentLoaded', function() {
             { data: 'id', name: 'id' },
             { data: 'customer', name: 'user_id' },
             { data: 'card_label', name: 'brand', orderable: false },
+            { data: 'verification_charge_fmt', name: 'verification_charge_amount' },
             { data: 'status_badge', name: 'verification_status' },
             { data: 'failed_attempts', name: 'verification_attempts' },
             { data: 'blocked_at_fmt', name: 'blocked_at' },

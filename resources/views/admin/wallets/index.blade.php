@@ -14,7 +14,7 @@
             <thead>
                 <tr>
                     <th>#</th>
-                    <th>User</th>
+                    <th>Customer</th>
                     <th>{{ __('admin.available') }}</th>
                     <th>{{ __('admin.pending') }}</th>
                     <th>{{ __('admin.promo') }}</th>
@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', function() {
         ajax: "{{ route('admin.wallets.data') }}",
         columns: [
             { data: 'id', name: 'id' },
-            { data: 'user_contact', name: 'user_id' },
+            { data: 'customer', name: 'user_id' },
             { data: 'available_balance', name: 'available_balance' },
             { data: 'pending_balance', name: 'pending_balance' },
             { data: 'promo_balance', name: 'promo_balance' },

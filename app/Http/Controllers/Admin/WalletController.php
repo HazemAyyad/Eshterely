@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Wallet;
+use App\Support\AdminWalletDataTable;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -20,12 +21,12 @@ class WalletController extends Controller
         $query = Wallet::with('user')->orderBy('available_balance', 'desc');
 
         return DataTables::eloquent($query)
-            ->addColumn('user_contact', fn (Wallet $w) => $w->user?->phone ?? $w->user?->email ?? 'User #' . $w->user_id)
+            ->addColumn('customer', fn (Wallet $w) => AdminWalletDataTable::customerCell($w->user))
             ->editColumn('available_balance', fn (Wallet $w) => number_format((float) $w->available_balance, 2))
             ->editColumn('pending_balance', fn (Wallet $w) => number_format((float) $w->pending_balance, 2))
             ->editColumn('promo_balance', fn (Wallet $w) => number_format((float) $w->promo_balance, 2))
             ->addColumn('actions', fn (Wallet $w) => '<a href="' . route('admin.wallets.show', $w->user_id) . '" class="btn btn-text-secondary rounded-pill waves-effect btn-icon" title="' . __('admin.details') . '"><i class="icon-base ti tabler-eye icon-22px"></i></a>')
-            ->rawColumns(['actions'])
+            ->rawColumns(['customer', 'actions'])
             ->toJson();
     }
 

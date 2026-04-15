@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\WalletTopupRequest;
 use App\Services\Wallet\WalletManualTopupProcessor;
+use App\Support\AdminWalletDataTable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -39,12 +41,13 @@ class WalletTopupRequestsController extends Controller
         }
 
         return DataTables::eloquent($query)
-            ->addColumn('user_contact', fn (WalletTopupRequest $r) => $r->user?->email ?? $r->user?->phone ?? 'User #'.$r->user_id)
+            ->addColumn('customer', fn (WalletTopupRequest $r) => AdminWalletDataTable::customerCell($r->user))
             ->addColumn('amount_fmt', fn (WalletTopupRequest $r) => number_format((float) $r->amount, 2).' '.$r->currency)
             ->addColumn('method_label', fn (WalletTopupRequest $r) => $r->method === WalletTopupRequest::METHOD_ZELLE ? 'Zelle' : 'Wire')
+            ->addColumn('status_badge', fn (WalletTopupRequest $r) => AdminWalletDataTable::topupStatusInteractive($r))
             ->editColumn('created_at', fn (WalletTopupRequest $r) => $r->created_at?->format('Y-m-d H:i') ?? '')
             ->addColumn('actions', fn (WalletTopupRequest $r) => '<a href="'.route('admin.wallet-topup-requests.show', $r).'" class="btn btn-sm btn-primary">'.e(__('admin.details')).'</a>')
-            ->rawColumns(['actions'])
+            ->rawColumns(['customer', 'status_badge', 'actions'])
             ->toJson();
     }
 
@@ -55,7 +58,7 @@ class WalletTopupRequestsController extends Controller
         return view('admin.wallet-topup-requests.show', ['req' => $walletTopupRequest]);
     }
 
-    public function updateStatus(Request $request, WalletTopupRequest $walletTopupRequest): RedirectResponse
+    public function updateStatus(Request $request, WalletTopupRequest $walletTopupRequest): RedirectResponse|JsonResponse
     {
         $validated = $request->validate([
             'status' => 'required|string|in:'.implode(',', [
@@ -69,9 +72,33 @@ class WalletTopupRequestsController extends Controller
 
         $old = $walletTopupRequest->status;
         $new = $validated['status'];
+        $wantsJson = $request->wantsJson() || $request->expectsJson();
+
+        if ($old === $new && ! in_array($old, [WalletTopupRequest::STATUS_APPROVED, WalletTopupRequest::STATUS_REJECTED], true)) {
+            if (array_key_exists('admin_notes', $validated)) {
+                $walletTopupRequest->admin_notes = $validated['admin_notes'];
+                $walletTopupRequest->save();
+            }
+            $walletTopupRequest->refresh();
+            if ($wantsJson) {
+                return response()->json([
+                    'ok' => true,
+                    'message' => __('admin.wallet_topup_status_updated'),
+                    'status' => $walletTopupRequest->status,
+                ]);
+            }
+
+            return redirect()
+                ->route('admin.wallet-topup-requests.show', $walletTopupRequest)
+                ->with('success', __('admin.wallet_topup_status_updated'));
+        }
 
         if ($new === WalletTopupRequest::STATUS_APPROVED) {
             if (in_array($old, [WalletTopupRequest::STATUS_APPROVED, WalletTopupRequest::STATUS_REJECTED], true)) {
+                if ($wantsJson) {
+                    return response()->json(['ok' => false, 'message' => 'Request is already finalized.'], 422);
+                }
+
                 return redirect()->back()->with('error', 'Request is already finalized.');
             }
             if (array_key_exists('admin_notes', $validated)) {
@@ -81,9 +108,21 @@ class WalletTopupRequestsController extends Controller
             try {
                 $this->processor->approve($walletTopupRequest, (int) auth('admin')->id());
             } catch (\Throwable $e) {
+                if ($wantsJson) {
+                    return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+                }
+
                 return redirect()
                     ->route('admin.wallet-topup-requests.show', $walletTopupRequest)
                     ->with('error', $e->getMessage());
+            }
+            $walletTopupRequest->refresh();
+            if ($wantsJson) {
+                return response()->json([
+                    'ok' => true,
+                    'message' => __('admin.wallet_topup_status_updated'),
+                    'status' => $walletTopupRequest->status,
+                ]);
             }
 
             return redirect()
@@ -93,6 +132,10 @@ class WalletTopupRequestsController extends Controller
 
         if ($new === WalletTopupRequest::STATUS_REJECTED) {
             if (in_array($old, [WalletTopupRequest::STATUS_APPROVED, WalletTopupRequest::STATUS_REJECTED], true)) {
+                if ($wantsJson) {
+                    return response()->json(['ok' => false, 'message' => 'Request is already finalized.'], 422);
+                }
+
                 return redirect()->back()->with('error', 'Request is already finalized.');
             }
             try {
@@ -102,9 +145,21 @@ class WalletTopupRequestsController extends Controller
                     $validated['admin_notes'] ?? null
                 );
             } catch (\Throwable $e) {
+                if ($wantsJson) {
+                    return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+                }
+
                 return redirect()
                     ->route('admin.wallet-topup-requests.show', $walletTopupRequest)
                     ->with('error', $e->getMessage());
+            }
+            $walletTopupRequest->refresh();
+            if ($wantsJson) {
+                return response()->json([
+                    'ok' => true,
+                    'message' => __('admin.wallet_topup_status_updated'),
+                    'status' => $walletTopupRequest->status,
+                ]);
             }
 
             return redirect()
@@ -114,6 +169,10 @@ class WalletTopupRequestsController extends Controller
 
         // pending / under_review: allow moving between non-terminal states.
         if (in_array($old, [WalletTopupRequest::STATUS_APPROVED, WalletTopupRequest::STATUS_REJECTED], true)) {
+            if ($wantsJson) {
+                return response()->json(['ok' => false, 'message' => 'Cannot change a finalized request.'], 422);
+            }
+
             return redirect()->back()->with('error', 'Cannot change a finalized request.');
         }
 
@@ -126,6 +185,15 @@ class WalletTopupRequestsController extends Controller
             $walletTopupRequest->reviewed_at = now();
         }
         $walletTopupRequest->save();
+        $walletTopupRequest->refresh();
+
+        if ($wantsJson) {
+            return response()->json([
+                'ok' => true,
+                'message' => __('admin.wallet_topup_status_updated'),
+                'status' => $walletTopupRequest->status,
+            ]);
+        }
 
         return redirect()
             ->route('admin.wallet-topup-requests.show', $walletTopupRequest)

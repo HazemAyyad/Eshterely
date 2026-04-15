@@ -14,7 +14,7 @@
             <thead>
                 <tr>
                     <th>#</th>
-                    <th>{{ __('admin.user') }}</th>
+                    <th>Customer</th>
                     <th>{{ __('admin.amount') }}</th>
                     <th>{{ __('admin.status') }}</th>
                     <th>{{ __('admin.bank_name') }}</th>
@@ -26,6 +26,8 @@
         </table>
     </div>
 </div>
+
+@include('admin.partials.wallet-inline-status-modal')
 @endsection
 
 @push('styles')
@@ -38,15 +40,15 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const dtLang = @json(__('datatatables'));
-    $('#wallet-withdrawals-table').DataTable({
+    const table = $('#wallet-withdrawals-table').DataTable({
         processing: true,
         serverSide: true,
         ajax: "{{ route('admin.wallet-withdrawals.data') }}",
         columns: [
             { data: 'id', name: 'id' },
-            { data: 'user_contact', name: 'user_id' },
+            { data: 'customer', name: 'user_id' },
             { data: 'amount_fmt', name: 'amount' },
-            { data: 'status', name: 'status' },
+            { data: 'status_badge', name: 'status', orderable: false, searchable: false },
             { data: 'bank_name', name: 'bank_name' },
             { data: 'country', name: 'country' },
             { data: 'created_at', name: 'created_at' },
@@ -55,6 +57,7 @@ document.addEventListener('DOMContentLoaded', function() {
         order: [[0, 'desc']],
         language: dtLang
     });
+    window.walletInlineDataTableReload = function () { table.ajax.reload(null, false); };
 });
 </script>
 @endpush

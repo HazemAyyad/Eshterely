@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\SavedPaymentMethod;
 use App\Services\Wallet\StripeSavedCardService;
-use App\Support\AdminUserDisplay;
+use App\Support\AdminWalletDataTable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -27,18 +27,15 @@ class SavedPaymentMethodsController extends Controller
         $query = SavedPaymentMethod::query()->with('user')->orderByDesc('id');
 
         return DataTables::eloquent($query)
-            ->addColumn('customer', function (SavedPaymentMethod $c) {
-                $u = $c->user;
-                if (! $u) {
+            ->addColumn('customer', fn (SavedPaymentMethod $c) => AdminWalletDataTable::customerCell($c->user))
+            ->addColumn('card_label', fn (SavedPaymentMethod $c) => ($c->brand ?: 'Card').' •••• '.($c->last4 ?? '????'))
+            ->addColumn('verification_charge_fmt', function (SavedPaymentMethod $c) {
+                if ($c->verification_charge_amount === null) {
                     return '—';
                 }
-                $name = e(AdminUserDisplay::primaryName($u));
-                $phone = $u->phone ? '<div class="text-muted small">'.e($u->phone).'</div>' : '';
-                $email = $u->email ? '<div class="text-muted small">'.e($u->email).'</div>' : '';
 
-                return '<div><a href="'.route('admin.users.show', $u).'" class="fw-semibold">'.$name.'</a></div>'.$phone.$email;
+                return number_format((float) $c->verification_charge_amount, 2).' USD';
             })
-            ->addColumn('card_label', fn (SavedPaymentMethod $c) => ($c->brand ?: 'Card').' •••• '.($c->last4 ?? '????'))
             ->addColumn('status_badge', function (SavedPaymentMethod $c) {
                 $raw = $c->verification_status;
 
@@ -55,9 +52,7 @@ class SavedPaymentMethodsController extends Controller
             ->addColumn('blocked_at_fmt', fn (SavedPaymentMethod $c) => $c->blocked_at?->format('Y-m-d H:i') ?? '—')
             ->editColumn('created_at', fn (SavedPaymentMethod $c) => $c->created_at?->format('Y-m-d H:i') ?? '')
             ->addColumn('actions', function (SavedPaymentMethod $c) {
-                $userUrl = route('admin.users.show', $c->user_id);
-                $btns = '<div class="d-flex flex-wrap gap-1">'
-                    .'<a href="'.$userUrl.'" class="btn btn-sm btn-outline-secondary">'.e(__('admin.user')).'</a>';
+                $btns = '<div class="d-flex flex-wrap gap-1">';
 
                 if ($c->verification_status === SavedPaymentMethod::STATUS_BLOCKED) {
                     $btns .= '<form action="'.route('admin.saved-payment-methods.unblock', $c).'" method="POST" class="d-inline" onsubmit="return confirm(\'Unblock this card and reset failed verification attempts? The customer can try entering the verification amount again.\');">'
@@ -66,11 +61,16 @@ class SavedPaymentMethodsController extends Controller
                         .'<button type="submit" class="btn btn-sm btn-success">Unblock / reset</button></form>';
                 }
 
-                $btns .= '<form action="'.route('admin.saved-payment-methods.disable', $c).'" method="POST" class="d-inline" onsubmit="return confirm(\'Disable this card? It will be detached in Stripe.\');">'
+                $btns .= '<form action="'.route('admin.saved-payment-methods.disable', $c).'" method="POST" class="d-inline" onsubmit="return confirm(\'Disable this card? It will be detached in Stripe and cannot be used for payments.\');">'
                     .'<input type="hidden" name="_token" value="'.csrf_token().'">'
                     .'<input type="hidden" name="_method" value="PATCH">'
                     .'<button type="submit" class="btn btn-sm btn-warning" '
-                    .($c->verification_status === SavedPaymentMethod::STATUS_DISABLED ? 'disabled' : '').'>Disable</button></form>'
+                    .($c->verification_status === SavedPaymentMethod::STATUS_DISABLED ? 'disabled' : '').'>Disable</button></form>';
+
+                $btns .= '<form action="'.route('admin.saved-payment-methods.destroy', $c).'" method="POST" class="d-inline" onsubmit="return confirm(\'Permanently delete this saved card? It will be removed from Stripe (if still attached) and from this list. This cannot be undone.\');">'
+                    .'<input type="hidden" name="_token" value="'.csrf_token().'">'
+                    .'<input type="hidden" name="_method" value="DELETE">'
+                    .'<button type="submit" class="btn btn-sm btn-outline-danger">Delete</button></form>'
                     .'</div>';
 
                 return $btns;
@@ -110,5 +110,18 @@ class SavedPaymentMethodsController extends Controller
         $savedPaymentMethod->update(['verification_status' => SavedPaymentMethod::STATUS_DISABLED]);
 
         return redirect()->back()->with('success', __('admin.saved_payment_method_disabled'));
+    }
+
+    public function destroy(SavedPaymentMethod $savedPaymentMethod): RedirectResponse
+    {
+        try {
+            $this->stripeSavedCardService->detachPaymentMethod($savedPaymentMethod);
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+
+        $savedPaymentMethod->delete();
+
+        return redirect()->back()->with('success', 'Saved card deleted.');
     }
 }
