@@ -21,10 +21,11 @@
                 <tr>
                     <th>#</th>
                     <th>{{ __('admin.user_name') }}</th>
-                    <th>URL</th>
+                    <th>Store</th>
                     <th>{{ __('admin.status') }}</th>
                     <th>{{ __('admin.source_order') }}</th>
                     <th>{{ __('admin.created_at') }}</th>
+                    <th class="text-center" title="Open product URL"><span class="visually-hidden">Link</span><i class="icon-base ti tabler-external-link icon-18px"></i></th>
                     <th></th>
                 </tr>
             </thead>
@@ -51,10 +52,11 @@ document.addEventListener('DOMContentLoaded', function() {
         columns: [
             { data: 'id', name: 'id' },
             { data: 'user_name', name: 'user_name', orderable: false },
-            { data: 'source_url', name: 'source_url' },
+            { data: 'store_name', name: 'store_display_name' },
             { data: 'status', name: 'status' },
             { data: 'order', name: 'converted_order_id', orderable: false, searchable: false },
             { data: 'created_at', name: 'created_at' },
+            { data: 'link_icon', name: 'link_icon', orderable: false, searchable: false },
             { data: 'actions', name: 'actions', orderable: false, searchable: false },
         ],
         order: [[0, 'desc']],

@@ -191,6 +191,7 @@ Route::middleware('auth:sanctum')->prefix('purchase-assistant-requests')->group(
     Route::get('/', [PurchaseAssistantRequestController::class, 'index']);
     Route::post('/', [PurchaseAssistantRequestController::class, 'store']);
     Route::get('{purchase_assistant_request}', [PurchaseAssistantRequestController::class, 'show']);
+    Route::delete('{purchase_assistant_request}', [PurchaseAssistantRequestController::class, 'destroy']);
     Route::post('{purchase_assistant_request}/start-payment', [PurchaseAssistantRequestController::class, 'startPayment']);
 });
 

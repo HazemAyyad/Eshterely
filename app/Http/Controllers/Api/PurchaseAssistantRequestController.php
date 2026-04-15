@@ -7,6 +7,7 @@ use App\Http\Resources\PaymentLaunchResource;
 use App\Http\Resources\PurchaseAssistantRequestResource;
 use App\Models\Order;
 use App\Models\PurchaseAssistantRequest;
+use App\Support\PurchaseAssistantStoreDisplayName;
 use App\Services\Payments\PaymentEligibilityService;
 use App\Services\Payments\PaymentGatewayManager;
 use App\Services\Payments\PaymentService;
@@ -14,7 +15,6 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 class PurchaseAssistantRequestController extends Controller
 {
@@ -65,6 +65,7 @@ class PurchaseAssistantRequestController extends Controller
             'user_id' => $request->user()->id,
             'source_url' => $url,
             'source_domain' => $domain,
+            'store_display_name' => PurchaseAssistantStoreDisplayName::fromSourceUrl($url),
             'title' => $validated['title'] ?? null,
             'details' => $validated['details'] ?? null,
             'quantity' => $validated['quantity'] ?? 1,
@@ -192,5 +193,23 @@ class PurchaseAssistantRequestController extends Controller
             'status' => $payment->fresh()->status->value,
             'order_id' => $order->id,
         ]);
+    }
+
+    public function destroy(Request $request, PurchaseAssistantRequest $purchaseAssistantRequest): JsonResponse
+    {
+        $this->authorize('delete', $purchaseAssistantRequest);
+
+        if ($purchaseAssistantRequest->status !== PurchaseAssistantRequest::STATUS_SUBMITTED) {
+            return response()->json([
+                'message' => 'Only submitted requests can be removed.',
+                'error_key' => 'cannot_delete_status',
+                'errors' => [],
+                'status' => 422,
+            ], 422);
+        }
+
+        $purchaseAssistantRequest->delete();
+
+        return response()->json(null, 204);
     }
 }

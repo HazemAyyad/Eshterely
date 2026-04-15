@@ -7,6 +7,7 @@ use App\Models\PurchaseAssistantRequest;
 use App\Models\User;
 use App\Services\PurchaseAssistant\PurchaseAssistantOrderFromRequestService;
 use App\Services\PurchaseAssistant\PurchaseAssistantRequestNotifier;
+use App\Support\AdminPurchaseAssistantDataTable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -38,16 +39,23 @@ class PurchaseAssistantRequestController extends Controller
                         ->orWhere('display_name', 'like', "%{$keyword}%");
                 });
             })
-            ->editColumn('source_url', fn (PurchaseAssistantRequest $r) => \Str::limit($r->source_url, 48))
+            ->addColumn('store_name', fn (PurchaseAssistantRequest $r) => e($r->store_display_name ?: \App\Support\PurchaseAssistantStoreDisplayName::fromHost($r->source_domain)))
+            ->filterColumn('store_name', function ($query, $keyword) {
+                $query->where(function ($q) use ($keyword) {
+                    $q->where('store_display_name', 'like', "%{$keyword}%")
+                        ->orWhere('source_domain', 'like', "%{$keyword}%");
+                });
+            })
             ->editColumn('created_at', fn (PurchaseAssistantRequest $r) => $r->created_at?->format('Y-m-d H:i') ?? '-')
-            ->editColumn('status', fn (PurchaseAssistantRequest $r) => '<span class="badge bg-label-primary">'.e($r->status).'</span>')
+            ->editColumn('status', fn (PurchaseAssistantRequest $r) => AdminPurchaseAssistantDataTable::statusBadge($r))
             ->addColumn('order', fn (PurchaseAssistantRequest $r) => $r->converted_order_id ? '<a href="'.e(route('admin.orders.show', $r->converted_order_id)).'">#'.e((string) $r->converted_order_id).'</a>' : '—')
+            ->addColumn('link_icon', fn (PurchaseAssistantRequest $r) => AdminPurchaseAssistantDataTable::sourceLinkButton($r))
             ->addColumn('actions', function (PurchaseAssistantRequest $r) {
                 $url = route('admin.purchase-assistant.show', $r);
 
                 return '<a href="'.$url.'" class="btn btn-sm btn-primary">'.e(__('admin.details')).'</a>';
             })
-            ->rawColumns(['status', 'order', 'actions'])
+            ->rawColumns(['status', 'order', 'link_icon', 'actions'])
             ->toJson();
     }
 
@@ -72,6 +80,9 @@ class PurchaseAssistantRequestController extends Controller
             'action' => 'nullable|in:save,ready_for_payment',
         ]);
 
+        $oldStatus = $purchaseAssistantRequest->status;
+        $user = User::find($purchaseAssistantRequest->user_id);
+
         if (($validated['action'] ?? 'save') === 'ready_for_payment') {
             $request->validate([
                 'admin_product_price' => 'required|numeric|min:0.01',
@@ -88,12 +99,16 @@ class PurchaseAssistantRequestController extends Controller
 
             if ($purchaseAssistantRequest->converted_order_id === null) {
                 $this->orderFromRequestService->createPendingPaymentOrder($purchaseAssistantRequest);
-                $purchaseAssistantRequest->refresh();
             }
+            $purchaseAssistantRequest->refresh();
 
-            $user = User::find($purchaseAssistantRequest->user_id);
             if ($user) {
-                $this->notifier->notifyPaymentReady($purchaseAssistantRequest, $user);
+                $this->notifier->notifyAfterStatusChange(
+                    $purchaseAssistantRequest,
+                    $user,
+                    $oldStatus,
+                    $purchaseAssistantRequest->status
+                );
             }
         } else {
             $purchaseAssistantRequest->fill([
@@ -108,11 +123,13 @@ class PurchaseAssistantRequestController extends Controller
             }
             $purchaseAssistantRequest->save();
 
-            if ($purchaseAssistantRequest->status === PurchaseAssistantRequest::STATUS_REJECTED) {
-                $user = User::find($purchaseAssistantRequest->user_id);
-                if ($user) {
-                    $this->notifier->notifyRejected($purchaseAssistantRequest, $user);
-                }
+            if ($user) {
+                $this->notifier->notifyAfterStatusChange(
+                    $purchaseAssistantRequest->fresh(),
+                    $user,
+                    $oldStatus,
+                    $purchaseAssistantRequest->status
+                );
             }
         }
 

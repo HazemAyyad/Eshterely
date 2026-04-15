@@ -16,4 +16,10 @@ class PurchaseAssistantRequestPolicy
     {
         return $this->view($user, $purchaseAssistantRequest);
     }
+
+    public function delete(User $user, PurchaseAssistantRequest $purchaseAssistantRequest): bool
+    {
+        return $this->view($user, $purchaseAssistantRequest)
+            && $purchaseAssistantRequest->status === PurchaseAssistantRequest::STATUS_SUBMITTED;
+    }
 }

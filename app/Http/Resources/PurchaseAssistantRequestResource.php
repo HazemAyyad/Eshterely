@@ -23,6 +23,7 @@ class PurchaseAssistantRequestResource extends JsonResource
             'id' => (string) $r->id,
             'source_url' => $r->source_url,
             'source_domain' => $r->source_domain,
+            'store_display_name' => $r->store_display_name,
             'title' => $r->title,
             'details' => $r->details,
             'quantity' => $r->quantity,

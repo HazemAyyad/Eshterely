@@ -58,6 +58,7 @@ class PurchaseAssistantRequest extends Model
         'user_id',
         'source_url',
         'source_domain',
+        'store_display_name',
         'title',
         'details',
         'quantity',

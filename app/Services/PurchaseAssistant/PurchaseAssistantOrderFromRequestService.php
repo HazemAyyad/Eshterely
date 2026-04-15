@@ -7,6 +7,7 @@ use App\Models\DraftOrderItem;
 use App\Models\Order;
 use App\Models\PurchaseAssistantRequest;
 use App\Services\OrderFinalizationService;
+use App\Support\PurchaseAssistantStoreDisplayName;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -42,6 +43,11 @@ class PurchaseAssistantOrderFromRequestService
                 $domain = is_string($host) ? $host : null;
             }
 
+            $storeLabel = $request->store_display_name;
+            if ($storeLabel === null || $storeLabel === '') {
+                $storeLabel = PurchaseAssistantStoreDisplayName::fromHost($domain);
+            }
+
             $firstImage = null;
             if (is_array($request->image_paths) && $request->image_paths !== []) {
                 $first = $request->image_paths[0];
@@ -69,7 +75,7 @@ class PurchaseAssistantOrderFromRequestService
                 'product_snapshot' => [
                     'name' => $request->title ?: 'Purchase Assistant item',
                     'unit_price' => (float) $request->admin_product_price,
-                    'store_name' => $domain ?: 'Purchase Assistant',
+                    'store_name' => $storeLabel,
                     'country' => 'US',
                     'image_url' => $firstImage,
                     'product_id' => '',

@@ -15,11 +15,28 @@ class PurchaseAssistantRequestNotifier
         protected NotificationDispatchService $dispatchService
     ) {}
 
-    public function notifyPaymentReady(PurchaseAssistantRequest $request, User $user): void
-    {
-        $title = $this->appTitle();
-        $body = 'Your Purchase Assistant request is priced. Please complete payment to continue.';
+    /**
+     * Notify the customer when status changes from admin or payment webhooks.
+     * Skips when old and new are equal or when the transition is not customer-facing.
+     */
+    public function notifyAfterStatusChange(
+        PurchaseAssistantRequest $request,
+        User $user,
+        ?string $oldStatus,
+        string $newStatus
+    ): void {
+        if ($oldStatus !== null && $oldStatus === $newStatus) {
+            return;
+        }
+
+        if (! $this->shouldNotifyForNewStatus($newStatus)) {
+            return;
+        }
+
+        [$title, $body, $actionLabel] = $this->messageForStatus($request, $newStatus);
+
         $route = '/purchase-assistant-requests/'.$request->id;
+        $meta = $this->baseMeta($request, $actionLabel, $route);
 
         Notification::create([
             'user_id' => $user->id,
@@ -28,7 +45,7 @@ class PurchaseAssistantRequestNotifier
             'subtitle' => $body,
             'read' => false,
             'important' => true,
-            'action_label' => 'pay_now',
+            'action_label' => $actionLabel,
             'action_route' => $route,
         ]);
 
@@ -38,46 +55,110 @@ class PurchaseAssistantRequestNotifier
             $body,
             $this->appIconUrl(),
             null,
-            [
-                'route_key' => 'purchase_assistant',
-                'target_type' => 'purchase_assistant_request',
-                'target_id' => (string) $request->id,
-                'action_label' => 'pay_now',
-                'action_route' => $route,
-            ],
+            $meta,
             null
         );
     }
 
-    public function notifyRejected(PurchaseAssistantRequest $request, User $user): void
+    /**
+     * @return array{0: string, 1: string, 2: string}
+     */
+    private function messageForStatus(PurchaseAssistantRequest $request, string $status): array
     {
         $title = $this->appTitle();
-        $body = 'Your Purchase Assistant request could not be fulfilled.';
 
-        Notification::create([
-            'user_id' => $user->id,
-            'type' => 'orders',
-            'title' => $title,
-            'subtitle' => $body,
-            'read' => false,
-            'important' => true,
-            'action_label' => 'view_request',
-            'action_route' => '/purchase-assistant-requests/'.$request->id,
-        ]);
-
-        $this->dispatchService->sendToUser(
-            $user,
-            $title,
-            $body,
-            $this->appIconUrl(),
-            null,
-            [
-                'route_key' => 'purchase_assistant',
-                'target_type' => 'purchase_assistant_request',
-                'target_id' => (string) $request->id,
+        return match ($status) {
+            PurchaseAssistantRequest::STATUS_UNDER_REVIEW => [
+                $title,
+                'We are reviewing your Purchase Assistant request.',
+                'view_request',
             ],
-            null
-        );
+            PurchaseAssistantRequest::STATUS_AWAITING_CUSTOMER_PAYMENT => [
+                $title,
+                'Your Purchase Assistant request is priced. Please complete payment to continue.',
+                'pay_now',
+            ],
+            PurchaseAssistantRequest::STATUS_REJECTED => [
+                $title,
+                'Your Purchase Assistant request could not be fulfilled.',
+                'view_request',
+            ],
+            PurchaseAssistantRequest::STATUS_CANCELLED => [
+                $title,
+                'Your Purchase Assistant request was cancelled.',
+                'view_request',
+            ],
+            PurchaseAssistantRequest::STATUS_PAID => [
+                $title,
+                'Payment received for your Purchase Assistant order.',
+                'view_request',
+            ],
+            PurchaseAssistantRequest::STATUS_COMPLETED => [
+                $title,
+                'Your Purchase Assistant request is completed.',
+                'view_request',
+            ],
+            PurchaseAssistantRequest::STATUS_PURCHASING => [
+                $title,
+                'We are purchasing your item for your Purchase Assistant order.',
+                'view_request',
+            ],
+            PurchaseAssistantRequest::STATUS_PURCHASED => [
+                $title,
+                'Your Purchase Assistant item has been purchased.',
+                'view_request',
+            ],
+            PurchaseAssistantRequest::STATUS_IN_TRANSIT_TO_WAREHOUSE => [
+                $title,
+                'Your Purchase Assistant shipment is on the way to our warehouse.',
+                'view_request',
+            ],
+            PurchaseAssistantRequest::STATUS_RECEIVED_AT_WAREHOUSE => [
+                $title,
+                'Your Purchase Assistant item arrived at our warehouse.',
+                'view_request',
+            ],
+            default => [
+                $title,
+                'Your Purchase Assistant request was updated.',
+                'view_request',
+            ],
+        };
+    }
+
+    private function shouldNotifyForNewStatus(string $newStatus): bool
+    {
+        return in_array($newStatus, [
+            PurchaseAssistantRequest::STATUS_UNDER_REVIEW,
+            PurchaseAssistantRequest::STATUS_AWAITING_CUSTOMER_PAYMENT,
+            PurchaseAssistantRequest::STATUS_REJECTED,
+            PurchaseAssistantRequest::STATUS_CANCELLED,
+            PurchaseAssistantRequest::STATUS_PAID,
+            PurchaseAssistantRequest::STATUS_COMPLETED,
+            PurchaseAssistantRequest::STATUS_PURCHASING,
+            PurchaseAssistantRequest::STATUS_PURCHASED,
+            PurchaseAssistantRequest::STATUS_IN_TRANSIT_TO_WAREHOUSE,
+            PurchaseAssistantRequest::STATUS_RECEIVED_AT_WAREHOUSE,
+        ], true);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function baseMeta(PurchaseAssistantRequest $request, string $actionLabel, string $route): array
+    {
+        $meta = [
+            'route_key' => 'purchase_assistant',
+            'target_type' => 'purchase_assistant_request',
+            'target_id' => (string) $request->id,
+            'action_label' => $actionLabel,
+            'action_route' => $route,
+        ];
+        if ($request->converted_order_id !== null) {
+            $meta['converted_order_id'] = (string) $request->converted_order_id;
+        }
+
+        return $meta;
     }
 
     private function appTitle(): string
