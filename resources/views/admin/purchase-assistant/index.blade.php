@@ -33,19 +33,27 @@
 </div>
 @endsection
 
+@push('styles')
+<link rel="stylesheet" href="https://cdn.datatables.net/2.0.8/css/dataTables.bootstrap5.min.css" />
+@endpush
+
 @push('scripts')
+<script src="https://cdn.datatables.net/2.0.8/js/dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/2.0.8/js/dataTables.bootstrap5.min.js"></script>
 <script>
-$(function () {
+document.addEventListener('DOMContentLoaded', function() {
+    const dtLang = @json(__('datatatables'));
     $('#pa-table').DataTable({
         processing: true,
         serverSide: true,
         ajax: "{{ route('admin.purchase-assistant.data') }}",
+        language: dtLang,
         columns: [
             { data: 'id', name: 'id' },
             { data: 'user_name', name: 'user_name', orderable: false },
             { data: 'source_url', name: 'source_url' },
             { data: 'status', name: 'status' },
-            { data: 'order', name: 'converted_order_id', orderable: false },
+            { data: 'order', name: 'converted_order_id', orderable: false, searchable: false },
             { data: 'created_at', name: 'created_at' },
             { data: 'actions', name: 'actions', orderable: false, searchable: false },
         ],

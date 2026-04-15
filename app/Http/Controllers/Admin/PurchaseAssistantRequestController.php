@@ -31,6 +31,13 @@ class PurchaseAssistantRequestController extends Controller
 
         return DataTables::eloquent($query)
             ->addColumn('user_name', fn (PurchaseAssistantRequest $r) => $r->user?->full_name ?? $r->user?->name ?? '-')
+            ->filterColumn('user_name', function ($query, $keyword) {
+                $query->whereHas('user', function ($q) use ($keyword) {
+                    $q->where('name', 'like', "%{$keyword}%")
+                        ->orWhere('full_name', 'like', "%{$keyword}%")
+                        ->orWhere('display_name', 'like', "%{$keyword}%");
+                });
+            })
             ->editColumn('source_url', fn (PurchaseAssistantRequest $r) => \Str::limit($r->source_url, 48))
             ->editColumn('created_at', fn (PurchaseAssistantRequest $r) => $r->created_at?->format('Y-m-d H:i') ?? '-')
             ->editColumn('status', fn (PurchaseAssistantRequest $r) => '<span class="badge bg-label-primary">'.e($r->status).'</span>')
