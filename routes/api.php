@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\PaymentCheckoutController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ImportedProductController;
 use App\Http\Controllers\Api\ProductImportController;
+use App\Http\Controllers\Api\PurchaseAssistantRequestController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SessionsController;
 use App\Http\Controllers\Api\SupportController;
@@ -184,6 +185,14 @@ Route::get('warehouses', WarehousesController::class);
 
 // Product import (auth required)
 Route::middleware('auth:sanctum')->post('products/import-from-url', [ProductImportController::class, 'importFromUrl']);
+
+// Purchase Assistant (unsupported Add via Link)
+Route::middleware('auth:sanctum')->prefix('purchase-assistant-requests')->group(function () {
+    Route::get('/', [PurchaseAssistantRequestController::class, 'index']);
+    Route::post('/', [PurchaseAssistantRequestController::class, 'store']);
+    Route::get('{purchase_assistant_request}', [PurchaseAssistantRequestController::class, 'show']);
+    Route::post('{purchase_assistant_request}/start-payment', [PurchaseAssistantRequestController::class, 'startPayment']);
+});
 
 // Imported product confirm & add-to-cart (auth required)
 Route::middleware('auth:sanctum')->prefix('imported-products')->group(function () {

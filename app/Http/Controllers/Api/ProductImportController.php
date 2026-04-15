@@ -192,6 +192,14 @@ class ProductImportController extends Controller
             // Log successful attempt.
             $orchestrator->recordSuccess($url, $storeKey, $product['extraction_source'] ?? 'unknown');
 
+            // Add via Link: supported store + minimal product data → standard import/cart path; otherwise Purchase Assistant.
+            $storeKeyLower = strtolower((string) ($product['store_key'] ?? $storeKey));
+            $nameRaw = trim((string) ($product['name'] ?? ''));
+            $nameOk = $nameRaw !== '' && strcasecmp($nameRaw, 'product') !== 0;
+            $priceOk = is_numeric($product['price'] ?? null) && (float) $product['price'] > 0;
+            $supportedStore = $storeKeyLower !== 'generic';
+            $product['import_flow'] = ($supportedStore && $nameOk && $priceOk) ? 'standard' : 'purchase_assistant';
+
             return response()->json($product);
         } catch (\Exception $e) {
             $orchestrator->recordFailure($url, $storeKey ?? 'unknown', $e->getMessage());

@@ -628,4 +628,12 @@ return [
     'procurement_modal_fields_intro' => 'سجّل ما تم شراؤه وكيف يُتتبّع قبل استلام المستودع.',
     'procurement_modal_fieldset_legend' => 'بيانات المشتريات',
     'procurement_modal_no_transition_note' => 'حالة البند تجاوزت الشراء/النقل. يمكنك تحديث الحقول؛ استخدم المستودع عند وصول العنصر.',
+    'purchase_assistant_title' => 'مساعد الشراء',
+    'purchase_assistant_intro' => 'طلبات من روابط غير مدعومة: راجع السعر وأضف رسوم الخدمة ثم أبلغ العميل للدفع.',
+    'purchase_assistant_ready_payment' => 'إنشاء الطلب وإشعار العميل للدفع',
+    'purchase_assistant_confirm_payment' => 'إنشاء طلب بانتظار الدفع وإشعار العميل؟',
+    'request_details' => 'تفاصيل الطلب',
+    'product_price' => 'سعر المنتج',
+    'quantity' => 'الكمية',
+    'estimated_price' => 'السعر التقديري',
 ];

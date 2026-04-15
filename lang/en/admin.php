@@ -635,4 +635,12 @@ return [
     'procurement_modal_fields_intro' => 'Record what was bought and how it is tracked before warehouse receiving.',
     'procurement_modal_fieldset_legend' => 'Procurement data',
     'procurement_modal_no_transition_note' => 'Line status is past purchase / in-transit stages. You can still update these fields; use Warehouse when the item arrives.',
+    'purchase_assistant_title' => 'Purchase Assistant',
+    'purchase_assistant_intro' => 'Unsupported store links from the app: review, set product price and service fee, then notify the customer to pay.',
+    'purchase_assistant_ready_payment' => 'Create order & notify customer to pay',
+    'purchase_assistant_confirm_payment' => 'Create a pending-payment order and notify the customer?',
+    'request_details' => 'Request details',
+    'product_price' => 'Product price',
+    'quantity' => 'Quantity',
+    'estimated_price' => 'Estimated price',
 ];

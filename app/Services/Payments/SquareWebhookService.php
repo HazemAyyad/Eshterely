@@ -11,6 +11,7 @@ use App\Models\Shipment;
 use App\Models\Wallet;
 use App\Models\WalletTopUpPayment;
 use App\Services\Cart\RemoveOrderedCartItemsService;
+use App\Services\PurchaseAssistant\PurchaseAssistantRequestStatusSync;
 use App\Services\Fcm\OrderShipmentNotificationTrigger;
 use App\Services\Shipments\ShipmentDraftFinalizationService;
 use Illuminate\Support\Facades\DB;
@@ -462,6 +463,10 @@ class SquareWebhookService
                 'order_id' => $payment->order_id,
                 'payment_id' => $payment->id,
             ]);
+            $order = Order::find($payment->order_id);
+            if ($order) {
+                app(PurchaseAssistantRequestStatusSync::class)->onOrderMarkedPaid($order);
+            }
         }
 
         (app(RemoveOrderedCartItemsService::class))((int) $payment->order_id);

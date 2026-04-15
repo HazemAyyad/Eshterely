@@ -29,7 +29,7 @@ class Order extends Model
     public const REVIEW_STATE_NEEDS_SHIPPING_COMPLETION = 'needs_shipping_completion';
 
     protected $fillable = [
-        'user_id', 'draft_order_id', 'order_number', 'origin', 'status', 'placed_at', 'delivered_at',
+        'user_id', 'draft_order_id', 'purchase_assistant_request_id', 'order_number', 'origin', 'status', 'placed_at', 'delivered_at',
         'total_amount', 'currency', 'order_total_snapshot', 'shipping_total_snapshot', 'service_fee_snapshot',
         'promo_code_id', 'promo_code', 'promo_discount_amount', 'wallet_applied_amount', 'amount_due_now',
         'estimated', 'needs_review', 'review_state', 'admin_notes', 'reviewed_at',
@@ -72,6 +72,11 @@ class Order extends Model
     public function draftOrder(): BelongsTo
     {
         return $this->belongsTo(DraftOrder::class);
+    }
+
+    public function purchaseAssistantRequest(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseAssistantRequest::class);
     }
 
     public function promoCode(): BelongsTo

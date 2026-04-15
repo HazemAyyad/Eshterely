@@ -64,6 +64,10 @@ class OrderController extends Controller
 
         $base = [
             'id' => (string) $o->id,
+            'purchase_assistant_request_id' => $o->purchase_assistant_request_id !== null
+                ? (string) $o->purchase_assistant_request_id
+                : null,
+            'is_purchase_assistant' => $o->purchase_assistant_request_id !== null,
             'order_number' => $o->order_number,
             'origin' => $o->origin,
             'status' => $o->status,

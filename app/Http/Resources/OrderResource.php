@@ -28,6 +28,10 @@ class OrderResource extends JsonResource
 
         return [
             'id' => (string) $order->id,
+            'purchase_assistant_request_id' => $order->purchase_assistant_request_id !== null
+                ? (string) $order->purchase_assistant_request_id
+                : null,
+            'is_purchase_assistant' => $order->purchase_assistant_request_id !== null,
             'status' => $order->status,
             'execution_status' => $executionStatus,
             'status_key' => $executionStatus,

@@ -33,6 +33,7 @@ use App\Http\Controllers\Admin\OutboundShipmentController;
 use App\Http\Controllers\Admin\OrderLineItemProcurementController;
 use App\Http\Controllers\Admin\WarehouseQueueController;
 use App\Http\Controllers\Admin\OutboundShipmentsAdminController;
+use App\Http\Controllers\Admin\PurchaseAssistantRequestController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('login', [AdminAuthController::class, 'showLogin'])->name('login');
@@ -128,6 +129,12 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
     Route::put('warehouse/order-line-items/{orderLineItem}/receive/{warehouseReceipt}', [WarehouseReceivingController::class, 'update'])->name('warehouse.receive-update');
     Route::post('shipments/{shipment}/pack', [OutboundShipmentController::class, 'pack'])->name('outbound-shipments.pack');
     Route::post('shipments/{shipment}/ship', [OutboundShipmentController::class, 'ship'])->name('outbound-shipments.ship');
+
+    // Purchase Assistant (unsupported Add via Link)
+    Route::get('purchase-assistant/data', [PurchaseAssistantRequestController::class, 'data'])->name('purchase-assistant.data');
+    Route::get('purchase-assistant', [PurchaseAssistantRequestController::class, 'index'])->name('purchase-assistant.index');
+    Route::get('purchase-assistant/{purchaseAssistantRequest}', [PurchaseAssistantRequestController::class, 'show'])->name('purchase-assistant.show');
+    Route::patch('purchase-assistant/{purchaseAssistantRequest}', [PurchaseAssistantRequestController::class, 'update'])->name('purchase-assistant.update');
 
     // Cart Review
     Route::get('cart-review/data', [CartReviewController::class, 'data'])->name('cart-review.data');

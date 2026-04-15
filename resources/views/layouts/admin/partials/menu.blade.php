@@ -120,7 +120,7 @@
                 </li>
             </ul>
         </li>
-        <li class="menu-item {{ request()->routeIs('admin.users*', 'admin.cart-review*', 'admin.wallets*', 'admin.wallet-refunds*', 'admin.wallet-withdrawals*', 'admin.wallet-topup-requests*', 'admin.saved-payment-methods*', 'admin.support*') ? 'active open' : '' }}">
+        <li class="menu-item {{ request()->routeIs('admin.users*', 'admin.cart-review*', 'admin.purchase-assistant*', 'admin.wallets*', 'admin.wallet-refunds*', 'admin.wallet-withdrawals*', 'admin.wallet-topup-requests*', 'admin.saved-payment-methods*', 'admin.support*') ? 'active open' : '' }}">
             <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon icon-base ti tabler-users"></i>
                 <div>{{ __('admin.management') }}</div>
@@ -134,6 +134,11 @@
                 <li class="menu-item {{ request()->routeIs('admin.cart-review*') ? 'active' : '' }}">
                     <a href="{{ route('admin.cart-review.index') }}" class="menu-link">
                         <div>{{ __('admin.cart_review') }}</div>
+                    </a>
+                </li>
+                <li class="menu-item {{ request()->routeIs('admin.purchase-assistant*') ? 'active' : '' }}">
+                    <a href="{{ route('admin.purchase-assistant.index') }}" class="menu-link">
+                        <div>{{ __('admin.purchase_assistant_title') }}</div>
                     </a>
                 </li>
                 <li class="menu-item {{ request()->routeIs('admin.wallets*') ? 'active' : '' }}">

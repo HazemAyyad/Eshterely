@@ -11,7 +11,12 @@
 @endphp
 
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 py-4 mb-2">
-    <h4 class="mb-0">{{ __('admin.order_number') }} {{ $order->order_number }}</h4>
+    <h4 class="mb-0">
+        @if(!empty($order->purchase_assistant_request_id))
+            <span class="badge bg-label-info me-2">Purchase Assistant</span>
+        @endif
+        {{ __('admin.order_number') }} {{ $order->order_number }}
+    </h4>
     <div class="d-flex flex-wrap gap-2 align-items-center">
         @if(!empty($canCancelOrder))
         <form method="POST" action="{{ route('admin.orders.update-status', $order) }}" class="ajax-submit-form d-inline" onsubmit="return confirm({{ json_encode(__('admin.confirm_cancel_order')) }});">

@@ -13,6 +13,7 @@ use App\Services\Wallet\WalletCardVerificationNotifier;
 use App\Services\Wallet\WalletTopUpCreditNotifier;
 use App\Services\Wallet\WalletTopUpPaymentCompletionService;
 use App\Services\Cart\RemoveOrderedCartItemsService;
+use App\Services\PurchaseAssistant\PurchaseAssistantRequestStatusSync;
 use App\Services\Fcm\OrderShipmentNotificationTrigger;
 use App\Services\Shipments\ShipmentDraftFinalizationService;
 use Illuminate\Support\Facades\DB;
@@ -303,12 +304,19 @@ class StripeWebhookService
             return;
         }
 
-        Order::where('id', $payment->order_id)
+        $updated = Order::where('id', $payment->order_id)
             ->where('status', Order::STATUS_PENDING_PAYMENT)
             ->update([
                 'status' => Order::STATUS_PAID,
                 'placed_at' => now(),
             ]);
+
+        if ($updated > 0) {
+            $order = Order::find($payment->order_id);
+            if ($order) {
+                app(PurchaseAssistantRequestStatusSync::class)->onOrderMarkedPaid($order);
+            }
+        }
 
         (app(RemoveOrderedCartItemsService::class))((int) $payment->order_id);
     }
