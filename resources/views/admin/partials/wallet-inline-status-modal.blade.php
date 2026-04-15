@@ -26,98 +26,120 @@
 </div>
 
 <script>
+// Runs on window.load so bootstrap.js (end of body) has executed first.
 (function () {
-    const modalEl = document.getElementById('walletInlineStatusModal');
-    if (!modalEl || typeof bootstrap === 'undefined') return;
-    const modal = new bootstrap.Modal(modalEl);
+    let modalInstance = null;
     let pendingUrl = '';
 
-    document.addEventListener('click', function (e) {
-        const btn = e.target.closest('.js-wallet-inline-status');
-        if (!btn) return;
-        e.preventDefault();
-        pendingUrl = btn.getAttribute('data-url') || '';
-        let options = [];
-        try {
-            options = JSON.parse(btn.getAttribute('data-options') || '[]');
-        } catch (err) {
-            options = [];
+    function setup() {
+        const modalEl = document.getElementById('walletInlineStatusModal');
+        if (!modalEl) {
+            return;
         }
-        const current = btn.getAttribute('data-current') || '';
-        const sel = document.getElementById('wallet-inline-status-select');
-        const notes = document.getElementById('wallet-inline-status-notes');
-        const hint = document.getElementById('wallet-inline-status-hint');
-        if (!sel || !notes) return;
-        sel.innerHTML = '';
-        options.forEach(function (st) {
-            const opt = document.createElement('option');
-            opt.value = st;
-            opt.textContent = st;
-            if (st === current) opt.selected = true;
-            sel.appendChild(opt);
-        });
-        notes.value = '';
-        if (hint) {
-            hint.textContent = 'Approvals and rejections follow the same rules as the detail page. For withdrawals, marking transferred requires a proof file — open Details.';
+        if (typeof bootstrap === 'undefined') {
+            return;
         }
-        modal.show();
-    });
+        modalInstance = new bootstrap.Modal(modalEl);
 
-    const saveBtn = document.getElementById('wallet-inline-status-save');
-    if (saveBtn) {
-        saveBtn.addEventListener('click', function () {
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.js-wallet-inline-status');
+            if (!btn) {
+                return;
+            }
+            e.preventDefault();
+            pendingUrl = btn.getAttribute('data-url') || '';
+            let options = [];
+            try {
+                options = JSON.parse(btn.getAttribute('data-options') || '[]');
+            } catch (err) {
+                options = [];
+            }
+            const current = btn.getAttribute('data-current') || '';
             const sel = document.getElementById('wallet-inline-status-select');
             const notes = document.getElementById('wallet-inline-status-notes');
-            if (!pendingUrl || !sel) return;
-            const token = document.querySelector('meta[name="csrf-token"]');
-            saveBtn.disabled = true;
-            fetch(pendingUrl, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': token ? token.getAttribute('content') : '',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                body: JSON.stringify({
-                    status: sel.value,
-                    admin_notes: notes ? notes.value : '',
-                }),
-            })
-                .then(function (r) {
-                    return r.text().then(function (text) {
-                        var data = {};
-                        try { data = text ? JSON.parse(text) : {}; } catch (e) {}
-                        return { ok: r.ok, data: data, status: r.status };
-                    });
+            const hint = document.getElementById('wallet-inline-status-hint');
+            if (!sel || !notes) {
+                return;
+            }
+            sel.innerHTML = '';
+            options.forEach(function (st) {
+                const opt = document.createElement('option');
+                opt.value = st;
+                opt.textContent = st;
+                if (st === current) {
+                    opt.selected = true;
+                }
+                sel.appendChild(opt);
+            });
+            notes.value = '';
+            if (hint) {
+                hint.textContent = 'Approvals and rejections follow the same rules as the detail page. For withdrawals, marking transferred requires a proof file — open Details.';
+            }
+            modalInstance.show();
+        });
+
+        const saveBtn = document.getElementById('wallet-inline-status-save');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', function () {
+                const sel = document.getElementById('wallet-inline-status-select');
+                const notes = document.getElementById('wallet-inline-status-notes');
+                if (!pendingUrl || !sel || !modalInstance) {
+                    return;
+                }
+                const token = document.querySelector('meta[name="csrf-token"]');
+                saveBtn.disabled = true;
+                fetch(pendingUrl, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': token ? token.getAttribute('content') : '',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: JSON.stringify({
+                        status: sel.value,
+                        admin_notes: notes ? notes.value : '',
+                    }),
                 })
-                .then(function (res) {
-                    saveBtn.disabled = false;
-                    if (res.ok && res.data && res.data.ok) {
-                        modal.hide();
-                        if (typeof window.walletInlineDataTableReload === 'function') {
-                            window.walletInlineDataTableReload();
+                    .then(function (r) {
+                        return r.text().then(function (text) {
+                            var data = {};
+                            try { data = text ? JSON.parse(text) : {}; } catch (e) {}
+                            return { ok: r.ok, data: data, status: r.status };
+                        });
+                    })
+                    .then(function (res) {
+                        saveBtn.disabled = false;
+                        if (res.ok && res.data && res.data.ok) {
+                            modalInstance.hide();
+                            if (typeof window.walletInlineDataTableReload === 'function') {
+                                window.walletInlineDataTableReload();
+                            }
+                            return;
                         }
-                        return;
-                    }
-                    var msg = 'Could not update status.';
-                    if (res.data) {
-                        if (res.data.message) {
-                            msg = res.data.message;
-                        } else if (res.data.errors) {
-                            var first = Object.values(res.data.errors)[0];
-                            if (Array.isArray(first) && first[0]) {
-                                msg = first[0];
+                        var msg = 'Could not update status.';
+                        if (res.data) {
+                            if (res.data.message) {
+                                msg = res.data.message;
+                            } else if (res.data.errors) {
+                                var first = Object.values(res.data.errors)[0];
+                                if (Array.isArray(first) && first[0]) {
+                                    msg = first[0];
+                                }
                             }
                         }
-                    }
-                    alert(msg);
-                })
-                .catch(function () {
-                    saveBtn.disabled = false;
-                    alert('Request failed.');
-                });
-        });
+                        alert(msg);
+                    })
+                    .catch(function () {
+                        saveBtn.disabled = false;
+                        alert('Request failed.');
+                    });
+            });
+        }
     }
+
+    window.addEventListener('load', function () {
+        setup();
+    });
 })();
 </script>

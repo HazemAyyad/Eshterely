@@ -69,7 +69,6 @@
 </style>
 @endpush
 @push('scripts')
-<script src="{{ asset('vuexy/assets/vendor/libs/pickr/pickr.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     function toHex(val) {

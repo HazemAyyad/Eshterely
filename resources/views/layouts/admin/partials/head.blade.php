@@ -21,6 +21,8 @@
     <link rel="stylesheet" href="{{ asset('vuexy/assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.css') }}" />
     <link rel="stylesheet" href="{{ asset('vuexy/assets/vendor/libs/sweetalert2/sweetalert2.css') }}" />
     <script src="{{ asset('vuexy/assets/vendor/js/helpers.js') }}"></script>
+    {{-- Pickr must load before template-customizer.js (customizer calls Pickr on window load). --}}
+    <script src="{{ asset('vuexy/assets/vendor/libs/pickr/pickr.js') }}"></script>
     <script src="{{ asset('vuexy/assets/vendor/js/template-customizer.js') }}"></script>
     <script src="{{ asset('vuexy/assets/js/config.js') }}"></script>
     @stack('styles')

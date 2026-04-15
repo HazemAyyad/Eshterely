@@ -24,6 +24,7 @@
     <link rel="stylesheet" href="{{ asset('vuexy/assets/vendor/libs/@form-validation/form-validation.css') }}" />
     <link rel="stylesheet" href="{{ asset('vuexy/assets/vendor/css/pages/page-auth.css') }}" />
     <script src="{{ asset('vuexy/assets/vendor/js/helpers.js') }}"></script>
+    <script src="{{ asset('vuexy/assets/vendor/libs/pickr/pickr.js') }}"></script>
     <script src="{{ asset('vuexy/assets/vendor/js/template-customizer.js') }}"></script>
     <script src="{{ asset('vuexy/assets/js/config.js') }}"></script>
 </head>
