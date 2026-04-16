@@ -65,15 +65,26 @@ class WarehouseQueueController extends Controller
             $query->where('store_name', 'like', "%{$st}%");
         }
 
+        $source = $request->input('source');
+        if ($source === 'purchase_assistant') {
+            $query->whereHas('shipment.order', fn ($q) => $q->whereNotNull('purchase_assistant_request_id'));
+        } elseif ($source === 'standard') {
+            $query->whereHas('shipment.order', fn ($q) => $q->whereNull('purchase_assistant_request_id'));
+        }
+
         return DataTables::eloquent($query)
             ->addColumn('order_number', function (OrderLineItem $li) {
-                $on = $li->shipment?->order?->order_number ?? '-';
+                $order = $li->shipment?->order;
+                $on = $order?->order_number ?? '-';
                 $oid = $li->shipment?->order_id;
+                $badge = ($order && $order->purchase_assistant_request_id !== null)
+                    ? '<span class="badge bg-label-info me-1">PA</span>'
+                    : '';
                 if ($oid && $on !== '-') {
-                    return '<a href="'.route('admin.orders.show', $oid).'">'.e($on).'</a>';
+                    return $badge.'<a href="'.route('admin.orders.show', $oid).'">'.e($on).'</a>';
                 }
 
-                return e($on);
+                return $badge.e($on);
             })
             ->addColumn('customer', function (OrderLineItem $li) {
                 $u = $li->shipment?->order?->user;

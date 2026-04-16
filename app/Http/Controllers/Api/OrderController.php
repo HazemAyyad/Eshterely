@@ -14,14 +14,23 @@ class OrderController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $orders = Order::where('user_id', $request->user()->id)
+        $query = Order::where('user_id', $request->user()->id)
             ->with(
                 'shipments.lineItems',
                 'shipments.trackingEvents',
                 'shipments.events',
                 'payments',
                 'lineItems.shipmentItems.shipment',
-            )
+            );
+
+        $source = $request->query('source');
+        if ($source === 'purchase_assistant') {
+            $query->whereNotNull('purchase_assistant_request_id');
+        } elseif ($source === 'standard') {
+            $query->whereNull('purchase_assistant_request_id');
+        }
+
+        $orders = $query
             ->orderByDesc(DB::raw('COALESCE(orders.placed_at, orders.created_at)'))
             ->get();
 

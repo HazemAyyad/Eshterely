@@ -28,6 +28,11 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 @endif
+@if (session('error'))
+    <div class="alert alert-danger alert-dismissible">{{ session('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+@endif
 
 {{-- 1. Customer --}}
 <div class="card border-0 shadow-sm mb-4">
@@ -156,6 +161,17 @@
     @method('PATCH')
     <div class="card-header"><strong>{{ __('admin.admin') }}</strong></div>
     <div class="card-body row g-3">
+        <div class="col-12">
+            <div class="alert alert-info border-0 mb-0" role="status">
+                <div class="fw-semibold mb-1">{{ __('admin.purchase_assistant_workflow_title') }}</div>
+                <ol class="mb-0 ps-3 small">
+                    <li>{{ __('admin.purchase_assistant_workflow_step_price') }}</li>
+                    <li>{{ __('admin.purchase_assistant_workflow_step_fee') }}</li>
+                    <li>{{ __('admin.purchase_assistant_workflow_step_status') }}</li>
+                    <li>{{ __('admin.purchase_assistant_workflow_step_notify') }}</li>
+                </ol>
+            </div>
+        </div>
         <div class="col-md-6">
             <label class="form-label">{{ __('admin.product_price') }}</label>
             <input type="number" step="0.01" min="0" name="admin_product_price" class="form-control"
@@ -172,20 +188,19 @@
         </div>
         <div class="col-md-6">
             <label class="form-label">{{ __('admin.status') }}</label>
-            <select name="status" class="form-select">
+            <select name="status" class="form-select @error('status') is-invalid @enderror">
                 @foreach(PurchaseAssistantRequest::statuses() as $st)
                     <option value="{{ $st }}" @selected(old('status', $req->status) === $st)>{{ $st }}</option>
                 @endforeach
             </select>
+            @error('status')
+                <div class="invalid-feedback d-block">{{ $message }}</div>
+            @enderror
         </div>
     </div>
     <div class="card-footer d-flex flex-wrap gap-2 align-items-center">
-        <button type="submit" name="action" value="save" class="btn btn-primary">{{ __('admin.save') }}</button>
-        <button type="submit" name="action" value="ready_for_payment" class="btn btn-success"
-                onclick="return confirm({{ json_encode(__('admin.purchase_assistant_confirm_payment')) }});">
-            {{ __('admin.purchase_assistant_ready_payment') }}
-        </button>
-        <span class="text-muted small ms-auto">Saving updates pricing and status; “Ready for payment” creates/opens the checkout order when needed.</span>
+        <button type="submit" class="btn btn-primary">{{ __('admin.save') }}</button>
+        <span class="text-muted small ms-auto">{{ __('admin.purchase_assistant_save_footer_hint') }}</span>
     </div>
 </form>
 @endsection

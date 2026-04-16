@@ -62,6 +62,14 @@
                 <input type="text" name="store" id="warehouse-store" class="form-control form-control-sm" placeholder="—">
             </div>
             <div class="col-auto">
+                <label class="form-label small mb-0">{{ __('admin.orders_source_filter') }}</label>
+                <select name="source" id="warehouse-source" class="form-select form-select-sm">
+                    <option value="">{{ __('admin.orders_source_all') }}</option>
+                    <option value="purchase_assistant">{{ __('admin.orders_source_purchase_assistant') }}</option>
+                    <option value="standard">{{ __('admin.orders_source_standard') }}</option>
+                </select>
+            </div>
+            <div class="col-auto">
                 <button type="button" id="warehouse-filter-btn" class="btn btn-sm btn-primary">{{ __('admin.filter') }}</button>
             </div>
         </form>
@@ -111,6 +119,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 d.user_id = $('#warehouse-user').val();
                 d.order_number = $('#warehouse-order').val();
                 d.store = $('#warehouse-store').val();
+                d.source = $('#warehouse-source').val();
             }
         },
         order: [[0, 'asc']],

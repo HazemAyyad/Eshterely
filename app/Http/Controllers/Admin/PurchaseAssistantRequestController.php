@@ -107,79 +107,46 @@ class PurchaseAssistantRequestController extends Controller
             'admin_service_fee' => 'nullable|numeric|min:0',
             'admin_notes' => 'nullable|string|max:10000',
             'status' => 'nullable|in:'.implode(',', PurchaseAssistantRequest::statuses()),
-            'action' => 'nullable|in:save,ready_for_payment',
         ]);
 
         $oldStatus = $purchaseAssistantRequest->status;
         $user = User::find($purchaseAssistantRequest->user_id);
 
-        if (($validated['action'] ?? 'save') === 'ready_for_payment') {
-            $request->validate([
-                'admin_product_price' => 'required|numeric|min:0.01',
-                'admin_service_fee' => 'required|numeric|min:0',
-            ]);
+        $purchaseAssistantRequest->fill([
+            'title' => $validated['title'] ?? $purchaseAssistantRequest->title,
+            'details' => $validated['details'] ?? $purchaseAssistantRequest->details,
+            'admin_product_price' => $validated['admin_product_price'] ?? $purchaseAssistantRequest->admin_product_price,
+            'admin_service_fee' => $validated['admin_service_fee'] ?? $purchaseAssistantRequest->admin_service_fee,
+            'admin_notes' => $validated['admin_notes'] ?? $purchaseAssistantRequest->admin_notes,
+        ]);
 
-            $purchaseAssistantRequest->fill([
-                'title' => $validated['title'] ?? $purchaseAssistantRequest->title,
-                'details' => $validated['details'] ?? $purchaseAssistantRequest->details,
-                'admin_product_price' => $validated['admin_product_price'],
-                'admin_service_fee' => $validated['admin_service_fee'],
-                'admin_notes' => $validated['admin_notes'] ?? $purchaseAssistantRequest->admin_notes,
-            ]);
-
-            if ($purchaseAssistantRequest->converted_order_id === null) {
-                $this->orderFromRequestService->createPendingPaymentOrder($purchaseAssistantRequest);
+        try {
+            if (isset($validated['status'])) {
+                $this->applyStatusWithOrderIfAwaitingPayment($purchaseAssistantRequest, $validated['status']);
             } else {
-                $purchaseAssistantRequest->status = PurchaseAssistantRequest::STATUS_AWAITING_CUSTOMER_PAYMENT;
                 $purchaseAssistantRequest->save();
             }
-            $purchaseAssistantRequest->refresh();
+        } catch (ValidationException $e) {
+            return redirect()
+                ->back()
+                ->withErrors($e->errors())
+                ->withInput();
+        } catch (\Throwable $e) {
+            return redirect()
+                ->back()
+                ->with('error', $e->getMessage())
+                ->withInput();
+        }
 
-            if ($user) {
-                $this->notifier->notifyAfterStatusChange(
-                    $purchaseAssistantRequest,
-                    $user,
-                    $oldStatus,
-                    $purchaseAssistantRequest->status
-                );
-            }
-        } else {
-            $purchaseAssistantRequest->fill([
-                'title' => $validated['title'] ?? $purchaseAssistantRequest->title,
-                'details' => $validated['details'] ?? $purchaseAssistantRequest->details,
-                'admin_product_price' => $validated['admin_product_price'] ?? $purchaseAssistantRequest->admin_product_price,
-                'admin_service_fee' => $validated['admin_service_fee'] ?? $purchaseAssistantRequest->admin_service_fee,
-                'admin_notes' => $validated['admin_notes'] ?? $purchaseAssistantRequest->admin_notes,
-            ]);
+        $purchaseAssistantRequest->refresh();
 
-            try {
-                if (isset($validated['status'])) {
-                    $this->applyStatusWithOrderIfAwaitingPayment($purchaseAssistantRequest, $validated['status']);
-                } else {
-                    $purchaseAssistantRequest->save();
-                }
-            } catch (ValidationException $e) {
-                return redirect()
-                    ->back()
-                    ->withErrors($e->errors())
-                    ->withInput();
-            } catch (\Throwable $e) {
-                return redirect()
-                    ->back()
-                    ->with('error', $e->getMessage())
-                    ->withInput();
-            }
-
-            $purchaseAssistantRequest->refresh();
-
-            if ($user) {
-                $this->notifier->notifyAfterStatusChange(
-                    $purchaseAssistantRequest,
-                    $user,
-                    $oldStatus,
-                    $purchaseAssistantRequest->status
-                );
-            }
+        if ($user) {
+            $this->notifier->notifyAfterStatusChange(
+                $purchaseAssistantRequest,
+                $user,
+                $oldStatus,
+                $purchaseAssistantRequest->status
+            );
         }
 
         return redirect()
@@ -261,8 +228,7 @@ class PurchaseAssistantRequestController extends Controller
 
     /**
      * When setting status to awaiting_customer_payment, ensure a converted order exists using
-     * PurchaseAssistantOrderFromRequestService (same path as "Ready for payment").
-     * Does nothing extra if converted_order_id is already set.
+     * PurchaseAssistantOrderFromRequestService. Skips creating a second order if converted_order_id is set.
      */
     private function applyStatusWithOrderIfAwaitingPayment(
         PurchaseAssistantRequest $purchaseAssistantRequest,

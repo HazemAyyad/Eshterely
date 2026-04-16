@@ -55,8 +55,25 @@ class OrderController extends Controller
         if ($request->filled('origin')) {
             $query->where('origin', $request->origin);
         }
+        if ($request->filled('source')) {
+            $src = (string) $request->input('source');
+            if ($src === 'purchase_assistant') {
+                $query->whereNotNull('purchase_assistant_request_id');
+            } elseif ($src === 'standard') {
+                $query->whereNull('purchase_assistant_request_id');
+            }
+        }
 
         return DataTables::eloquent($query)
+            ->editColumn('order_number', function (Order $o) {
+                $num = e($o->order_number);
+                $link = '<a href="'.route('admin.orders.show', $o).'" class="fw-semibold">'.$num.'</a>';
+                if ($o->purchase_assistant_request_id !== null) {
+                    return '<span class="badge bg-label-info me-1">PA</span>'.$link;
+                }
+
+                return $link;
+            })
             ->addColumn('customer', function (Order $o) {
                 $u = $o->user;
                 if (! $u) {
@@ -90,7 +107,7 @@ class OrderController extends Controller
             })
             ->editColumn('placed_at', fn (Order $o) => $o->placed_at?->format('Y-m-d H:i') ?? '—')
             ->addColumn('actions', fn (Order $o) => '<a href="'.route('admin.orders.show', $o).'" class="btn btn-sm btn-primary">'.e(__('admin.view')).'</a>')
-            ->rawColumns(['customer', 'execution_status', 'payment_status', 'actions'])
+            ->rawColumns(['order_number', 'customer', 'execution_status', 'payment_status', 'actions'])
             ->filterColumn('order_number', fn ($q, $keyword) => $q)
             ->filterColumn('customer', function ($q, $keyword) {
                 $q->where(function ($q2) use ($keyword) {

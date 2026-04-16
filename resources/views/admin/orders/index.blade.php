@@ -21,6 +21,11 @@
                 <option value="turkey">Turkey</option>
                 <option value="multi_origin">Multi</option>
             </select>
+            <select name="source" id="orders-source" class="form-select" style="max-width: 220px;" title="{{ __('admin.orders_source_filter') }}">
+                <option value="">{{ __('admin.orders_source_all') }}</option>
+                <option value="purchase_assistant">{{ __('admin.orders_source_purchase_assistant') }}</option>
+                <option value="standard">{{ __('admin.orders_source_standard') }}</option>
+            </select>
             <button type="button" id="orders-filter-btn" class="btn btn-primary">{{ __('admin.filter') }}</button>
         </form>
     </div>
@@ -62,6 +67,7 @@ document.addEventListener('DOMContentLoaded', function() {
             data: function(d) {
                 d.execution_status = $('#orders-execution-status').val();
                 d.origin = $('#orders-origin').val();
+                d.source = $('#orders-source').val();
             }
         },
         order: [[7, 'desc']],
