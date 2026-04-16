@@ -6,6 +6,20 @@
 <h4 class="py-4 mb-2">{{ __('admin.orders_list') }}</h4>
 <p class="text-muted mb-4">{{ __('admin.orders_list_procurement_hint') }}</p>
 
+<input type="hidden" id="orders-source" value="">
+
+<ul class="nav nav-tabs flex-wrap mb-0" id="orders-source-tabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button type="button" class="nav-link active" data-orders-source="" role="tab" aria-selected="true">{{ __('admin.orders_source_all') }}</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button type="button" class="nav-link" data-orders-source="purchase_assistant" role="tab" aria-selected="false">{{ __('admin.orders_source_purchase_assistant') }}</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button type="button" class="nav-link" data-orders-source="standard" role="tab" aria-selected="false">{{ __('admin.orders_source_standard') }}</button>
+    </li>
+</ul>
+
 <div class="card border-0 shadow-sm">
     <div class="card-header">
         <form id="orders-filter" class="d-flex flex-wrap gap-2 align-items-center">
@@ -20,11 +34,6 @@
                 <option value="usa">USA</option>
                 <option value="turkey">Turkey</option>
                 <option value="multi_origin">Multi</option>
-            </select>
-            <select name="source" id="orders-source" class="form-select" style="max-width: 220px;" title="{{ __('admin.orders_source_filter') }}">
-                <option value="">{{ __('admin.orders_source_all') }}</option>
-                <option value="purchase_assistant">{{ __('admin.orders_source_purchase_assistant') }}</option>
-                <option value="standard">{{ __('admin.orders_source_standard') }}</option>
             </select>
             <button type="button" id="orders-filter-btn" class="btn btn-primary">{{ __('admin.filter') }}</button>
         </form>
@@ -59,6 +68,18 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const dtLang = @json(__('datatatables'));
+    const sourceInput = document.getElementById('orders-source');
+    document.querySelectorAll('#orders-source-tabs [data-orders-source]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const v = this.getAttribute('data-orders-source') || '';
+            if (sourceInput) sourceInput.value = v;
+            document.querySelectorAll('#orders-source-tabs [data-orders-source]').forEach(function(b) {
+                b.classList.toggle('active', b === btn);
+                b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
+            });
+            if (window.ordersTable) window.ordersTable.ajax.reload();
+        });
+    });
     const table = $('#orders-table').DataTable({
         processing: true,
         serverSide: true,
@@ -67,7 +88,7 @@ document.addEventListener('DOMContentLoaded', function() {
             data: function(d) {
                 d.execution_status = $('#orders-execution-status').val();
                 d.origin = $('#orders-origin').val();
-                d.source = $('#orders-source').val();
+                d.source = sourceInput ? sourceInput.value : '';
             }
         },
         order: [[7, 'desc']],
@@ -84,6 +105,7 @@ document.addEventListener('DOMContentLoaded', function() {
         ],
         language: dtLang
     });
+    window.ordersTable = table;
     $('#orders-filter-btn').on('click', () => table.ajax.reload());
 });
 </script>

@@ -11,6 +11,20 @@
 <h4 class="py-4 mb-2">{{ __('admin.warehouse_title') }}</h4>
 <p class="text-muted mb-3">{{ __('admin.warehouse_intro_tabs') }}</p>
 
+<input type="hidden" id="warehouse-source" value="">
+
+<ul class="nav nav-tabs flex-wrap mb-2" id="warehouse-source-tabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button type="button" class="nav-link active" data-warehouse-source="" role="tab">{{ __('admin.orders_source_all') }}</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button type="button" class="nav-link" data-warehouse-source="purchase_assistant" role="tab">{{ __('admin.orders_source_purchase_assistant') }}</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button type="button" class="nav-link" data-warehouse-source="standard" role="tab">{{ __('admin.orders_source_standard') }}</button>
+    </li>
+</ul>
+
 <ul class="nav nav-tabs mb-0 flex-wrap" id="warehouse-tabs" role="tablist">
     <li class="nav-item" role="presentation">
         <button class="nav-link" id="tab-awaiting-arrival" data-bs-toggle="tab" data-bs-target="#pane-awaiting-arrival" type="button" role="tab" data-queue="awaiting_arrival" aria-controls="pane-awaiting-arrival" aria-selected="false">
@@ -62,14 +76,6 @@
                 <input type="text" name="store" id="warehouse-store" class="form-control form-control-sm" placeholder="—">
             </div>
             <div class="col-auto">
-                <label class="form-label small mb-0">{{ __('admin.orders_source_filter') }}</label>
-                <select name="source" id="warehouse-source" class="form-select form-select-sm">
-                    <option value="">{{ __('admin.orders_source_all') }}</option>
-                    <option value="purchase_assistant">{{ __('admin.orders_source_purchase_assistant') }}</option>
-                    <option value="standard">{{ __('admin.orders_source_standard') }}</option>
-                </select>
-            </div>
-            <div class="col-auto">
                 <button type="button" id="warehouse-filter-btn" class="btn btn-sm btn-primary">{{ __('admin.filter') }}</button>
             </div>
         </form>
@@ -109,6 +115,17 @@
 document.addEventListener('DOMContentLoaded', function() {
     const dtLang = @json(__('datatatables'));
     const queueInput = document.getElementById('warehouse-queue');
+    const whSourceInput = document.getElementById('warehouse-source');
+    document.querySelectorAll('#warehouse-source-tabs [data-warehouse-source]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const v = this.getAttribute('data-warehouse-source') || '';
+            if (whSourceInput) whSourceInput.value = v;
+            document.querySelectorAll('#warehouse-source-tabs [data-warehouse-source]').forEach(function(b) {
+                b.classList.toggle('active', b === btn);
+            });
+            if (window.warehouseTable) window.warehouseTable.ajax.reload();
+        });
+    });
     const table = $('#warehouse-table').DataTable({
         processing: true,
         serverSide: true,
@@ -119,7 +136,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 d.user_id = $('#warehouse-user').val();
                 d.order_number = $('#warehouse-order').val();
                 d.store = $('#warehouse-store').val();
-                d.source = $('#warehouse-source').val();
+                d.source = whSourceInput ? whSourceInput.value : '';
             }
         },
         order: [[0, 'asc']],
@@ -135,6 +152,7 @@ document.addEventListener('DOMContentLoaded', function() {
         ],
         language: dtLang
     });
+    window.warehouseTable = table;
 
     document.querySelectorAll('#warehouse-tabs [data-bs-toggle="tab"]').forEach(function(el) {
         el.addEventListener('shown.bs.tab', function(e) {

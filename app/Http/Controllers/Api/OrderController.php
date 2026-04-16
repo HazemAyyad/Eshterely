@@ -29,6 +29,7 @@ class OrderController extends Controller
         } elseif ($source === 'standard') {
             $query->whereNull('purchase_assistant_request_id');
         }
+        // source omitted, empty, or "all": no extra constraint
 
         $orders = $query
             ->orderByDesc(DB::raw('COALESCE(orders.placed_at, orders.created_at)'))
