@@ -20,8 +20,10 @@
             <thead>
                 <tr>
                     <th>#</th>
-                    <th>{{ __('admin.user_name') }}</th>
+                    <th>Customer</th>
+                    <th>{{ __('admin.title') }}</th>
                     <th>Store</th>
+                    <th>{{ __('admin.estimated_price') }}</th>
                     <th>{{ __('admin.status') }}</th>
                     <th>{{ __('admin.source_order') }}</th>
                     <th>{{ __('admin.created_at') }}</th>
@@ -32,6 +34,8 @@
         </table>
     </div>
 </div>
+
+@include('admin.partials.wallet-inline-status-modal')
 @endsection
 
 @push('styles')
@@ -44,16 +48,19 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const dtLang = @json(__('datatatables'));
-    $('#pa-table').DataTable({
+    const table = $('#pa-table').DataTable({
         processing: true,
         serverSide: true,
+        scrollX: true,
         ajax: "{{ route('admin.purchase-assistant.data') }}",
         language: dtLang,
         columns: [
             { data: 'id', name: 'id' },
-            { data: 'user_name', name: 'user_name', orderable: false },
+            { data: 'customer', name: 'user_id' },
+            { data: 'product_title', name: 'title' },
             { data: 'store_name', name: 'store_display_name' },
-            { data: 'status', name: 'status' },
+            { data: 'estimated_price', name: 'customer_estimated_price' },
+            { data: 'status_badge', name: 'status', orderable: false, searchable: false },
             { data: 'order', name: 'converted_order_id', orderable: false, searchable: false },
             { data: 'created_at', name: 'created_at' },
             { data: 'link_icon', name: 'link_icon', orderable: false, searchable: false },
@@ -61,6 +68,7 @@ document.addEventListener('DOMContentLoaded', function() {
         ],
         order: [[0, 'desc']],
     });
+    window.walletInlineDataTableReload = function () { table.ajax.reload(null, false); };
 });
 </script>
 @endpush

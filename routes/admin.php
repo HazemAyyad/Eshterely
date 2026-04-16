@@ -134,6 +134,7 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
     Route::get('purchase-assistant/data', [PurchaseAssistantRequestController::class, 'data'])->name('purchase-assistant.data');
     Route::get('purchase-assistant', [PurchaseAssistantRequestController::class, 'index'])->name('purchase-assistant.index');
     Route::get('purchase-assistant/{purchaseAssistantRequest}', [PurchaseAssistantRequestController::class, 'show'])->name('purchase-assistant.show');
+    Route::patch('purchase-assistant/{purchaseAssistantRequest}/status', [PurchaseAssistantRequestController::class, 'updateStatus'])->name('purchase-assistant.update-status');
     Route::patch('purchase-assistant/{purchaseAssistantRequest}', [PurchaseAssistantRequestController::class, 'update'])->name('purchase-assistant.update');
 
     // Cart Review
