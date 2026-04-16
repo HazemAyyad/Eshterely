@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
 
@@ -128,6 +129,9 @@ class PurchaseAssistantRequestController extends Controller
 
             if ($purchaseAssistantRequest->converted_order_id === null) {
                 $this->orderFromRequestService->createPendingPaymentOrder($purchaseAssistantRequest);
+            } else {
+                $purchaseAssistantRequest->status = PurchaseAssistantRequest::STATUS_AWAITING_CUSTOMER_PAYMENT;
+                $purchaseAssistantRequest->save();
             }
             $purchaseAssistantRequest->refresh();
 
@@ -147,14 +151,30 @@ class PurchaseAssistantRequestController extends Controller
                 'admin_service_fee' => $validated['admin_service_fee'] ?? $purchaseAssistantRequest->admin_service_fee,
                 'admin_notes' => $validated['admin_notes'] ?? $purchaseAssistantRequest->admin_notes,
             ]);
-            if (isset($validated['status'])) {
-                $purchaseAssistantRequest->status = $validated['status'];
+
+            try {
+                if (isset($validated['status'])) {
+                    $this->applyStatusWithOrderIfAwaitingPayment($purchaseAssistantRequest, $validated['status']);
+                } else {
+                    $purchaseAssistantRequest->save();
+                }
+            } catch (ValidationException $e) {
+                return redirect()
+                    ->back()
+                    ->withErrors($e->errors())
+                    ->withInput();
+            } catch (\Throwable $e) {
+                return redirect()
+                    ->back()
+                    ->with('error', $e->getMessage())
+                    ->withInput();
             }
-            $purchaseAssistantRequest->save();
+
+            $purchaseAssistantRequest->refresh();
 
             if ($user) {
                 $this->notifier->notifyAfterStatusChange(
-                    $purchaseAssistantRequest->fresh(),
+                    $purchaseAssistantRequest,
                     $user,
                     $oldStatus,
                     $purchaseAssistantRequest->status
@@ -180,34 +200,94 @@ class PurchaseAssistantRequestController extends Controller
         $oldStatus = $purchaseAssistantRequest->status;
         $new = $validated['status'];
         $user = User::find($purchaseAssistantRequest->user_id);
+        $wantsJson = $request->wantsJson() || $request->expectsJson();
 
         if (array_key_exists('admin_notes', $validated)) {
             $purchaseAssistantRequest->admin_notes = $validated['admin_notes'];
         }
-
-        $purchaseAssistantRequest->status = $new;
         $purchaseAssistantRequest->save();
+
+        try {
+            $this->applyStatusWithOrderIfAwaitingPayment($purchaseAssistantRequest, $new);
+        } catch (ValidationException $e) {
+            if ($wantsJson) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => collect($e->errors())->flatten()->first() ?? __('admin.error'),
+                    'errors' => $e->errors(),
+                ], 422);
+            }
+
+            return redirect()
+                ->route('admin.purchase-assistant.show', $purchaseAssistantRequest)
+                ->withErrors($e->errors());
+        } catch (\Throwable $e) {
+            if ($wantsJson) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => $e->getMessage(),
+                ], 422);
+            }
+
+            return redirect()
+                ->route('admin.purchase-assistant.show', $purchaseAssistantRequest)
+                ->with('error', $e->getMessage());
+        }
+
+        $purchaseAssistantRequest->refresh();
 
         if ($user) {
             $this->notifier->notifyAfterStatusChange(
-                $purchaseAssistantRequest->fresh(),
+                $purchaseAssistantRequest,
                 $user,
                 $oldStatus,
                 $purchaseAssistantRequest->status
             );
         }
 
-        $wantsJson = $request->wantsJson() || $request->expectsJson();
         if ($wantsJson) {
             return response()->json([
                 'ok' => true,
                 'message' => __('admin.success'),
                 'status' => $purchaseAssistantRequest->status,
+                'converted_order_id' => $purchaseAssistantRequest->converted_order_id,
             ]);
         }
 
         return redirect()
             ->route('admin.purchase-assistant.show', $purchaseAssistantRequest)
             ->with('success', __('admin.success'));
+    }
+
+    /**
+     * When setting status to awaiting_customer_payment, ensure a converted order exists using
+     * PurchaseAssistantOrderFromRequestService (same path as "Ready for payment").
+     * Does nothing extra if converted_order_id is already set.
+     */
+    private function applyStatusWithOrderIfAwaitingPayment(
+        PurchaseAssistantRequest $purchaseAssistantRequest,
+        string $newStatus
+    ): void {
+        if ($newStatus !== PurchaseAssistantRequest::STATUS_AWAITING_CUSTOMER_PAYMENT) {
+            $purchaseAssistantRequest->status = $newStatus;
+            $purchaseAssistantRequest->save();
+
+            return;
+        }
+
+        if ($purchaseAssistantRequest->converted_order_id !== null) {
+            $purchaseAssistantRequest->status = $newStatus;
+            $purchaseAssistantRequest->save();
+
+            return;
+        }
+
+        if ($purchaseAssistantRequest->admin_product_price === null || $purchaseAssistantRequest->admin_service_fee === null) {
+            throw ValidationException::withMessages([
+                'status' => [__('admin.purchase_assistant_pricing_required_for_payment')],
+            ]);
+        }
+
+        $this->orderFromRequestService->createPendingPaymentOrder($purchaseAssistantRequest);
     }
 }

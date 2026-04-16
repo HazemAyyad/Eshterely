@@ -639,6 +639,7 @@ return [
     'purchase_assistant_intro' => 'Unsupported store links from the app: review, set product price and service fee, then notify the customer to pay.',
     'purchase_assistant_ready_payment' => 'Create order & notify customer to pay',
     'purchase_assistant_confirm_payment' => 'Create a pending-payment order and notify the customer?',
+    'purchase_assistant_pricing_required_for_payment' => 'Set product price and service fee on this request before marking it as awaiting payment (or use “Create order & notify customer to pay”).',
     'request_details' => 'Request details',
     'product_price' => 'Product price',
     'quantity' => 'Quantity',

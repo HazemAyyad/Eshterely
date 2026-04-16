@@ -632,6 +632,7 @@ return [
     'purchase_assistant_intro' => 'طلبات من روابط غير مدعومة: راجع السعر وأضف رسوم الخدمة ثم أبلغ العميل للدفع.',
     'purchase_assistant_ready_payment' => 'إنشاء الطلب وإشعار العميل للدفع',
     'purchase_assistant_confirm_payment' => 'إنشاء طلب بانتظار الدفع وإشعار العميل؟',
+    'purchase_assistant_pricing_required_for_payment' => 'حدد سعر المنتج ورسوم الخدمة قبل تعيين الحالة إلى انتظار الدفع (أو استخدم «إنشاء الطلب وإشعار العميل للدفع»).',
     'request_details' => 'تفاصيل الطلب',
     'product_price' => 'سعر المنتج',
     'quantity' => 'الكمية',
