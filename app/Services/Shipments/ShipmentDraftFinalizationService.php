@@ -5,6 +5,7 @@ namespace App\Services\Shipments;
 use App\Models\OrderLineItem;
 use App\Models\Shipment;
 use App\Models\ShipmentItem;
+use App\Services\PurchaseAssistant\PurchaseAssistantRequestStatusSync;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -60,6 +61,7 @@ class ShipmentDraftFinalizationService
                 'order_line_item_id' => $line->id,
             ]);
             $line->update(['fulfillment_status' => OrderLineItem::FULFILLMENT_READY_FOR_SHIPMENT]);
+            app(PurchaseAssistantRequestStatusSync::class)->syncFromOrderLineItem($line->fresh());
         }
 
         $shipment->update([

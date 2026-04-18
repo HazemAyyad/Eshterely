@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\OrderLineItem;
+use App\Services\PurchaseAssistant\PurchaseAssistantRequestStatusSync;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -90,6 +91,9 @@ class OrderLineItemProcurementController extends Controller
             'fulfillment_status' => $status,
             'review_metadata' => $meta,
         ]);
+
+        $orderLineItem->refresh();
+        app(PurchaseAssistantRequestStatusSync::class)->syncFromOrderLineItem($orderLineItem);
 
         if ($request->ajax() || $request->wantsJson()) {
             return response()->json(['success' => true, 'message' => __('admin.success')]);

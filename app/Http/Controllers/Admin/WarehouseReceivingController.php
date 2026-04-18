@@ -7,6 +7,7 @@ use App\Models\OrderLineItem;
 use App\Models\WarehouseReceipt;
 use App\Support\AdminOrderLineItemDisplay;
 use App\Support\AdminWarehouseReceiptImages;
+use App\Services\PurchaseAssistant\PurchaseAssistantRequestStatusSync;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -64,6 +65,9 @@ class WarehouseReceivingController extends Controller
                 'fulfillment_status' => OrderLineItem::FULFILLMENT_ARRIVED_AT_WAREHOUSE,
             ]);
         });
+
+        $orderLineItem->refresh();
+        app(PurchaseAssistantRequestStatusSync::class)->syncFromOrderLineItem($orderLineItem);
 
         $payload = [
             'success' => true,
