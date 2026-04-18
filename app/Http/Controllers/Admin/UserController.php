@@ -34,10 +34,17 @@ class UserController extends Controller
 
         return DataTables::eloquent($query)
             ->addColumn('display_name_col', fn (User $u) => $u->display_name ?? $u->full_name ?? $u->name ?? '-')
+            ->addColumn('customer_code_col', function (User $u) {
+                $c = trim((string) ($u->customer_code ?? ''));
+
+                return $c !== ''
+                    ? '<span class="font-monospace">'.e($c).'</span>'
+                    : '—';
+            })
             ->editColumn('verified', fn (User $u) => $u->verified ? __('admin.yes') : __('admin.no'))
             ->editColumn('created_at', fn (User $u) => $u->created_at?->format('Y-m-d'))
             ->addColumn('actions', fn (User $u) => '<a href="' . route('admin.users.show', $u) . '" class="btn btn-text-secondary rounded-pill waves-effect btn-icon" title="' . __('admin.show') . '"><i class="icon-base ti tabler-eye icon-22px"></i></a>')
-            ->rawColumns(['actions'])
+            ->rawColumns(['actions', 'customer_code_col'])
             ->toJson();
     }
 

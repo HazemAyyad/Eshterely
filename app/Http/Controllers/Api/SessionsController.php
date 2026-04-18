@@ -53,6 +53,8 @@ class SessionsController extends Controller
                 $clientInfo = $t->name ?: 'API';
             }
 
+            $ip = $hasMeta ? (string) ($t->getAttribute('ip_address') ?? '') : '';
+
             return [
                 'id' => (string) $t->id,
                 'device_name' => $deviceLabel,
@@ -63,6 +65,7 @@ class SessionsController extends Controller
                 'client_info' => $clientInfo,
                 'is_current' => $current ? ($t->id === $current->id) : false,
                 'created_at' => $t->created_at?->toIso8601String(),
+                'ip_address' => $ip !== '' ? $ip : null,
             ];
         })->values());
     }
@@ -116,6 +119,8 @@ class SessionsController extends Controller
                 ? $deviceModel
                 : (($t->name ?: 'Unknown device').($deviceType !== '' ? ' · '.$deviceType : ''));
 
+            $ip = $hasMeta ? (string) ($t->getAttribute('ip_address') ?? '') : '';
+
             return [
                 'id' => (string) $t->id,
                 'location' => $location,
@@ -124,6 +129,7 @@ class SessionsController extends Controller
                 'device_model' => $deviceModel,
                 'timestamp' => ($t->last_used_at ?? $t->created_at)?->toIso8601String() ?? '',
                 'last_active' => ($t->last_used_at ?? $t->created_at)?->toIso8601String() ?? '',
+                'ip_address' => $ip !== '' ? $ip : null,
             ];
         })->values());
     }

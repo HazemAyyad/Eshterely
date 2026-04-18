@@ -115,7 +115,10 @@ class AuthController extends Controller
             $user->update(['password' => $request->password]);
         }
 
-        $user->tokens()->delete();
+        // Password reset: revoke all sessions. Other flows keep existing device tokens for multi-device.
+        if ($mode === 'reset') {
+            $user->tokens()->delete();
+        }
 
         $newToken = $user->createToken('mobile-app');
         $this->attachSanctumSessionMeta($newToken->accessToken, $request);
@@ -152,7 +155,6 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
-        $user->tokens()->delete();
         $newToken = $user->createToken('mobile-app');
         $this->attachSanctumSessionMeta($newToken->accessToken, $request);
         $this->upsertFcmToken($user, $request);

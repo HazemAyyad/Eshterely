@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\Config\MarketCountriesController;
 use App\Http\Controllers\Admin\Config\OnboardingController;
 use App\Http\Controllers\Admin\Config\PromoCodesController;
 use App\Http\Controllers\Admin\Config\PromoBannersController;
+use App\Http\Controllers\Admin\Config\CustomerCodeSettingsController;
 use App\Http\Controllers\Admin\Config\PaymentGatewaysController;
 use App\Http\Controllers\Admin\Config\SplashConfigController;
 use App\Http\Controllers\Admin\Config\ThemeConfigController;
@@ -70,6 +71,9 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
         Route::resource('warehouses', WarehousesController::class)->except(['show'])->names('warehouses');
         Route::get('app-config', [AppConfigController::class, 'edit'])->name('app-config');
         Route::patch('app-config', [AppConfigController::class, 'update']);
+
+        Route::get('customer-code-settings', [CustomerCodeSettingsController::class, 'edit'])->name('customer-code-settings.edit');
+        Route::patch('customer-code-settings', [CustomerCodeSettingsController::class, 'update'])->name('customer-code-settings.update');
 
         Route::get('payment-gateways', [PaymentGatewaysController::class, 'edit'])->name('payment-gateways.edit');
         Route::patch('payment-gateways', [PaymentGatewaysController::class, 'update'])->name('payment-gateways.update');

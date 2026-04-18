@@ -15,6 +15,7 @@
                 <tr>
                     <th>#</th>
                     <th>{{ __('admin.name') }}</th>
+                    <th>Customer code</th>
                     <th>phone</th>
                     <th>{{ __('admin.email') }}</th>
                     <th>{{ __('admin.verified') }}</th>
@@ -44,6 +45,7 @@ document.addEventListener('DOMContentLoaded', function() {
         columns: [
             { data: 'id', name: 'id' },
             { data: 'display_name_col', name: 'name' },
+            { data: 'customer_code_col', name: 'customer_code', orderable: false },
             { data: 'phone', name: 'phone' },
             { data: 'email', name: 'email' },
             { data: 'verified', name: 'verified' },

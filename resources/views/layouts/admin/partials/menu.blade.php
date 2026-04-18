@@ -137,6 +137,11 @@
                         <div>{{ __('admin.app_config') }}</div>
                     </a>
                 </li>
+                <li class="menu-item {{ request()->routeIs('admin.config.customer-code-settings*') ? 'active' : '' }}">
+                    <a href="{{ route('admin.config.customer-code-settings.edit') }}" class="menu-link">
+                        <div>Customer codes</div>
+                    </a>
+                </li>
                 <li class="menu-item {{ request()->routeIs('admin.config.payment-gateways*') ? 'active' : '' }}">
                     <a href="{{ route('admin.config.payment-gateways.edit') }}" class="menu-link">
                         <div>Payment Gateways</div>

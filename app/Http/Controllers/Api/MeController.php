@@ -26,6 +26,7 @@ class MeController extends Controller
         $defaultAddress = $user->addresses()->where('is_default', true)->first();
 
         return response()->json([
+            'customer_code' => $user->customer_code,
             'display_name' => $user->display_name ?? $user->name,
             'verified' => (bool) $user->verified,
             'last_verified_at' => $user->last_verified_at?->format('M j, Y'),

@@ -80,9 +80,10 @@ class OrderController extends Controller
                     return '—';
                 }
                 $name = e(AdminUserDisplay::primaryName($u));
+                $code = AdminUserDisplay::customerCodeLineHtml($u);
                 $phone = $u->phone ? '<div class="text-muted small">'.e($u->phone).'</div>' : '';
 
-                return '<div><a href="'.route('admin.users.show', $u).'" class="fw-semibold">'.$name.'</a></div>'.$phone;
+                return '<div><a href="'.route('admin.users.show', $u).'" class="fw-semibold">'.$name.'</a></div>'.$code.$phone;
             })
             ->addColumn('execution_status', function (Order $o) {
                 $hasPaid = $o->payments->contains(fn ($p) => $p->status->value === 'paid');
@@ -117,7 +118,8 @@ class OrderController extends Controller
                                 ->orWhere('email', 'like', "%{$keyword}%")
                                 ->orWhere('name', 'like', "%{$keyword}%")
                                 ->orWhere('full_name', 'like', "%{$keyword}%")
-                                ->orWhere('display_name', 'like', "%{$keyword}%");
+                                ->orWhere('display_name', 'like', "%{$keyword}%")
+                                ->orWhere('customer_code', 'like', "%{$keyword}%");
                         });
                 });
             })

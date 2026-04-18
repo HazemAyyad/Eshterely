@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use App\Models\Order;
+use App\Models\User;
 use App\Observers\OrderObserver;
+use App\Observers\UserObserver;
 use App\Services\Payments\SquareService;
 use App\Services\Shipping\CarrierPricingResolverRegistry;
 use App\Services\Shipping\CheapestCarrierSelectionStrategy;
@@ -93,6 +95,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Paginator::useBootstrapFive();
         Order::observe(OrderObserver::class);
+        User::observe(UserObserver::class);
 
         View::composer(
             [

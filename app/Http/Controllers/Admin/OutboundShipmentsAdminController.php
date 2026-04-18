@@ -36,9 +36,10 @@ class OutboundShipmentsAdminController extends Controller
                     return '—';
                 }
                 $name = e(AdminUserDisplay::primaryName($u));
+                $code = AdminUserDisplay::customerCodeLineHtml($u);
                 $phone = $u->phone ? '<div class="text-muted small">'.e($u->phone).'</div>' : '';
 
-                return '<div><a href="'.route('admin.users.show', $u).'" class="fw-semibold">'.$name.'</a></div>'.$phone;
+                return '<div><a href="'.route('admin.users.show', $u).'" class="fw-semibold">'.$name.'</a></div>'.$code.$phone;
             })
             ->addColumn('destination', function (Shipment $s) {
                 $a = $s->destinationAddress;

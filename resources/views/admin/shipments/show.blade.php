@@ -8,6 +8,7 @@
     use App\Support\AdminOrderLineItemDisplay;
     use App\Support\AdminWarehouseReceiptImages;
     use App\Models\Shipment;
+    use App\Support\AdminUserDisplay;
     use Illuminate\Support\Str;
     $st = AdminFulfillmentLabels::outboundShipment($shipment->status);
 @endphp
@@ -46,7 +47,11 @@
                 <p class="mb-1"><strong>{{ __('admin.status') }}:</strong> <span class="badge bg-{{ $st['badge'] }}">{{ $st['label'] }}</span></p>
                 <p class="mb-1"><strong>{{ __('admin.user_name') }}:</strong>
                     @if($shipment->user)
-                        <a href="{{ route('admin.users.show', $shipment->user) }}">{{ $shipment->user->phone ?? $shipment->user->email ?? ('#'.$shipment->user_id) }}</a>
+                        <a href="{{ route('admin.users.show', $shipment->user) }}">{{ AdminUserDisplay::primaryName($shipment->user) }}</a>
+                        @if($shipment->user->customer_code)
+                            <span class="badge bg-label-secondary ms-1 font-monospace">{{ $shipment->user->customer_code }}</span>
+                        @endif
+                        <span class="text-muted small ms-1">{{ $shipment->user->phone ?? $shipment->user->email ?? '' }}</span>
                     @else
                         —
                     @endif
@@ -79,6 +84,28 @@
                 @endif
             </div>
         </div>
+    </div>
+</div>
+
+@php
+    $customerDelivery = is_array($shipment->pricing_breakdown['customer_delivery'] ?? null)
+        ? $shipment->pricing_breakdown['customer_delivery']
+        : [];
+@endphp
+<div class="card border-0 shadow-sm mt-4">
+    <div class="card-header"><h5 class="mb-0">Customer delivery (app)</h5></div>
+    <div class="card-body">
+        @if(!empty($customerDelivery['confirmed_at'] ?? null))
+            <p class="mb-1"><strong>Confirmed receipt:</strong> yes</p>
+            <p class="mb-1"><strong>Confirmed at:</strong> {{ \Carbon\Carbon::parse($customerDelivery['confirmed_at'])->timezone(config('app.timezone'))->format('Y-m-d H:i') }}</p>
+            <p class="mb-1"><strong>Rating (1–5):</strong> {{ isset($customerDelivery['rating']) && $customerDelivery['rating'] !== null ? $customerDelivery['rating'] : '—' }}</p>
+            <p class="mb-1"><strong>Note:</strong> {{ isset($customerDelivery['note']) && trim((string) $customerDelivery['note']) !== '' ? $customerDelivery['note'] : '—' }}</p>
+            @if(!empty($customerDelivery['source'] ?? null))
+                <p class="mb-0 small text-muted">Source: {{ $customerDelivery['source'] }}</p>
+            @endif
+        @else
+            <p class="text-muted mb-0">The customer has not confirmed delivery via the app yet, or no data is stored.</p>
+        @endif
     </div>
 </div>
 

@@ -43,7 +43,8 @@ class PurchaseAssistantRequestController extends Controller
                         ->orWhere('full_name', 'like', "%{$keyword}%")
                         ->orWhere('display_name', 'like', "%{$keyword}%")
                         ->orWhere('email', 'like', "%{$keyword}%")
-                        ->orWhere('phone', 'like', "%{$keyword}%");
+                        ->orWhere('phone', 'like', "%{$keyword}%")
+                        ->orWhere('customer_code', 'like', "%{$keyword}%");
                 });
             })
             ->addColumn('product_title', function (PurchaseAssistantRequest $r) {

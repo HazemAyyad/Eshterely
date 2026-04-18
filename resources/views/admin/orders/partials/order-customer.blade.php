@@ -12,6 +12,9 @@
                 @if($u->email)
                     <div class="small mb-1"><a href="mailto:{{ $u->email }}">{{ $u->email }}</a></div>
                 @endif
+                @if($u->customer_code)
+                    <div class="small text-muted mb-1">Customer code: <span class="font-monospace">{{ $u->customer_code }}</span></div>
+                @endif
                 @if($u->phone)
                     <div class="small text-muted">{{ __('admin.phone') }}: {{ $u->phone }}</div>
                 @endif

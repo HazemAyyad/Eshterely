@@ -47,6 +47,9 @@
             <div class="col-md-6">
                 <div class="small text-muted mb-1">{{ __('admin.user_name') }}</div>
                 <div class="fw-semibold">{{ $req->user?->full_name ?? $req->user?->name ?? '—' }}</div>
+                @if($req->user?->customer_code)
+                    <div class="small text-muted mt-1">Customer code: <span class="font-monospace">{{ $req->user->customer_code }}</span></div>
+                @endif
             </div>
             <div class="col-md-6">
                 <div class="small text-muted mb-1">Email</div>

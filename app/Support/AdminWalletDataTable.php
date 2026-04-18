@@ -18,10 +18,11 @@ class AdminWalletDataTable
             return '—';
         }
         $name = e(AdminUserDisplay::primaryName($user));
+        $code = AdminUserDisplay::customerCodeLineHtml($user);
         $phone = $user->phone ? '<div class="text-muted small">'.e($user->phone).'</div>' : '';
         $email = $user->email ? '<div class="text-muted small">'.e($user->email).'</div>' : '';
 
-        return '<div><a href="'.route('admin.users.show', $user).'" class="fw-semibold">'.$name.'</a></div>'.$phone.$email;
+        return '<div><a href="'.route('admin.users.show', $user).'" class="fw-semibold">'.$name.'</a></div>'.$code.$phone.$email;
     }
 
     public static function topupStatusInteractive(WalletTopupRequest $r): string

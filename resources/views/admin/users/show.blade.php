@@ -40,6 +40,10 @@
                             <span>{{ $user->full_name ?? '-' }}</span>
                         </li>
                         <li class="mb-2">
+                            <span class="h6">Customer code:</span>
+                            <span class="font-monospace">{{ $user->customer_code ?? '—' }}</span>
+                        </li>
+                        <li class="mb-2">
                             <span class="h6">{{ __('admin.phone') }}:</span>
                             <span>{{ $user->phone ?? '-' }}</span>
                         </li>

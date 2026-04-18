@@ -92,9 +92,10 @@ class WarehouseQueueController extends Controller
                     return '—';
                 }
                 $name = e(AdminUserDisplay::primaryName($u));
+                $code = AdminUserDisplay::customerCodeLineHtml($u);
                 $phone = $u->phone ? '<div class="text-muted small">'.e($u->phone).'</div>' : '';
 
-                return '<div><a href="'.route('admin.users.show', $u).'" class="fw-semibold">'.$name.'</a></div>'.$phone;
+                return '<div><a href="'.route('admin.users.show', $u).'" class="fw-semibold">'.$name.'</a></div>'.$code.$phone;
             })
             ->addColumn('product', fn (OrderLineItem $li) => AdminOrderLineItemDisplay::adminProductThumbnailWithNameHtml($li, 40, 60))
             ->addColumn('store_name', fn (OrderLineItem $li) => e($li->store_name ?? '-'))
