@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\PurchaseAssistantRequest;
 use App\Models\User;
 use App\Services\PurchaseAssistant\PurchaseAssistantOrderFromRequestService;
+use App\Services\PurchaseAssistant\PurchaseAssistantOrderPricingSyncService;
 use App\Services\PurchaseAssistant\PurchaseAssistantRequestNotifier;
 use App\Support\AdminPurchaseAssistantDataTable;
 use App\Support\AdminWalletDataTable;
@@ -21,6 +22,7 @@ class PurchaseAssistantRequestController extends Controller
 {
     public function __construct(
         protected PurchaseAssistantOrderFromRequestService $orderFromRequestService,
+        protected PurchaseAssistantOrderPricingSyncService $pricingSyncService,
         protected PurchaseAssistantRequestNotifier $notifier
     ) {}
 
@@ -140,6 +142,10 @@ class PurchaseAssistantRequestController extends Controller
 
         $purchaseAssistantRequest->refresh();
 
+        if ($purchaseAssistantRequest->converted_order_id !== null) {
+            $this->pricingSyncService->syncFromRequestIfEligible($purchaseAssistantRequest);
+        }
+
         if ($user) {
             $this->notifier->notifyAfterStatusChange(
                 $purchaseAssistantRequest,
@@ -202,6 +208,10 @@ class PurchaseAssistantRequestController extends Controller
         }
 
         $purchaseAssistantRequest->refresh();
+
+        if ($purchaseAssistantRequest->converted_order_id !== null) {
+            $this->pricingSyncService->syncFromRequestIfEligible($purchaseAssistantRequest);
+        }
 
         if ($user) {
             $this->notifier->notifyAfterStatusChange(

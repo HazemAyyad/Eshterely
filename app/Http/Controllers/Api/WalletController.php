@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Order;
 use App\Models\Wallet;
 use App\Models\WalletTopupRequest;
 use App\Models\WalletTopUpPayment;
@@ -95,6 +96,16 @@ class WalletController extends Controller
 
         $txs = $query->orderByDesc('created_at')->limit(50)->get();
 
+        $orderIds = $txs
+            ->filter(fn ($t) => ($t->reference_type ?? '') === 'order' && $t->reference_id !== null)
+            ->map(fn ($t) => (int) $t->reference_id)
+            ->unique()
+            ->values();
+
+        $ordersById = $orderIds->isNotEmpty()
+            ? Order::query()->whereIn('id', $orderIds)->get()->keyBy('id')
+            : collect();
+
         return response()->json($txs->map(fn ($t) => [
             'id' => (string) $t->id,
             'type' => $t->type,
@@ -105,7 +116,52 @@ class WalletController extends Controller
             'is_credit' => $t->amount >= 0,
             'reference_type' => $t->reference_type,
             'reference_id' => $t->reference_id !== null ? (string) $t->reference_id : null,
+            'flow' => $this->resolveWalletTransactionFlow($t, $ordersById),
         ]));
+    }
+
+    /**
+     * UI-oriented classification for wallet history (distinct from generic payment rows).
+     *
+     * @param  \Illuminate\Support\Collection<int, \App\Models\Order>  $ordersById
+     */
+    private function resolveWalletTransactionFlow(object $t, $ordersById): string
+    {
+        $rt = (string) ($t->reference_type ?? '');
+
+        if ($rt === 'shipment') {
+            return 'shipment_payment';
+        }
+
+        if ($rt === 'order' && $t->reference_id !== null) {
+            $order = $ordersById->get((int) $t->reference_id);
+
+            return ($order && $order->purchase_assistant_request_id)
+                ? 'purchase_assistant_payment'
+                : 'order_payment';
+        }
+
+        if (in_array($rt, ['wallet_top_up_payment', 'wallet_topup_request'], true)) {
+            return 'wallet_topup';
+        }
+
+        if ($rt === 'wallet_refund') {
+            return 'wallet_refund';
+        }
+
+        if ($rt === 'wallet_withdrawal') {
+            return 'withdrawal';
+        }
+
+        if ($rt === 'admin_adjustment') {
+            return 'admin_adjustment';
+        }
+
+        if ($rt === 'saved_payment_method') {
+            return 'card_verification';
+        }
+
+        return 'other';
     }
 
     public function topUp(Request $request): JsonResponse

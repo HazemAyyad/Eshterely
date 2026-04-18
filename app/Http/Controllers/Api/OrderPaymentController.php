@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PaymentLaunchResource;
 use App\Models\Order;
+use App\Models\PurchaseAssistantRequest;
 use App\Models\Wallet;
 use App\Services\Payments\CheckoutPaymentModeService;
 use App\Services\Payments\OrderWalletPaymentService;
 use App\Services\Payments\PaymentEligibilityService;
 use App\Services\Payments\PaymentGatewayManager;
 use App\Services\Payments\PaymentService;
+use App\Services\PurchaseAssistant\PurchaseAssistantOrderPricingSyncService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -26,7 +28,8 @@ class OrderPaymentController extends Controller
         protected PaymentService $paymentService,
         protected PaymentGatewayManager $gatewayManager,
         protected CheckoutPaymentModeService $checkoutPaymentModeService,
-        protected OrderWalletPaymentService $orderWalletPaymentService
+        protected OrderWalletPaymentService $orderWalletPaymentService,
+        protected PurchaseAssistantOrderPricingSyncService $purchaseAssistantPricingSync
     ) {}
 
     /**
@@ -38,6 +41,8 @@ class OrderPaymentController extends Controller
         if ($order->user_id !== $request->user()->id) {
             abort(404, 'Order not found.');
         }
+
+        $this->syncPurchaseAssistantOrderPricingIfNeeded($order);
 
         $result = $this->eligibilityService->checkOrderEligibility($order);
         if (! $result['eligible']) {
@@ -75,6 +80,8 @@ class OrderPaymentController extends Controller
         if ($order->user_id !== $request->user()->id) {
             abort(404, 'Order not found.');
         }
+
+        $this->syncPurchaseAssistantOrderPricingIfNeeded($order);
 
         $request->validate([
             'payment_method' => 'sometimes|nullable|in:wallet,gateway',
@@ -189,5 +196,23 @@ class OrderPaymentController extends Controller
         $due = (float) ($order->amount_due_now ?? 0);
 
         return round($due > 0 ? $due : (float) ($order->order_total_snapshot ?? $order->total_amount ?? 0), 2);
+    }
+
+    /**
+     * Ensures PA-linked orders use the latest admin pricing before exposing amounts or creating payments.
+     */
+    private function syncPurchaseAssistantOrderPricingIfNeeded(Order $order): void
+    {
+        if ($order->purchase_assistant_request_id === null) {
+            return;
+        }
+
+        $pa = PurchaseAssistantRequest::query()->find($order->purchase_assistant_request_id);
+        if ($pa === null) {
+            return;
+        }
+
+        $this->purchaseAssistantPricingSync->syncFromRequestIfEligible($pa);
+        $order->refresh();
     }
 }
