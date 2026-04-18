@@ -23,6 +23,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\SupportController;
+use App\Http\Controllers\Admin\UserActivityAdminController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WalletController;
 use App\Http\Controllers\Admin\WalletRefundsController;
@@ -96,6 +97,9 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
             ->except(['show'])
             ->names('shipping-rates');
     });
+
+    Route::get('activity', [UserActivityAdminController::class, 'index'])->name('activity.index');
+    Route::get('users/{user}/activity', [UserActivityAdminController::class, 'user'])->name('users.activity');
 
     // Users
     Route::get('users/data', [UserController::class, 'data'])->name('users.data');

@@ -7,6 +7,8 @@ use App\Http\Resources\PaymentLaunchResource;
 use App\Models\Order;
 use App\Models\PurchaseAssistantRequest;
 use App\Models\Wallet;
+use App\Services\Activity\UserActivityLogger;
+use App\Support\UserActivityAction;
 use App\Services\Payments\CheckoutPaymentModeService;
 use App\Services\Payments\OrderWalletPaymentService;
 use App\Services\Payments\PaymentEligibilityService;
@@ -30,7 +32,8 @@ class OrderPaymentController extends Controller
         protected PaymentGatewayManager $gatewayManager,
         protected CheckoutPaymentModeService $checkoutPaymentModeService,
         protected OrderWalletPaymentService $orderWalletPaymentService,
-        protected PurchaseAssistantOrderPricingSyncService $purchaseAssistantPricingSync
+        protected PurchaseAssistantOrderPricingSyncService $purchaseAssistantPricingSync,
+        protected UserActivityLogger $activityLogger
     ) {}
 
     /**
@@ -113,6 +116,33 @@ class OrderPaymentController extends Controller
 
             /** @var \App\Models\Payment $payment */
             $payment = $out['payment'];
+
+            $this->activityLogger->log(
+                $request->user(),
+                UserActivityAction::ORDER_PAID,
+                'Order #'.($order->order_number ?? $order->id).' paid with wallet',
+                null,
+                [
+                    'order_id' => $order->id,
+                    'order_number' => $order->order_number,
+                    'payment_id' => $payment->id,
+                    'amount' => round((float) $payment->amount, 2),
+                    'currency' => $payment->currency ?? $order->currency,
+                ],
+                $request
+            );
+            $this->activityLogger->log(
+                $request->user(),
+                UserActivityAction::WALLET_PAYMENT,
+                'Wallet payment for order #'.($order->order_number ?? $order->id),
+                null,
+                [
+                    'order_id' => $order->id,
+                    'amount' => round((float) $payment->amount, 2),
+                    'currency' => $payment->currency ?? $order->currency,
+                ],
+                $request
+            );
 
             return new PaymentLaunchResource([
                 'payment_id' => $payment->id,

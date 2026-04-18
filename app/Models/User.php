@@ -77,4 +77,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(SavedPaymentMethod::class);
     }
+
+    public function activities(): HasMany
+    {
+        return $this->hasMany(UserActivity::class);
+    }
 }

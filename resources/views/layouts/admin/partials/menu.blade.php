@@ -164,7 +164,7 @@
                 </li>
             </ul>
         </li>
-        <li class="menu-item {{ request()->routeIs('admin.users*', 'admin.cart-review*', 'admin.saved-payment-methods*', 'admin.support*') ? 'active open' : '' }}">
+        <li class="menu-item {{ request()->routeIs('admin.users*', 'admin.activity*', 'admin.cart-review*', 'admin.saved-payment-methods*', 'admin.support*') ? 'active open' : '' }}">
             <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon icon-base ti tabler-users"></i>
                 <div>{{ __('admin.management') }}</div>
@@ -173,6 +173,11 @@
                 <li class="menu-item {{ request()->routeIs('admin.users*') ? 'active' : '' }}">
                     <a href="{{ route('admin.users.index') }}" class="menu-link">
                         <div>{{ __('admin.users') }}</div>
+                    </a>
+                </li>
+                <li class="menu-item {{ request()->routeIs('admin.activity*') ? 'active' : '' }}">
+                    <a href="{{ route('admin.activity.index') }}" class="menu-link">
+                        <div>Activity log</div>
                     </a>
                 </li>
                 <li class="menu-item {{ request()->routeIs('admin.cart-review*') ? 'active' : '' }}">

@@ -6,6 +6,8 @@ use App\Models\Order;
 use App\Models\OrderLineItem;
 use App\Models\PurchaseAssistantRequest;
 use App\Models\User;
+use App\Services\Activity\UserActivityLogger;
+use App\Support\UserActivityAction;
 
 /**
  * Keeps Purchase Assistant request status aligned with order payment state
@@ -14,7 +16,8 @@ use App\Models\User;
 class PurchaseAssistantRequestStatusSync
 {
     public function __construct(
-        protected PurchaseAssistantRequestNotifier $notifier
+        protected PurchaseAssistantRequestNotifier $notifier,
+        protected UserActivityLogger $activityLogger
     ) {}
 
     /**
@@ -173,6 +176,17 @@ class PurchaseAssistantRequestStatusSync
             && $request->status === PurchaseAssistantRequest::STATUS_PAID) {
             $user = User::find($request->user_id);
             if ($user !== null) {
+                $this->activityLogger->log(
+                    $user,
+                    UserActivityAction::PA_PAYMENT_COMPLETED,
+                    'Purchase Assistant request #'.$request->id.' paid',
+                    null,
+                    [
+                        'purchase_assistant_request_id' => $request->id,
+                        'order_id' => $order->id,
+                    ],
+                    null
+                );
                 $this->notifier->notifyAfterStatusChange($request, $user, $oldStatus, $request->status);
             }
         }

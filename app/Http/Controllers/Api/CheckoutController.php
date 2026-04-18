@@ -15,7 +15,9 @@ use App\Services\Payments\CheckoutPaymentModeService;
 use App\Services\Payments\PaymentReferenceGenerator;
 use App\Services\Cart\RemoveOrderedCartItemsService;
 use App\Services\PromoCodeService;
+use App\Services\Activity\UserActivityLogger;
 use App\Services\Shipping\ShippingPricingConfigService;
+use App\Support\UserActivityAction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -258,6 +260,21 @@ class CheckoutController extends Controller
                 'status' => 422,
             ], 422);
         }
+
+        app(UserActivityLogger::class)->log(
+            $request->user(),
+            UserActivityAction::ORDER_CREATED,
+            'Order '.$result['order_number'].' placed',
+            null,
+            [
+                'order_id' => $result['order']->id,
+                'order_number' => $result['order_number'],
+                'total' => $result['total'],
+                'currency' => $result['currency'],
+                'status' => $result['status'],
+            ],
+            $request
+        );
 
         return response()->json([
             'message' => 'Order placed',

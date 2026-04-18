@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\DraftOrderController;
 use App\Http\Controllers\Api\ShippingQuoteController;
 use App\Http\Controllers\Api\FavoritesController;
 use App\Http\Controllers\Api\MeController;
+use App\Http\Controllers\Api\UserActivityController;
 use App\Http\Controllers\Api\NotificationsController;
 use App\Http\Controllers\Api\NotificationPrefsController;
 use App\Http\Controllers\Api\OrderController;
@@ -75,6 +76,7 @@ Route::middleware('auth:sanctum')->prefix('me')->group(function () {
     Route::get('security', [MeController::class, 'security']);
     Route::patch('two-factor', [MeController::class, 'updateTwoFactor']);
     Route::get('login-history', [SessionsController::class, 'loginHistory']);
+    Route::get('activities', [UserActivityController::class, 'index']);
     Route::patch('fcm-token', [MeController::class, 'updateFcmToken']);
     Route::get('notification-preferences', [NotificationPrefsController::class, 'show']);
     Route::patch('notification-preferences', [NotificationPrefsController::class, 'update']);

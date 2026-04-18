@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\OtpCode;
 use App\Models\User;
+use App\Services\Activity\UserActivityLogger;
 use App\Services\Fcm\DeviceTokenService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,6 +18,10 @@ use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
 {
+    public function __construct(
+        protected UserActivityLogger $activityLogger
+    ) {}
+
     public function register(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
@@ -124,6 +129,12 @@ class AuthController extends Controller
         $this->attachSanctumSessionMeta($newToken->accessToken, $request);
         $this->upsertFcmToken($user, $request);
 
+        if ($mode !== 'reset') {
+            $newId = $newToken->accessToken->id;
+            $isNew = $this->activityLogger->isNewDevice($user, $request, $newId);
+            $this->activityLogger->logAuthLogin($user, $request, $isNew, $newId);
+        }
+
         return response()->json([
             'token' => $newToken->plainTextToken,
             'token_type' => 'Bearer',
@@ -158,6 +169,10 @@ class AuthController extends Controller
         $newToken = $user->createToken('mobile-app');
         $this->attachSanctumSessionMeta($newToken->accessToken, $request);
         $this->upsertFcmToken($user, $request);
+
+        $newId = $newToken->accessToken->id;
+        $isNew = $this->activityLogger->isNewDevice($user, $request, $newId);
+        $this->activityLogger->logAuthLogin($user, $request, $isNew, $newId);
 
         return response()->json([
             'token' => $newToken->plainTextToken,

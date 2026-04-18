@@ -48,6 +48,8 @@ $allowedCommands = [
     ['name' => 'config:clear', 'params' => []],
     ['name' => 'cache:clear', 'params' => []],
     ['name' => 'migrate', 'params' => ['--force' => true]],
+    // Assign customer_code (ESH00001, …) to users missing it — run after migrations
+    ['name' => 'users:backfill-customer-codes', 'params' => []],
     // Regenerate Composer autoload (e.g. after deploy) so classes like Kreait\Firebase\Factory are found
     ['name' => '__composer_dump_autoload__', 'params' => []],
     ['name' => 'storage:link', 'params' => []],

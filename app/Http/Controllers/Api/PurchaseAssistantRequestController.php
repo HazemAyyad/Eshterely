@@ -7,7 +7,9 @@ use App\Http\Resources\PaymentLaunchResource;
 use App\Http\Resources\PurchaseAssistantRequestResource;
 use App\Models\Order;
 use App\Models\PurchaseAssistantRequest;
+use App\Services\Activity\UserActivityLogger;
 use App\Support\PurchaseAssistantStoreDisplayName;
+use App\Support\UserActivityAction;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,7 +20,8 @@ class PurchaseAssistantRequestController extends Controller
     use AuthorizesRequests;
 
     public function __construct(
-        protected OrderPaymentController $orderPaymentController
+        protected OrderPaymentController $orderPaymentController,
+        protected UserActivityLogger $activityLogger
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -72,6 +75,18 @@ class PurchaseAssistantRequestController extends Controller
             'origin' => PurchaseAssistantRequest::ORIGIN_PURCHASE_ASSISTANT,
         ]);
 
+        $this->activityLogger->log(
+            $request->user(),
+            UserActivityAction::PA_REQUEST_CREATED,
+            'Purchase Assistant request #'.$req->id.' submitted',
+            null,
+            [
+                'purchase_assistant_request_id' => $req->id,
+                'source_url' => $url,
+            ],
+            $request
+        );
+
         return (new PurchaseAssistantRequestResource($req))
             ->response()
             ->setStatusCode(201);
@@ -119,6 +134,18 @@ class PurchaseAssistantRequestController extends Controller
         $response = $this->orderPaymentController->startPayment($request, $order);
 
         if ($response instanceof PaymentLaunchResource) {
+            $this->activityLogger->log(
+                $request->user(),
+                UserActivityAction::PA_PAYMENT_STARTED,
+                'Purchase Assistant payment started (request #'.$purchaseAssistantRequest->id.')',
+                null,
+                [
+                    'purchase_assistant_request_id' => $purchaseAssistantRequest->id,
+                    'order_id' => $orderId,
+                ],
+                $request
+            );
+
             $data = $response->toArray($request);
             $checkoutUrl = isset($data['checkout_url']) && is_string($data['checkout_url'])
                 ? trim($data['checkout_url'])
@@ -146,7 +173,17 @@ class PurchaseAssistantRequestController extends Controller
             ], 422);
         }
 
+        $rid = $purchaseAssistantRequest->id;
         $purchaseAssistantRequest->delete();
+
+        $this->activityLogger->log(
+            $request->user(),
+            UserActivityAction::PA_REQUEST_DELETED,
+            'Purchase Assistant request #'.$rid.' deleted',
+            null,
+            ['purchase_assistant_request_id' => $rid],
+            $request
+        );
 
         return response()->json(null, 204);
     }

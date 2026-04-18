@@ -2,8 +2,11 @@
 
 namespace App\Services\Wallet;
 
+use App\Models\User;
 use App\Models\Wallet;
 use App\Models\WalletTopUpPayment;
+use App\Services\Activity\UserActivityLogger;
+use App\Support\UserActivityAction;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -12,6 +15,10 @@ use Illuminate\Support\Facades\DB;
  */
 class WalletTopUpPaymentCompletionService
 {
+    public function __construct(
+        protected UserActivityLogger $activityLogger
+    ) {}
+
     /**
      * Idempotent wallet credit when the top-up row is already (or just became) `paid`.
      *
@@ -54,6 +61,22 @@ class WalletTopUpPaymentCompletionService
 
         $meta['wallet_credited_at'] = now()->toIso8601String();
         $topUp->update(['metadata' => $meta]);
+
+        $user = User::find($wallet->user_id);
+        if ($user !== null) {
+            $this->activityLogger->log(
+                $user,
+                UserActivityAction::WALLET_TOPUP,
+                'Wallet top-up +'.number_format((float) $topUp->amount, 2).' '.$topUp->currency,
+                null,
+                [
+                    'wallet_top_up_payment_id' => $topUp->id,
+                    'amount' => round((float) $topUp->amount, 2),
+                    'currency' => $topUp->currency,
+                ],
+                null
+            );
+        }
 
         return true;
     }

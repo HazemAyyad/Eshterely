@@ -9,7 +9,9 @@ use App\Models\OrderLineItem;
 use App\Models\Payment;
 use App\Models\Shipment;
 use App\Models\ShipmentItem;
+use App\Services\Activity\UserActivityLogger;
 use App\Services\Payments\CheckoutPaymentModeService;
+use App\Support\UserActivityAction;
 use App\Services\Payments\PaymentGatewayManager;
 use App\Services\Payments\PaymentReferenceGenerator;
 use App\Services\Shipments\ShipmentDraftFinalizationService;
@@ -26,7 +28,8 @@ class ShipmentsController extends Controller
         private PaymentGatewayManager $gatewayManager,
         private PaymentReferenceGenerator $referenceGenerator,
         private ShipmentDraftFinalizationService $draftFinalization,
-        private CheckoutPaymentModeService $checkoutPaymentModeService
+        private CheckoutPaymentModeService $checkoutPaymentModeService,
+        private UserActivityLogger $activityLogger
     ) {}
 
     /**
@@ -118,6 +121,19 @@ class ShipmentsController extends Controller
             ]);
         });
 
+        $this->activityLogger->log(
+            $request->user(),
+            UserActivityAction::SHIPMENT_CREATED,
+            'Shipment #'.$shipment->id.' created (draft)',
+            null,
+            [
+                'shipment_id' => $shipment->id,
+                'total_shipping_payment' => $total,
+                'currency' => 'USD',
+            ],
+            $request
+        );
+
         $shipment->load(['items.orderLineItem.latestWarehouseReceipt', 'destinationAddress.country', 'destinationAddress.city']);
 
         return response()->json([
@@ -186,6 +202,29 @@ class ShipmentsController extends Controller
             'delivered_at' => now(),
             'pricing_breakdown' => $breakdown,
         ]);
+
+        $u = $request->user();
+        $this->activityLogger->log(
+            $u,
+            UserActivityAction::DELIVERY_CONFIRMED_BY_USER,
+            'Confirmed delivery for shipment #'.$shipment->id,
+            null,
+            ['shipment_id' => $shipment->id],
+            $request
+        );
+        if (isset($validated['rating']) && $validated['rating'] !== null) {
+            $this->activityLogger->log(
+                $u,
+                UserActivityAction::RATING_SUBMITTED,
+                'Delivery rating for shipment #'.$shipment->id,
+                null,
+                [
+                    'shipment_id' => $shipment->id,
+                    'rating' => (int) $validated['rating'],
+                ],
+                $request
+            );
+        }
 
         return response()->json([
             'success' => true,

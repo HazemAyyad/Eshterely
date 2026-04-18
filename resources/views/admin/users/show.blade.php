@@ -42,6 +42,7 @@
                         <li class="mb-2">
                             <span class="h6">Customer code:</span>
                             <span class="font-monospace">{{ $user->customer_code ?? '—' }}</span>
+                            <div class="mt-1"><a href="{{ route('admin.users.activity', $user) }}">Activity log →</a></div>
                         </li>
                         <li class="mb-2">
                             <span class="h6">{{ __('admin.phone') }}:</span>

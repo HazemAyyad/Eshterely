@@ -4,8 +4,11 @@ namespace App\Services\Wallet;
 
 use App\Models\Order;
 use App\Models\Shipment;
+use App\Models\User;
 use App\Models\Wallet;
 use App\Models\WalletRefund;
+use App\Services\Activity\UserActivityLogger;
+use App\Support\UserActivityAction;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -13,6 +16,10 @@ use Illuminate\Support\Facades\DB;
  */
 class WalletRefundProcessor
 {
+    public function __construct(
+        protected UserActivityLogger $activityLogger
+    ) {}
+
     public function approveAndCredit(WalletRefund $refund, int $adminId): void
     {
         if ($refund->status !== WalletRefund::STATUS_PENDING) {
@@ -54,6 +61,23 @@ class WalletRefundProcessor
             $refund->reviewed_by = $adminId;
             $refund->reviewed_at = now();
             $refund->save();
+
+            $u = User::find($refund->user_id);
+            if ($u !== null) {
+                $this->activityLogger->log(
+                    $u,
+                    UserActivityAction::REFUND_RECEIVED,
+                    'Refund +'.number_format($amount, 2).' credited to wallet',
+                    null,
+                    [
+                        'wallet_refund_id' => $refund->id,
+                        'amount' => $amount,
+                        'source_type' => $refund->source_type,
+                        'source_id' => $refund->source_id,
+                    ],
+                    null
+                );
+            }
         });
     }
 
