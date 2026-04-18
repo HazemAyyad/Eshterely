@@ -417,6 +417,12 @@ class SquareWebhookService
                 $this->paymentService->addEvent($payment, PaymentEventSource::Webhook, 'payment.processing', [
                     'square_status' => $paymentObject['status'] ?? null,
                 ], 'Square webhook: processing');
+                if ($payment->order_id !== null) {
+                    $ord = Order::find($payment->order_id);
+                    if ($ord !== null) {
+                        app(PurchaseAssistantRequestStatusSync::class)->onOrderPaymentProcessing($ord);
+                    }
+                }
             }
         });
 

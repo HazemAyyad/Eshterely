@@ -82,9 +82,17 @@ class OrderWalletPaymentService
                 );
                 $wallet = Wallet::whereKey($wallet->id)->lockForUpdate()->first();
                 if ($wallet === null || (float) $wallet->available_balance + 0.00001 < $amount) {
+                    $balance = round((float) ($wallet?->available_balance ?? 0), 2);
+                    $shortfall = round(max(0, $amount - $balance), 2);
+
                     return ['error_response' => response()->json([
                         'message' => 'Insufficient wallet balance.',
+                        'error_key' => 'insufficient_wallet_balance',
                         'error_code' => 'insufficient_wallet_balance',
+                        'wallet_balance' => $balance,
+                        'payable_now_total' => $amount,
+                        'required_top_up_amount' => $shortfall,
+                        'suggested_top_up_amount' => $shortfall,
                         'errors' => [],
                         'status' => 422,
                     ], 422)];

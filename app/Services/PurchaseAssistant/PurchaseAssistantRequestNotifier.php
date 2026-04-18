@@ -78,6 +78,11 @@ class PurchaseAssistantRequestNotifier
                 'Your Purchase Assistant request is priced. Please complete payment to continue.',
                 'pay_now',
             ],
+            PurchaseAssistantRequest::STATUS_PAYMENT_UNDER_REVIEW => [
+                $title,
+                'Your Purchase Assistant payment was submitted and is being processed.',
+                'view_request',
+            ],
             PurchaseAssistantRequest::STATUS_REJECTED => [
                 $title,
                 'Your Purchase Assistant request could not be fulfilled.',
@@ -131,6 +136,7 @@ class PurchaseAssistantRequestNotifier
         return in_array($newStatus, [
             PurchaseAssistantRequest::STATUS_UNDER_REVIEW,
             PurchaseAssistantRequest::STATUS_AWAITING_CUSTOMER_PAYMENT,
+            PurchaseAssistantRequest::STATUS_PAYMENT_UNDER_REVIEW,
             PurchaseAssistantRequest::STATUS_REJECTED,
             PurchaseAssistantRequest::STATUS_CANCELLED,
             PurchaseAssistantRequest::STATUS_PAID,

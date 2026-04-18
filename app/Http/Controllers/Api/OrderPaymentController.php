@@ -13,6 +13,7 @@ use App\Services\Payments\PaymentEligibilityService;
 use App\Services\Payments\PaymentGatewayManager;
 use App\Services\Payments\PaymentService;
 use App\Services\PurchaseAssistant\PurchaseAssistantOrderPricingSyncService;
+use App\Services\PurchaseAssistant\PurchaseAssistantRequestStatusSync;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -180,6 +181,8 @@ class OrderPaymentController extends Controller
         if (! empty($sessionResult['provider_payment_id'])) {
             $payment->update(['provider_payment_id' => $sessionResult['provider_payment_id']]);
         }
+
+        app(PurchaseAssistantRequestStatusSync::class)->onCustomerInitiatedGatewayPayment($order->fresh());
 
         return new PaymentLaunchResource([
             'payment_id' => $payment->id,

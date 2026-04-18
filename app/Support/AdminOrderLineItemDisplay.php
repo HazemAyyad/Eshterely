@@ -145,6 +145,9 @@ class AdminOrderLineItemDisplay
         if (! empty($ps['product_url']) && is_string($ps['product_url'])) {
             return $ps['product_url'];
         }
+        if (! empty($ps['source_url']) && is_string($ps['source_url'])) {
+            return $ps['source_url'];
+        }
         if ($li->relationLoaded('cartItem') && $li->cartItem?->product_url) {
             return (string) $li->cartItem->product_url;
         }

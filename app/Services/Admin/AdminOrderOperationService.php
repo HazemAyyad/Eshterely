@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\OrderOperationLog;
 use App\Models\OrderShipment;
 use App\Services\Fcm\OrderShipmentNotificationTrigger;
+use App\Services\PurchaseAssistant\PurchaseAssistantRequestStatusSync;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -83,6 +84,9 @@ class AdminOrderOperationService
             } elseif ($newStatus === Order::STATUS_CANCELLED) {
                 $this->notificationTrigger->onOrderCancelled($order);
             }
+
+            app(PurchaseAssistantRequestStatusSync::class)->syncFromLinkedOrder($order);
+
             return $order;
         });
     }

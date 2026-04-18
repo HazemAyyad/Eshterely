@@ -54,7 +54,7 @@
                             $procPayloadB64 = base64_encode(json_encode($procPayload, JSON_UNESCAPED_UNICODE));
                         @endphp
                         <tr>
-                            <td>{{ Str::limit($li->name, 56) }}</td>
+                            <td class="py-2">{!! AdminOrderLineItemDisplay::adminProductThumbnailWithNameHtml($li, 40, 56) !!}</td>
                             <td>{{ $li->store_name ?? '—' }}</td>
                             <td class="small">
                                 @if($sourceUrl)

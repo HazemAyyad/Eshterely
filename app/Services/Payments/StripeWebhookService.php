@@ -206,6 +206,12 @@ class StripeWebhookService
                 $this->syncOrderToPaid($payment);
                 $this->finalizeOutboundShipmentAfterGatewayPayment($payment);
                 $this->notificationTrigger->onPaymentSuccess($payment);
+            } elseif (in_array($newStatus, [PaymentStatus::Processing, PaymentStatus::RequiresAction], true)
+                && $payment->order_id !== null) {
+                $ord = Order::find($payment->order_id);
+                if ($ord !== null) {
+                    app(PurchaseAssistantRequestStatusSync::class)->onOrderPaymentProcessing($ord);
+                }
             } elseif ($newStatus === PaymentStatus::Failed) {
                 $this->notificationTrigger->onPaymentFailed($payment);
             }
