@@ -38,6 +38,8 @@
         </table>
     </div>
 </div>
+
+@include('admin.shipments.partials.pack-modal')
 @endsection
 
 @push('styles')

@@ -8,9 +8,6 @@ use App\Http\Resources\PurchaseAssistantRequestResource;
 use App\Models\Order;
 use App\Models\PurchaseAssistantRequest;
 use App\Support\PurchaseAssistantStoreDisplayName;
-use App\Services\Payments\PaymentEligibilityService;
-use App\Services\Payments\PaymentGatewayManager;
-use App\Services\Payments\PaymentService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,9 +18,7 @@ class PurchaseAssistantRequestController extends Controller
     use AuthorizesRequests;
 
     public function __construct(
-        protected PaymentEligibilityService $eligibilityService,
-        protected PaymentService $paymentService,
-        protected PaymentGatewayManager $gatewayManager
+        protected OrderPaymentController $orderPaymentController
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -91,7 +86,7 @@ class PurchaseAssistantRequestController extends Controller
 
     /**
      * POST /api/purchase-assistant-requests/{purchaseAssistantRequest}/start-payment
-     * Same contract as POST /api/orders/{order}/start-payment for the converted order.
+     * Delegates to the same rules as POST /api/orders/{order}/start-payment (checkout payment mode + wallet/gateway).
      */
     public function startPayment(Request $request, PurchaseAssistantRequest $purchaseAssistantRequest): PaymentLaunchResource|JsonResponse
     {
@@ -121,78 +116,21 @@ class PurchaseAssistantRequestController extends Controller
             abort(404);
         }
 
-        $result = $this->eligibilityService->checkOrderEligibility($order);
+        $response = $this->orderPaymentController->startPayment($request, $order);
 
-        if (! $result['eligible']) {
-            return response()->json([
-                'message' => $result['message'],
-                'error_key' => $result['error_key'],
-                'errors' => [],
-                'status' => 422,
-            ], 422);
+        if ($response instanceof PaymentLaunchResource) {
+            $data = $response->toArray($request);
+            $checkoutUrl = isset($data['checkout_url']) && is_string($data['checkout_url'])
+                ? trim($data['checkout_url'])
+                : '';
+            if ($checkoutUrl !== '' && $purchaseAssistantRequest->status === PurchaseAssistantRequest::STATUS_AWAITING_CUSTOMER_PAYMENT) {
+                $purchaseAssistantRequest->update([
+                    'status' => PurchaseAssistantRequest::STATUS_PAYMENT_UNDER_REVIEW,
+                ]);
+            }
         }
 
-        $requestedGateway = $request->input('gateway');
-        try {
-            $gateway = is_string($requestedGateway) && trim($requestedGateway) !== ''
-                ? $this->gatewayManager->resolve($requestedGateway)
-                : $this->gatewayManager->resolveDefault();
-        } catch (\InvalidArgumentException $e) {
-            return response()->json([
-                'message' => 'Payment gateway unavailable.',
-                'error_key' => 'gateway_unavailable',
-                'errors' => [],
-                'status' => 422,
-            ], 422);
-        }
-
-        $payment = $this->paymentService->createPendingPaymentForOrder($order, ['provider' => $gateway->gatewayCode()]);
-
-        $attempt = $this->paymentService->createAttempt($payment, [
-            'order_id' => $order->id,
-            'payment_id' => $payment->id,
-            'reference' => $payment->reference,
-            'amount' => (float) $payment->amount,
-            'currency' => $payment->currency ?? 'USD',
-        ]);
-
-        try {
-            $sessionResult = $gateway->createOrderCheckoutSession($payment, $order);
-        } catch (\Throwable $e) {
-            $this->paymentService->updateAttemptWithResponse($attempt, [
-                'error' => $e->getMessage(),
-            ], 'failed');
-            throw $e;
-        }
-
-        $this->paymentService->updateAttemptWithResponse($attempt, [
-            'checkout_url' => $sessionResult['checkout_url'],
-            'provider' => $sessionResult['provider'],
-            'provider_order_id' => $sessionResult['provider_order_id'],
-            'provider_payment_id' => $sessionResult['provider_payment_id'],
-        ], 'success');
-
-        if (! empty($sessionResult['provider_order_id'])) {
-            $payment->update(['provider_order_id' => $sessionResult['provider_order_id']]);
-        }
-        if (! empty($sessionResult['provider_payment_id'])) {
-            $payment->update(['provider_payment_id' => $sessionResult['provider_payment_id']]);
-        }
-
-        if ($purchaseAssistantRequest->status === PurchaseAssistantRequest::STATUS_AWAITING_CUSTOMER_PAYMENT) {
-            $purchaseAssistantRequest->update([
-                'status' => PurchaseAssistantRequest::STATUS_PAYMENT_UNDER_REVIEW,
-            ]);
-        }
-
-        return new PaymentLaunchResource([
-            'payment_id' => $payment->id,
-            'reference' => $payment->reference,
-            'provider' => $payment->provider,
-            'checkout_url' => $sessionResult['checkout_url'],
-            'status' => $payment->fresh()->status->value,
-            'order_id' => $order->id,
-        ]);
+        return $response;
     }
 
     public function destroy(Request $request, PurchaseAssistantRequest $purchaseAssistantRequest): JsonResponse

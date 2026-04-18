@@ -20,6 +20,10 @@
                 <div>{{ __('admin.dashboard') }}</div>
             </a>
         </li>
+
+        <li class="menu-header small text-uppercase">
+            <span class="menu-header-text">{{ __('admin.menu_section_operations') }}</span>
+        </li>
         <li class="menu-item {{ request()->routeIs('admin.orders*') ? 'active' : '' }}">
             <a href="{{ route('admin.orders.index') }}" class="menu-link">
                 <i class="menu-icon icon-base ti tabler-shopping-cart"></i>
@@ -27,6 +31,12 @@
                 @if(($adminMenuCounts['orders_procurement'] ?? 0) > 0)
                     <span class="badge rounded-pill bg-warning ms-auto">{{ $adminMenuCounts['orders_procurement'] }}</span>
                 @endif
+            </a>
+        </li>
+        <li class="menu-item {{ request()->routeIs('admin.purchase-assistant*') ? 'active' : '' }}">
+            <a href="{{ route('admin.purchase-assistant.index') }}" class="menu-link">
+                <i class="menu-icon icon-base ti tabler-hand-rock"></i>
+                <div>{{ __('admin.purchase_assistant_title') }}</div>
             </a>
         </li>
         <li class="menu-item {{ request()->routeIs('admin.warehouse*') ? 'active' : '' }}">
@@ -47,6 +57,35 @@
                 @endif
             </a>
         </li>
+
+        <li class="menu-header small text-uppercase">
+            <span class="menu-header-text">{{ __('admin.menu_section_wallet_finance') }}</span>
+        </li>
+        <li class="menu-item {{ request()->routeIs('admin.wallets*') ? 'active' : '' }}">
+            <a href="{{ route('admin.wallets.index') }}" class="menu-link">
+                <i class="menu-icon icon-base ti tabler-wallet"></i>
+                <div>{{ __('admin.wallet') }}</div>
+            </a>
+        </li>
+        <li class="menu-item {{ request()->routeIs('admin.wallet-topup-requests*') ? 'active' : '' }}">
+            <a href="{{ route('admin.wallet-topup-requests.index') }}" class="menu-link">
+                <i class="menu-icon icon-base ti tabler-cash-banknote"></i>
+                <div>{{ __('admin.wallet_topup_requests_title') }}</div>
+            </a>
+        </li>
+        <li class="menu-item {{ request()->routeIs('admin.wallet-withdrawals*') ? 'active' : '' }}">
+            <a href="{{ route('admin.wallet-withdrawals.index') }}" class="menu-link">
+                <i class="menu-icon icon-base ti tabler-arrow-bar-up"></i>
+                <div>{{ __('admin.wallet_withdrawals_title') }}</div>
+            </a>
+        </li>
+        <li class="menu-item {{ request()->routeIs('admin.wallet-refunds*') ? 'active' : '' }}">
+            <a href="{{ route('admin.wallet-refunds.index') }}" class="menu-link">
+                <i class="menu-icon icon-base ti tabler-arrow-back-up"></i>
+                <div>{{ __('admin.wallet_refunds_to_wallet_title') }}</div>
+            </a>
+        </li>
+
         <li class="menu-item {{ request()->routeIs('admin.config.*') ? 'active open' : '' }}">
             <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon icon-base ti tabler-settings"></i>
@@ -120,7 +159,7 @@
                 </li>
             </ul>
         </li>
-        <li class="menu-item {{ request()->routeIs('admin.users*', 'admin.cart-review*', 'admin.purchase-assistant*', 'admin.wallets*', 'admin.wallet-refunds*', 'admin.wallet-withdrawals*', 'admin.wallet-topup-requests*', 'admin.saved-payment-methods*', 'admin.support*') ? 'active open' : '' }}">
+        <li class="menu-item {{ request()->routeIs('admin.users*', 'admin.cart-review*', 'admin.saved-payment-methods*', 'admin.support*') ? 'active open' : '' }}">
             <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon icon-base ti tabler-users"></i>
                 <div>{{ __('admin.management') }}</div>
@@ -134,31 +173,6 @@
                 <li class="menu-item {{ request()->routeIs('admin.cart-review*') ? 'active' : '' }}">
                     <a href="{{ route('admin.cart-review.index') }}" class="menu-link">
                         <div>{{ __('admin.cart_review') }}</div>
-                    </a>
-                </li>
-                <li class="menu-item {{ request()->routeIs('admin.purchase-assistant*') ? 'active' : '' }}">
-                    <a href="{{ route('admin.purchase-assistant.index') }}" class="menu-link">
-                        <div>{{ __('admin.purchase_assistant_title') }}</div>
-                    </a>
-                </li>
-                <li class="menu-item {{ request()->routeIs('admin.wallets*') ? 'active' : '' }}">
-                    <a href="{{ route('admin.wallets.index') }}" class="menu-link">
-                        <div>{{ __('admin.wallet') }}</div>
-                    </a>
-                </li>
-                <li class="menu-item {{ request()->routeIs('admin.wallet-refunds*') ? 'active' : '' }}">
-                    <a href="{{ route('admin.wallet-refunds.index') }}" class="menu-link">
-                        <div>{{ __('admin.wallet_refunds_to_wallet_title') }}</div>
-                    </a>
-                </li>
-                <li class="menu-item {{ request()->routeIs('admin.wallet-withdrawals*') ? 'active' : '' }}">
-                    <a href="{{ route('admin.wallet-withdrawals.index') }}" class="menu-link">
-                        <div>{{ __('admin.wallet_withdrawals_title') }}</div>
-                    </a>
-                </li>
-                <li class="menu-item {{ request()->routeIs('admin.wallet-topup-requests*') ? 'active' : '' }}">
-                    <a href="{{ route('admin.wallet-topup-requests.index') }}" class="menu-link">
-                        <div>{{ __('admin.wallet_topup_requests_title') }}</div>
                     </a>
                 </li>
                 <li class="menu-item {{ request()->routeIs('admin.saved-payment-methods*') ? 'active' : '' }}">

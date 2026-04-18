@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PaymentLaunchResource;
 use App\Models\Order;
+use App\Models\Wallet;
+use App\Services\Payments\CheckoutPaymentModeService;
+use App\Services\Payments\OrderWalletPaymentService;
 use App\Services\Payments\PaymentEligibilityService;
 use App\Services\Payments\PaymentGatewayManager;
 use App\Services\Payments\PaymentService;
@@ -14,23 +17,103 @@ use Illuminate\Http\Request;
 /**
  * Order-centric payment start. Validates ownership and eligibility, creates payment and Square session.
  * Payment amount comes from order snapshots only (no recalculation).
+ * Uses CheckoutPaymentModeService for wallet vs gateway rules (same as cart checkout / shipment pay).
  */
 class OrderPaymentController extends Controller
 {
     public function __construct(
         protected PaymentEligibilityService $eligibilityService,
         protected PaymentService $paymentService,
-        protected PaymentGatewayManager $gatewayManager
+        protected PaymentGatewayManager $gatewayManager,
+        protected CheckoutPaymentModeService $checkoutPaymentModeService,
+        protected OrderWalletPaymentService $orderWalletPaymentService
     ) {}
 
     /**
+     * GET /api/orders/{order}/payment-options
+     * Same payment availability rules as checkout review (wallet / gateway / both).
+     */
+    public function paymentOptions(Request $request, Order $order): JsonResponse
+    {
+        if ($order->user_id !== $request->user()->id) {
+            abort(404, 'Order not found.');
+        }
+
+        $result = $this->eligibilityService->checkOrderEligibility($order);
+        if (! $result['eligible']) {
+            return response()->json([
+                'message' => $result['message'],
+                'error_key' => $result['error_key'],
+                'errors' => [],
+                'status' => 422,
+            ], 422);
+        }
+
+        $wallet = Wallet::firstOrCreate(
+            ['user_id' => $request->user()->id],
+            ['available_balance' => 0, 'pending_balance' => 0, 'promo_balance' => 0]
+        );
+
+        $payable = $this->resolveOrderPayableAmount($order);
+        $balance = round((float) $wallet->available_balance, 2);
+        $modePayload = $this->checkoutPaymentModeService->buildModePayload($payable, $balance);
+
+        return response()->json(array_merge([
+            'order_id' => (string) $order->id,
+            'currency' => $order->currency ?? 'USD',
+            'amount_due_now' => $payable,
+            'wallet_balance' => $balance,
+        ], $modePayload));
+    }
+
+    /**
      * POST /api/orders/{order}/start-payment
-     * Start payment for an order: validate ownership, check eligibility, create payment record and Square checkout URL.
+     * Optional body: payment_method = wallet|gateway (defaults: gateway, except wallet_only → wallet).
      */
     public function startPayment(Request $request, Order $order): PaymentLaunchResource|JsonResponse
     {
         if ($order->user_id !== $request->user()->id) {
             abort(404, 'Order not found.');
+        }
+
+        $request->validate([
+            'payment_method' => 'sometimes|nullable|in:wallet,gateway',
+            'gateway' => 'nullable|string',
+        ]);
+
+        $mode = $this->checkoutPaymentModeService->getMode();
+        $explicit = $request->input('payment_method');
+        $method = is_string($explicit) && trim($explicit) !== ''
+            ? strtolower(trim($explicit))
+            : ($mode === 'wallet_only' ? 'wallet' : 'gateway');
+
+        $modeErr = $this->checkoutPaymentModeService->validatePaymentMethodForMode($method);
+        if ($modeErr !== null) {
+            return response()->json([
+                'message' => $modeErr,
+                'error_key' => 'payment_method_not_allowed',
+                'errors' => [],
+                'status' => 422,
+            ], 422);
+        }
+
+        if ($method === 'wallet') {
+            $out = $this->orderWalletPaymentService->settleOrderWithWallet($request->user(), $order);
+            if (isset($out['error_response'])) {
+                return $out['error_response'];
+            }
+
+            /** @var \App\Models\Payment $payment */
+            $payment = $out['payment'];
+
+            return new PaymentLaunchResource([
+                'payment_id' => $payment->id,
+                'reference' => $payment->reference,
+                'provider' => $payment->provider,
+                'checkout_url' => null,
+                'status' => $payment->fresh()->status->value,
+                'order_id' => $order->id,
+            ]);
         }
 
         $result = $this->eligibilityService->checkOrderEligibility($order);
@@ -99,5 +182,12 @@ class OrderPaymentController extends Controller
             'status' => $payment->fresh()->status->value,
             'order_id' => $order->id,
         ]);
+    }
+
+    private function resolveOrderPayableAmount(Order $order): float
+    {
+        $due = (float) ($order->amount_due_now ?? 0);
+
+        return round($due > 0 ? $due : (float) ($order->order_total_snapshot ?? $order->total_amount ?? 0), 2);
     }
 }

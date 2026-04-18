@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Shipment;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Yajra\DataTables\Facades\DataTables;
@@ -77,12 +78,12 @@ class OutboundShipmentsAdminController extends Controller
             })
             ->addColumn('actions', function (Shipment $s) {
                 $show = route('admin.shipments.show', $s);
-                $pack = route('admin.shipments.pack-form', $s);
+                $packUrl = route('admin.outbound-shipments.pack', $s);
                 $ship = route('admin.shipments.ship-form', $s);
 
                 $btns = '<a href="'.$show.'" class="btn btn-sm btn-outline-primary">'.e(__('admin.view')).'</a> ';
                 if (in_array($s->status, [Shipment::STATUS_PAID, Shipment::STATUS_PACKED], true)) {
-                    $btns .= '<a href="'.$pack.'" class="btn btn-sm btn-primary">'.e(__('admin.pack_shipment')).'</a> ';
+                    $btns .= '<button type="button" class="btn btn-sm btn-primary js-open-shipment-pack" data-bs-toggle="modal" data-bs-target="#shipmentPackModal" data-pack-url="'.e($packUrl).'">'.e(__('admin.pack_shipment')).'</button> ';
                 }
                 if ($s->status === Shipment::STATUS_PACKED) {
                     $btns .= '<a href="'.$ship.'" class="btn btn-sm btn-success">'.e(__('admin.mark_shipped')).'</a>';
@@ -111,11 +112,9 @@ class OutboundShipmentsAdminController extends Controller
         return view('admin.shipments.show', compact('shipment'));
     }
 
-    public function packForm(Shipment $shipment): View
+    public function packForm(Shipment $shipment): RedirectResponse
     {
-        $shipment->load(['items.orderLineItem']);
-
-        return view('admin.shipments.pack', compact('shipment'));
+        return redirect()->route('admin.shipments.show', $shipment);
     }
 
     public function shipForm(Shipment $shipment): View

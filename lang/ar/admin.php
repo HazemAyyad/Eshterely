@@ -2,6 +2,8 @@
 
 return [
     // General
+    'menu_section_operations' => 'العمليات',
+    'menu_section_wallet_finance' => 'المحفظة والمالية',
     'dashboard' => 'لوحة التحكم',
     'add' => 'إضافة',
     'edit' => 'تعديل',
@@ -578,6 +580,9 @@ return [
     'shipping_paid_badge' => 'شحن مدفوع',
     'awaiting_shipping_payment_badge' => 'بانتظار دفع الشحن',
     'pack_shipment' => 'تعبئة',
+    'pack_modal_intro' => 'أدخل وزن التعبئة بالرطل وأبعاد الصندوق بالبوصة. ارفع صورة للطرد المغلق.',
+    'pack_dims_lwh_in' => 'الأبعاد ط×ع×ارت (بوصة)',
+    'pack_image_upload_help' => 'ارفع صورة من جهازك. تُخزَّن الملفات على الخادم.',
     'mark_shipped' => 'شحن',
     'shipment_packed' => 'تم تعبئة الشحنة.',
     'shipment_dispatched' => 'تم تسجيل الشحنة كمشحونة.',
@@ -600,7 +605,7 @@ return [
     'additional_fee' => 'رسوم إضافية',
     'special_handling' => 'معالجة خاصة',
     'dims_lwh' => 'الأبعاد (طول × عرض × ارتفاع)',
-    'final_box_image' => 'صورة الصندوق النهائي (رابط)',
+    'final_box_image' => 'صورة الصندوق النهائي',
     'paid_at' => 'تاريخ الدفع',
     'checkout_review_gate_title' => 'بوابة مراجعة الدفع',
     'checkout_review_gate_help' => 'نقطة مطلوبة للتطبيق: حتى تكتمل قد تبقى حالات الطلب لاحقة مخفية. أكّد مراجعة التسعير/الشحن ثم سجّل الإكمال.',

@@ -11,6 +11,7 @@ use App\Models\OrderLineItem;
 use App\Models\OrderShipment;
 use App\Models\Payment;
 use App\Models\Wallet;
+use App\Services\Payments\CheckoutPaymentModeService;
 use App\Services\Payments\PaymentReferenceGenerator;
 use App\Services\Cart\RemoveOrderedCartItemsService;
 use App\Services\PromoCodeService;
@@ -18,14 +19,14 @@ use App\Services\Shipping\ShippingPricingConfigService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class CheckoutController extends Controller
 {
     public function __construct(
         private PromoCodeService $promoService,
-        private ShippingPricingConfigService $shippingConfig
+        private ShippingPricingConfigService $shippingConfig,
+        private CheckoutPaymentModeService $checkoutPaymentModeService
     ) {}
 
     public function validatePromo(Request $request): JsonResponse
@@ -67,7 +68,7 @@ class CheckoutController extends Controller
     {
         $promoCode = $this->normalizePromoCode($request->input('promo_code'));
         $summary = $this->buildCheckoutSummary($request, $promoCode, false);
-        $mode = $this->getCheckoutPaymentMode();
+        $mode = $this->checkoutPaymentModeService->getMode();
 
         if ($summary['checkout_items']->isEmpty()) {
             $message = $summary['items']->isEmpty()
@@ -102,7 +103,7 @@ class CheckoutController extends Controller
 
                 $promoDiscount = $lockedEvaluation['discount_amount'] ?? $summary['promo_discount_amount'];
                 $totalAfterPromo = round(max(0, $summary['base_total'] - $promoDiscount), 2);
-                $resolved = $this->resolveCheckoutPaymentAmounts($request, $mode, $totalAfterPromo, (float) $summary['wallet_balance']);
+                $resolved = $this->checkoutPaymentModeService->resolveCheckoutPaymentAmounts($request, $mode, $totalAfterPromo, (float) $summary['wallet_balance']);
                 if (isset($resolved['error'])) {
                     return ['checkout_error' => $resolved];
                 }
@@ -554,8 +555,10 @@ class CheckoutController extends Controller
     {
         $promoEvaluation = $summary['promo_evaluation'];
         $total = $summary['total_after_promo'];
-        $mode = $this->getCheckoutPaymentMode();
-        $modePayload = $this->buildCheckoutPaymentModePayload($mode, $summary);
+        $modePayload = $this->checkoutPaymentModeService->buildModePayload(
+            (float) $summary['total_after_promo'],
+            (float) $summary['wallet_balance']
+        );
 
         return [
             'shipping_address_short' => $summary['default_address'] ? $this->shortAddress($summary['default_address']) : '',
@@ -621,122 +624,6 @@ class CheckoutController extends Controller
                 ),
             ],
         ];
-    }
-
-    private function getCheckoutPaymentMode(): string
-    {
-        if (! Schema::hasTable('payment_gateway_settings')) {
-            return 'gateway_only';
-        }
-        if (! Schema::hasColumn('payment_gateway_settings', 'checkout_payment_mode')) {
-            return 'gateway_only';
-        }
-        $row = DB::table('payment_gateway_settings')->first();
-        if ($row === null) {
-            return 'gateway_only';
-        }
-        if (! isset($row->checkout_payment_mode)) {
-            return 'gateway_only';
-        }
-        $m = strtolower(trim((string) $row->checkout_payment_mode));
-        $allowed = ['wallet_only', 'gateway_only', 'wallet_and_gateway'];
-
-        return in_array($m, $allowed, true) ? $m : 'gateway_only';
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function buildCheckoutPaymentModePayload(string $mode, array $summary): array
-    {
-        $payable = round((float) $summary['total_after_promo'], 2);
-        $walletBalance = round((float) $summary['wallet_balance'], 2);
-        $shortfall = round(max(0, $payable - $walletBalance), 2);
-        $walletEnabled = in_array($mode, ['wallet_only', 'wallet_and_gateway'], true);
-        $gatewayEnabled = in_array($mode, ['gateway_only', 'wallet_and_gateway'], true);
-        $allowed = [];
-        if ($walletEnabled) {
-            $allowed[] = 'wallet';
-        }
-        if ($gatewayEnabled) {
-            $allowed[] = 'gateway';
-        }
-        $walletCanPayNow = $payable <= 0.00001 || $walletBalance + 0.00001 >= $payable;
-        $topUpRequired = $mode === 'wallet_only' && ! $walletCanPayNow && $payable > 0.00001;
-
-        return [
-            'checkout_payment_mode' => $mode,
-            'wallet_enabled_for_checkout' => $walletEnabled,
-            'gateway_enabled_for_checkout' => $gatewayEnabled,
-            'allowed_payment_methods' => $allowed,
-            'wallet_shortfall' => $shortfall,
-            'wallet_can_pay_now' => $walletCanPayNow,
-            'top_up_required' => $topUpRequired,
-            'required_top_up_amount' => $shortfall > 0.00001 ? $shortfall : 0.0,
-            'suggested_top_up_amount' => $shortfall > 0.00001 ? $shortfall : 0.0,
-        ];
-    }
-
-    /**
-     * @return array<string, float|string|bool|null>
-     */
-    private function resolveCheckoutPaymentAmounts(Request $request, string $mode, float $totalAfterPromo, float $walletBalance): array
-    {
-        $totalAfterPromo = round(max(0, $totalAfterPromo), 2);
-        $walletBalance = round($walletBalance, 2);
-        $explicit = $request->input('payment_method');
-        if (is_string($explicit) && trim($explicit) !== '') {
-            $m = strtolower(trim($explicit));
-            if (! in_array($m, ['wallet', 'gateway'], true)) {
-                return ['error' => 'invalid_payment_method', 'message' => 'Invalid payment_method. Use wallet or gateway.'];
-            }
-            if ($mode === 'gateway_only' && $m === 'wallet') {
-                return ['error' => 'wallet_not_allowed', 'message' => 'Wallet checkout is disabled.'];
-            }
-            if ($mode === 'wallet_only' && $m === 'gateway') {
-                return ['error' => 'gateway_not_allowed', 'message' => 'Card checkout is disabled for this store.'];
-            }
-            if ($m === 'wallet') {
-                $shortfall = round(max(0, $totalAfterPromo - $walletBalance), 2);
-                if ($shortfall > 0.00001) {
-                    return [
-                        'error' => 'insufficient_wallet_balance',
-                        'wallet_balance' => $walletBalance,
-                        'payable_now_total' => $totalAfterPromo,
-                        'required_top_up_amount' => $shortfall,
-                        'suggested_top_up_amount' => $shortfall,
-                    ];
-                }
-
-                return ['wallet_applied' => $totalAfterPromo, 'amount_due_now' => 0.0];
-            }
-
-            return ['wallet_applied' => 0.0, 'amount_due_now' => $totalAfterPromo];
-        }
-
-        if ($mode === 'gateway_only') {
-            return ['wallet_applied' => 0.0, 'amount_due_now' => $totalAfterPromo];
-        }
-        if ($mode === 'wallet_only') {
-            $shortfall = round(max(0, $totalAfterPromo - $walletBalance), 2);
-            if ($shortfall > 0.00001) {
-                return [
-                    'error' => 'insufficient_wallet_balance',
-                    'wallet_balance' => $walletBalance,
-                    'payable_now_total' => $totalAfterPromo,
-                    'required_top_up_amount' => $shortfall,
-                    'suggested_top_up_amount' => $shortfall,
-                ];
-            }
-
-            return ['wallet_applied' => $totalAfterPromo, 'amount_due_now' => 0.0];
-        }
-
-        $useWallet = $request->boolean('use_wallet_balance', true);
-        $walletApplied = $useWallet ? round(min($walletBalance, $totalAfterPromo), 2) : 0.0;
-        $amountDueNow = round(max(0, $totalAfterPromo - $walletApplied), 2);
-
-        return ['wallet_applied' => $walletApplied, 'amount_due_now' => $amountDueNow];
     }
 
     private function promoResponsePayload(array $evaluation, float $baseAmount): array

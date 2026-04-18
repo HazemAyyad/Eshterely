@@ -16,7 +16,7 @@ class PaymentLaunchResource extends JsonResource
             'payment_id' => $this->resource['payment_id'],
             'reference' => $this->resource['reference'],
             'provider' => $this->resource['provider'],
-            'checkout_url' => $this->resource['checkout_url'],
+            'checkout_url' => $this->resource['checkout_url'] ?? null,
             'status' => $this->resource['status'],
             'order_id' => (string) $this->resource['order_id'],
         ];

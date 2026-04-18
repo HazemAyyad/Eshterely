@@ -109,6 +109,7 @@ Route::middleware('auth:sanctum')->prefix('draft-orders')->group(function () {
 Route::middleware('auth:sanctum')->get('orders', [OrderController::class, 'index']);
 Route::middleware('auth:sanctum')->get('orders/{id}', [OrderController::class, 'show']);
 Route::middleware('auth:sanctum')->get('orders/{order}/payments', [OrderController::class, 'payments']);
+Route::middleware('auth:sanctum')->get('orders/{order}/payment-options', [OrderPaymentController::class, 'paymentOptions']);
 Route::middleware('auth:sanctum')->post('orders/{order}/start-payment', [OrderPaymentController::class, 'startPayment']);
 Route::middleware('auth:sanctum')->post('orders/{order}/pay', PaymentCheckoutController::class);
 

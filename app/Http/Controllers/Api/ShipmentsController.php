@@ -9,6 +9,7 @@ use App\Models\OrderLineItem;
 use App\Models\Payment;
 use App\Models\Shipment;
 use App\Models\ShipmentItem;
+use App\Services\Payments\CheckoutPaymentModeService;
 use App\Services\Payments\PaymentGatewayManager;
 use App\Services\Payments\PaymentReferenceGenerator;
 use App\Services\Shipments\ShipmentDraftFinalizationService;
@@ -16,7 +17,6 @@ use App\Services\Shipments\ShipmentShippingQuoteBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 
 class ShipmentsController extends Controller
@@ -25,7 +25,8 @@ class ShipmentsController extends Controller
         private ShipmentShippingQuoteBuilder $quoteBuilder,
         private PaymentGatewayManager $gatewayManager,
         private PaymentReferenceGenerator $referenceGenerator,
-        private ShipmentDraftFinalizationService $draftFinalization
+        private ShipmentDraftFinalizationService $draftFinalization,
+        private CheckoutPaymentModeService $checkoutPaymentModeService
     ) {}
 
     /**
@@ -128,7 +129,7 @@ class ShipmentsController extends Controller
                 'currency' => 'USD',
             ],
             'shipment' => $this->serializeShipment($shipment),
-            'checkout_payment_mode' => $this->getCheckoutPaymentMode(),
+            'checkout_payment_mode' => $this->checkoutPaymentModeService->getMode(),
         ], 201);
     }
 
@@ -164,7 +165,7 @@ class ShipmentsController extends Controller
             'gateway' => 'nullable|string|in:square,stripe',
         ]);
 
-        $modeErr = $this->validatePaymentMethodAgainstCheckoutMode($validated['payment_method']);
+        $modeErr = $this->checkoutPaymentModeService->validatePaymentMethodForMode($validated['payment_method']);
         if ($modeErr !== null) {
             return response()->json(['message' => $modeErr, 'status' => 422], 422);
         }
@@ -352,34 +353,6 @@ class ShipmentsController extends Controller
                 throw new InvalidArgumentException('Another draft shipment already includes one of these items. Complete or cancel it first.');
             }
         }
-    }
-
-    private function getCheckoutPaymentMode(): string
-    {
-        if (! Schema::hasTable('payment_gateway_settings')) {
-            return 'gateway_only';
-        }
-        $row = DB::table('payment_gateway_settings')->first();
-        if (! $row || ! isset($row->checkout_payment_mode)) {
-            return 'gateway_only';
-        }
-        $m = strtolower(trim((string) $row->checkout_payment_mode));
-        $allowed = ['wallet_only', 'gateway_only', 'wallet_and_gateway'];
-
-        return in_array($m, $allowed, true) ? $m : 'gateway_only';
-    }
-
-    private function validatePaymentMethodAgainstCheckoutMode(string $paymentMethod): ?string
-    {
-        $mode = $this->getCheckoutPaymentMode();
-        if ($mode === 'wallet_only' && $paymentMethod !== 'wallet') {
-            return 'Checkout is configured for wallet payment only.';
-        }
-        if ($mode === 'gateway_only' && $paymentMethod !== 'gateway') {
-            return 'Checkout is configured for card payment only.';
-        }
-
-        return null;
     }
 
     private function userOwnsLineItem(OrderLineItem $line, int $userId): bool

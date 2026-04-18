@@ -2,6 +2,8 @@
 
 return [
     // General
+    'menu_section_operations' => 'Operations',
+    'menu_section_wallet_finance' => 'Wallet & finance',
     'dashboard' => 'Dashboard',
     'add' => 'Add',
     'edit' => 'Edit',
@@ -585,6 +587,9 @@ return [
     'shipping_paid_badge' => 'Shipping paid',
     'awaiting_shipping_payment_badge' => 'Awaiting shipping payment',
     'pack_shipment' => 'Pack',
+    'pack_modal_intro' => 'Enter packed weight in pounds and box dimensions in inches. Upload a photo of the sealed package.',
+    'pack_dims_lwh_in' => 'Dimensions L × W × H (in)',
+    'pack_image_upload_help' => 'Upload a photo from your device. Files are stored on the server.',
     'mark_shipped' => 'Ship',
     'shipment_packed' => 'Shipment packed.',
     'shipment_dispatched' => 'Shipment marked shipped.',
@@ -607,7 +612,7 @@ return [
     'additional_fee' => 'Additional fee',
     'special_handling' => 'Special handling',
     'dims_lwh' => 'Dimensions (L × W × H)',
-    'final_box_image' => 'Final box image (URL)',
+    'final_box_image' => 'Final box image',
     'paid_at' => 'Paid at',
     'checkout_review_gate_title' => 'Checkout Review Gate',
     'checkout_review_gate_help' => 'Required checkpoint for the app: until this is complete, downstream order states may stay hidden. Confirm checkout pricing/shipping review, then mark complete.',

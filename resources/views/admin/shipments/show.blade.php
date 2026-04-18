@@ -32,7 +32,7 @@
                 <h5 class="mb-0">{{ __('admin.details') }}</h5>
                 <div class="d-flex flex-wrap gap-1">
                     @if(in_array($shipment->status, [Shipment::STATUS_PAID, Shipment::STATUS_PACKED], true))
-                        <a href="{{ route('admin.shipments.pack-form', $shipment) }}" class="btn btn-sm btn-primary">{{ __('admin.pack_shipment') }}</a>
+                        <button type="button" class="btn btn-sm btn-primary js-open-shipment-pack" data-bs-toggle="modal" data-bs-target="#shipmentPackModal" data-pack-url="{{ route('admin.outbound-shipments.pack', $shipment) }}">{{ __('admin.pack_shipment') }}</button>
                     @endif
                     @if($shipment->status === Shipment::STATUS_PACKED)
                         <a href="{{ route('admin.shipments.ship-form', $shipment) }}" class="btn btn-sm btn-success">{{ __('admin.mark_shipped') }}</a>
@@ -168,4 +168,6 @@
 <div class="mt-4">
     <a href="{{ route('admin.shipments.index') }}" class="btn btn-outline-secondary">{{ __('admin.back') }}</a>
 </div>
+
+@include('admin.shipments.partials.pack-modal')
 @endsection
