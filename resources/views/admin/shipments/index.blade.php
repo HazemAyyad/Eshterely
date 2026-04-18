@@ -40,6 +40,7 @@
 </div>
 
 @include('admin.shipments.partials.pack-modal')
+@include('admin.shipments.partials.ship-modal')
 @endsection
 
 @push('styles')

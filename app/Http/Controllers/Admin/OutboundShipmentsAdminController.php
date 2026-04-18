@@ -79,14 +79,14 @@ class OutboundShipmentsAdminController extends Controller
             ->addColumn('actions', function (Shipment $s) {
                 $show = route('admin.shipments.show', $s);
                 $packUrl = route('admin.outbound-shipments.pack', $s);
-                $ship = route('admin.shipments.ship-form', $s);
 
                 $btns = '<a href="'.$show.'" class="btn btn-sm btn-outline-primary">'.e(__('admin.view')).'</a> ';
-                if (in_array($s->status, [Shipment::STATUS_PAID, Shipment::STATUS_PACKED], true)) {
+                if ($s->status === Shipment::STATUS_PAID) {
                     $btns .= '<button type="button" class="btn btn-sm btn-primary js-open-shipment-pack" data-bs-toggle="modal" data-bs-target="#shipmentPackModal" data-pack-url="'.e($packUrl).'">'.e(__('admin.pack_shipment')).'</button> ';
                 }
                 if ($s->status === Shipment::STATUS_PACKED) {
-                    $btns .= '<a href="'.$ship.'" class="btn btn-sm btn-success">'.e(__('admin.mark_shipped')).'</a>';
+                    $shipUrl = route('admin.outbound-shipments.ship', $s);
+                    $btns .= '<button type="button" class="btn btn-sm btn-success js-open-shipment-ship" data-bs-toggle="modal" data-bs-target="#shipmentShipModal" data-ship-url="'.e($shipUrl).'">'.e(__('admin.mark_shipped')).'</button>';
                 }
 
                 return '<div class="d-flex flex-wrap gap-1">'.$btns.'</div>';
@@ -117,8 +117,8 @@ class OutboundShipmentsAdminController extends Controller
         return redirect()->route('admin.shipments.show', $shipment);
     }
 
-    public function shipForm(Shipment $shipment): View
+    public function shipForm(Shipment $shipment): RedirectResponse
     {
-        return view('admin.shipments.ship', compact('shipment'));
+        return redirect()->route('admin.shipments.show', $shipment);
     }
 }

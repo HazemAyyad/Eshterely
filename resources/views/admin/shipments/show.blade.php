@@ -31,11 +31,14 @@
             <div class="card-header d-flex flex-wrap gap-2 justify-content-between align-items-center">
                 <h5 class="mb-0">{{ __('admin.details') }}</h5>
                 <div class="d-flex flex-wrap gap-1">
-                    @if(in_array($shipment->status, [Shipment::STATUS_PAID, Shipment::STATUS_PACKED], true))
+                    @if($shipment->status === Shipment::STATUS_PAID)
                         <button type="button" class="btn btn-sm btn-primary js-open-shipment-pack" data-bs-toggle="modal" data-bs-target="#shipmentPackModal" data-pack-url="{{ route('admin.outbound-shipments.pack', $shipment) }}">{{ __('admin.pack_shipment') }}</button>
                     @endif
                     @if($shipment->status === Shipment::STATUS_PACKED)
-                        <a href="{{ route('admin.shipments.ship-form', $shipment) }}" class="btn btn-sm btn-success">{{ __('admin.mark_shipped') }}</a>
+                        <button type="button" class="btn btn-sm btn-success js-open-shipment-ship" data-bs-toggle="modal" data-bs-target="#shipmentShipModal" data-ship-url="{{ route('admin.outbound-shipments.ship', $shipment) }}">{{ __('admin.mark_shipped') }}</button>
+                    @endif
+                    @if($shipment->status === Shipment::STATUS_SHIPPED)
+                        <button type="button" class="btn btn-sm btn-outline-success js-mark-shipment-delivered" data-deliver-url="{{ route('admin.outbound-shipments.mark-delivered', $shipment) }}">{{ __('admin.mark_delivered') }}</button>
                     @endif
                 </div>
             </div>
@@ -170,4 +173,44 @@
 </div>
 
 @include('admin.shipments.partials.pack-modal')
+@include('admin.shipments.partials.ship-modal')
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.js-mark-shipment-delivered').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var url = btn.getAttribute('data-deliver-url');
+            if (!url) return;
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    title: @json(__('admin.confirm_mark_delivered_title')),
+                    text: @json(__('admin.confirm_mark_delivered_text')),
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: @json(__('admin.yes')),
+                    cancelButtonText: @json(__('admin.cancel'))
+                }).then(function(res) {
+                    if (!res.isConfirmed) return;
+                    fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+                      .then(function(x) {
+                        if (x.ok && x.data.success) {
+                            Swal.fire({ icon: 'success', title: x.data.message || @json(__('admin.success')) }).then(function() { window.location.reload(); });
+                        } else {
+                            Swal.fire({ icon: 'error', title: (x.data && x.data.message) ? x.data.message : @json(__('admin.error')) });
+                        }
+                      }).catch(function() { Swal.fire({ icon: 'error', title: @json(__('admin.error')) }); });
+                });
+            }
+        });
+    });
+});
+</script>
+@endpush
 @endsection

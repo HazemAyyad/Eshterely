@@ -129,6 +129,7 @@ Route::resource('market-countries', MarketCountriesController::class)->except(['
     Route::put('warehouse/order-line-items/{orderLineItem}/receive/{warehouseReceipt}', [WarehouseReceivingController::class, 'update'])->name('warehouse.receive-update');
     Route::post('shipments/{shipment}/pack', [OutboundShipmentController::class, 'pack'])->name('outbound-shipments.pack');
     Route::post('shipments/{shipment}/ship', [OutboundShipmentController::class, 'ship'])->name('outbound-shipments.ship');
+    Route::post('shipments/{shipment}/mark-delivered', [OutboundShipmentController::class, 'markDelivered'])->name('outbound-shipments.mark-delivered');
 
     // Purchase Assistant (unsupported Add via Link)
     Route::get('purchase-assistant/data', [PurchaseAssistantRequestController::class, 'data'])->name('purchase-assistant.data');

@@ -152,6 +152,48 @@ class ShipmentsController extends Controller
     }
 
     /**
+     * POST /api/shipments/{shipment}/confirm-delivery
+     * Customer confirms receipt after shipped; optional rating + note.
+     */
+    public function confirmDelivery(Request $request, Shipment $shipment): JsonResponse
+    {
+        if ($shipment->user_id !== $request->user()->id) {
+            abort(404);
+        }
+
+        if ($shipment->status !== Shipment::STATUS_SHIPPED) {
+            return response()->json([
+                'message' => 'You can only confirm delivery for a shipment that is on the way (shipped).',
+                'status' => 422,
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'rating' => 'nullable|integer|min:1|max:5',
+            'note' => 'nullable|string|max:2000',
+        ]);
+
+        $breakdown = $shipment->pricing_breakdown ?? [];
+        $breakdown['customer_delivery'] = [
+            'confirmed_at' => now()->toIso8601String(),
+            'rating' => $validated['rating'] ?? null,
+            'note' => $validated['note'] ?? null,
+            'source' => 'customer',
+        ];
+
+        $shipment->update([
+            'status' => Shipment::STATUS_DELIVERED,
+            'delivered_at' => now(),
+            'pricing_breakdown' => $breakdown,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'shipment' => $this->serializeShipment($shipment->fresh(['items.orderLineItem.latestWarehouseReceipt', 'destinationAddress.country', 'destinationAddress.city', 'payments'])),
+        ]);
+    }
+
+    /**
      * POST /api/shipments/{shipment}/pay
      */
     public function pay(Request $request, Shipment $shipment): JsonResponse
@@ -385,6 +427,9 @@ class ShipmentsController extends Controller
             $destinationSummary = $parts !== [] ? implode(', ', $parts) : null;
         }
 
+        $breakdown = $s->pricing_breakdown ?? [];
+        $cd = is_array($breakdown['customer_delivery'] ?? null) ? $breakdown['customer_delivery'] : [];
+
         return [
             'id' => (string) $s->id,
             'status' => $s->status,
@@ -396,6 +441,9 @@ class ShipmentsController extends Controller
             'final_height' => $s->final_height !== null ? (float) $s->final_height : null,
             'final_box_image' => $s->final_box_image,
             'dispatched_at' => $s->dispatched_at?->toIso8601String(),
+            'delivered_at' => $s->delivered_at?->toIso8601String(),
+            'delivery_rating' => isset($cd['rating']) ? (int) $cd['rating'] : null,
+            'delivery_note' => isset($cd['note']) && is_string($cd['note']) ? $cd['note'] : null,
             'shipping_cost' => round((float) $s->shipping_cost, 2),
             'additional_fees_total' => round((float) $s->additional_fees_total, 2),
             'total_shipping_payment' => round((float) $s->total_shipping_payment, 2),

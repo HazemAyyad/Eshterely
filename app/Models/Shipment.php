@@ -32,6 +32,7 @@ class Shipment extends Model
         'final_height',
         'final_box_image',
         'dispatched_at',
+        'delivered_at',
         'shipping_cost',
         'additional_fees_total',
         'total_shipping_payment',
@@ -44,6 +45,7 @@ class Shipment extends Model
     {
         return [
             'dispatched_at' => 'datetime',
+            'delivered_at' => 'datetime',
             'final_weight' => 'decimal:4',
             'final_length' => 'decimal:4',
             'final_width' => 'decimal:4',
